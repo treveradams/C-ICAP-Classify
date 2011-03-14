@@ -204,7 +204,9 @@ int writecheck;
 	lseek64(file, 0, SEEK_END);
 	if(hashes_list->used) // check before we write
 	{
-		write(file, &hashes_list->used, sizeof(uint_least16_t));
+		do {
+			writecheck = write(file, &hashes_list->used, sizeof(uint_least16_t));
+		while (writecheck >= 0 && writecheck < sizeof(uint_least16_t));
 		for(i=0; i < hashes_list->used; i++)
 		{
 			do {

@@ -31,7 +31,7 @@ typedef struct _linkedcascade {
 
 typedef struct _Category {
 	char name[CATMAXNAME+1];
-	char cascade_location[PATH_MAX+1];
+	char cascade_location[CI_MAX_PATH+1];
 	LinkedCascade *free_cascade; // don't forget to free me on any reload
 	LinkedCascade *busy_cascade; // don't forget to free me on any reload, wait for this to be null and all free_cascade to be released
 	CvScalar Color;
@@ -48,7 +48,7 @@ typedef struct _Detected {
 } ImageDetected;
 
 typedef struct {
-	char fname[PATH_MAX+1];
+	char fname[CI_MAX_PATH+1];
 	float scale;
 	IplImage *origImage;
 	IplImage *rightImage;

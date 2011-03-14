@@ -29,6 +29,20 @@
 #include "autoconf.h"
 
 // Include header files
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <strings.h>
+#include <assert.h>
+#include <math.h>
+#include <float.h>
+#include <limits.h>
+#include <time.h>
+#include <ctype.h>
+
 #include "c-icap.h"
 #include "service.h"
 #include "header.h"
@@ -36,20 +50,7 @@
 #include "simple_api.h"
 #include "debug.h"
 #include "cfg_param.h"
-
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <string.h>
-#include <assert.h>
-#include <math.h>
-#include <float.h>
-#include <limits.h>
-#include <time.h>
-#include <ctype.h>
+#include "ci_threads.h"
 
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
@@ -226,7 +227,7 @@ int i;
 		// add each category to header
 		if(current->detected->total)
 		{
-			char *oldHeader = strdup(header);
+			char *oldHeader = myStrDup(header);
 			snprintf(header, myMAX_HEADER, "%s %s(%d)", oldHeader, current->category->name, current->detected->total);
 			free(oldHeader);
 		}
@@ -247,7 +248,7 @@ int i;
 static void saveDetectedParts(ImageSession *mySession)
 {
 ImageDetected *current=mySession->detected;
-char fname[PATH_MAX+1];
+char fname[CI_MAX_PATH+1];
 int i;
 
 	// Loop through categories
@@ -257,9 +258,9 @@ int i;
 		{
 			// Create a new rectangle for saving the object
 			CvRect* r = (CvRect*)cvGetSeqElem( current->detected, i );
-			snprintf(fname, PATH_MAX, "%s/detected-%s-%s-%dx%dx%dx%d.png", CLASSIFY_TMP_DIR, current->category->name, (rindex(mySession->fname, '/'))+1,
+			snprintf(fname, CI_MAX_PATH, "%s/detected-%s-%s-%dx%dx%dx%d.png", CLASSIFY_TMP_DIR, current->category->name, (rindex(mySession->fname, '/'))+1,
 				r->x, r->y, r->height, r->width);
-			fname[PATH_MAX] = '\0';
+			fname[CI_MAX_PATH] = '\0';
                         ci_debug_printf(8, "Saving detected object to: %s\n", fname);
 			cvSetImageROI(mySession->origImage, *r);
 			cvSaveImage(fname, mySession->origImage, png_p);
@@ -318,18 +319,18 @@ int i;
 
 static void saveOriginal(ImageSession *mySession)
 {
-char fname[PATH_MAX+1];
-	snprintf(fname, PATH_MAX, "%s/original-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
-	fname[PATH_MAX] = '\0';
+char fname[CI_MAX_PATH+1];
+	snprintf(fname, CI_MAX_PATH, "%s/original-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
+	fname[CI_MAX_PATH] = '\0';
 	ci_debug_printf(10, "Saving Original Image To: %s\n", fname);
 	cvSaveImage(fname, mySession->origImage, png_p);
 }
 
 static void saveMarked(ImageSession *mySession)
 {
-char fname[PATH_MAX+1];
-	snprintf(fname, PATH_MAX, "%s/marked-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
-	fname[PATH_MAX] = '\0';
+char fname[CI_MAX_PATH+1];
+	snprintf(fname, CI_MAX_PATH, "%s/marked-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
+	fname[CI_MAX_PATH] = '\0';
 	ci_debug_printf(10, "Saving Marked Image To: %s\n", fname);
 	cvSaveImage(fname, mySession->origImage, png_p);
 }
@@ -338,14 +339,14 @@ static void demonstrateDetection(ImageSession *mySession)
 {
 struct stat stat_buf;
 classify_req_data_t *data = ci_service_data(mySession->req);
-char imageFILENAME[PATH_MAX+1];
+char imageFILENAME[CI_MAX_PATH+1];
 
         ci_http_response_remove_header(mySession->req, "Content-Length");
 	data->body->readpos = 0;
 	close(data->body->fd);
 	unlink(data->body->filename);
-	snprintf(imageFILENAME, PATH_MAX, "%s.%s", data->body->filename, data->type_name);
-	imageFILENAME[PATH_MAX] = '\0';
+	snprintf(imageFILENAME, CI_MAX_PATH, "%s.%s", data->body->filename, data->type_name);
+	imageFILENAME[CI_MAX_PATH] = '\0';
         if(strstr(imageFILENAME, "jpg"))
 		cvSaveImage(imageFILENAME, mySession->origImage, jpeg_p);
         else
@@ -356,8 +357,8 @@ char imageFILENAME[PATH_MAX+1];
 	fstat(data->body->fd, &stat_buf);
 	data->body->endpos = stat_buf.st_size;
 	// Make new content length header
-	snprintf(imageFILENAME, PATH_MAX, "Content-Length: %ld", (long) data->body->endpos);
-	imageFILENAME[PATH_MAX] = '\0';
+	snprintf(imageFILENAME, CI_MAX_PATH, "Content-Length: %ld", (long) data->body->endpos);
+	imageFILENAME[CI_MAX_PATH] = '\0';
         ci_http_response_add_header(mySession->req, imageFILENAME);
 }
 
@@ -605,8 +606,8 @@ ImageDetected *nDetected = NULL, *cDetected = NULL;
 	mySession->detected = NULL;
 	mySession->rightImage = NULL;
 	mySession->featuresDetected = 0;
-	strncpy(mySession->fname, filename, PATH_MAX);
-	mySession->fname[PATH_MAX]='\0';
+	strncpy(mySession->fname, filename, CI_MAX_PATH);
+	mySession->fname[CI_MAX_PATH]='\0';
 
 	// Allocate the memory storage
 	if((mySession->dstorage = cvCreateMemStorage(0)) == NULL)

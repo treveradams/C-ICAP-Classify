@@ -17,20 +17,7 @@
  *  along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
 #include "autoconf.h"
-
-#include "c-icap.h"
-#include "service.h"
-#include "header.h"
-#include "body.h"
-#include "simple_api.h"
-#include "debug.h"
-#include "cfg_param.h"
-#include "filetype.h"
-#include "ci_threads.h"
-#include "commands.h"
-#include "srv_classify.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -48,10 +35,21 @@
 
 #define __USE_GNU
 #define _GNU_SOURCE
-#include <string.h>
 #include <strings.h>
 #include <wchar.h>
 #include <wctype.h>
+
+#include "c-icap.h"
+#include "service.h"
+#include "header.h"
+#include "body.h"
+#include "simple_api.h"
+#include "debug.h"
+#include "cfg_param.h"
+#include "filetype.h"
+#include "commands.h"
+#include "srv_classify.h"
+#include "ci_threads.h"
 
 const wchar_t *WCNULL = L"\0";
 
@@ -498,7 +496,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
 int categorize_text(ci_request_t * req)
 {
 classify_req_data_t *data = ci_service_data(req);
-char reply[2*PATH_MAX+1];
+char reply[2*CI_MAX_PATH+1];
 char type[20];
 regexHead myRegexHead;
 HashList myHashes;
@@ -538,16 +536,16 @@ hsClassification classification;
      if(classification.probScaled >= (float) Ambiguous && classification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
      else if(classification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
      else strcpy(type,"NEAREST");
-     snprintf(reply, PATH_MAX, "X-TEXT-CATEGORY: %s", classification.name);
-     reply[PATH_MAX]='\0';
+     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY: %s", classification.name);
+     reply[CI_MAX_PATH]='\0';
      ci_http_response_add_header(req, reply);
      ci_debug_printf(10, "Added header: %s\n", reply);
-     snprintf(reply, PATH_MAX, "X-TEXT-CATEGORY-LEVEL: %f", classification.probScaled);
-     reply[PATH_MAX]='\0';
+     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL: %f", classification.probScaled);
+     reply[CI_MAX_PATH]='\0';
      ci_http_response_add_header(req, reply);
      ci_debug_printf(10, "Added header: %s\n", reply);
-     snprintf(reply, PATH_MAX, "X-TEXT-CATEGORY-CONFIDENCE: %s", type);
-     reply[PATH_MAX]='\0';
+     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-CONFIDENCE: %s", type);
+     reply[CI_MAX_PATH]='\0';
      ci_http_response_add_header(req, reply);
      ci_debug_printf(10, "Added header: %s\n", reply);
      // Release Read Lock
@@ -611,7 +609,7 @@ ci_off_t content_size = 0;
                free(tempbuffer);
           }
      }
-     if(charSet == NULL) charSet = strdup("UTF-8");
+     if(charSet == NULL) charSet = myStrDup("UTF-8");
      for(i = 0; i < strlen(charSet); i++) charSet[i] = toupper(charSet[i]);
      // Some websites send "Windows-1250" instead of "CP1250"
      if(strncmp("WINDOWS-", charSet, 8) == 0)
@@ -960,7 +958,7 @@ int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata)
 int cfg_TmpDir(char *directive, char **argv, void *setdata)
 {
      int val = 1;
-     char fname[PATH_MAX+1];
+     char fname[CI_MAX_PATH+1];
      FILE *test;
      struct stat stat_buf;
      if (argv == NULL || argv[0] == NULL) {
@@ -975,7 +973,7 @@ int cfg_TmpDir(char *directive, char **argv, void *setdata)
      }
 
      // Try to write to the directory to see if it is writable .......
-     snprintf(fname, PATH_MAX, "%s/test.txt", argv[0]);
+     snprintf(fname, CI_MAX_PATH, "%s/test.txt", argv[0]);
      test = fopen(fname, "w+");
      if (test == NULL)
      {
@@ -993,7 +991,7 @@ int cfg_TmpDir(char *directive, char **argv, void *setdata)
           free(CLASSIFY_TMP_DIR);
           CLASSIFY_TMP_DIR=NULL;
      }
-     CLASSIFY_TMP_DIR = strdup(argv[0]);
+     CLASSIFY_TMP_DIR = myStrDup(argv[0]);
      return val;
 }
 
@@ -1038,4 +1036,13 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
 
     ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
     return 1;
+}
+
+char *myStrDup(char *string)
+{
+char *temp;
+
+	temp=malloc(strlen(string)+1);
+	strcpy(temp, string);
+	return temp;
 }

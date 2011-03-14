@@ -6,7 +6,7 @@ cicapmoduledir=@MODSDIR@
 cicapmodule_LTLIBRARIES=srv_classify.la
 
 srv_classify_la_LIBADD = @MODULES_LIBADD@
-srv_classify_la_CFLAGS=  -I../../include/
+srv_classify_la_CFLAGS=  -I../../include/ -std=gnu99
 srv_classify_la_LDFLAGS=  -module -avoid-version -lm -ltre
 srv_classify_la_SOURCES = srv_classify.c hyperspace.c html.c hash.c
 

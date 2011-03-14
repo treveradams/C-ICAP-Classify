@@ -45,4 +45,6 @@ typedef struct classify_req_data {
 
 enum {NO_CLASSIFY=0, TEXT, IMAGE};
 
+char *myStrDup(char *string);
+
 #endif
