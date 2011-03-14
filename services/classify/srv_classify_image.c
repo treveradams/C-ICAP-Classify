@@ -61,7 +61,7 @@
 #ifdef _WIN32
 #define F_PERM S_IREAD|S_IWRITE
 #else
-#define F_PERM S_IREAD|S_IWRITE|S_IRGRP|S_IROTH
+#define F_PERM S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
 #endif
 
 extern char *CLASSIFY_TMP_DIR; // temp directory
