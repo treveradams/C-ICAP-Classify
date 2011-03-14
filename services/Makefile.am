@@ -1,0 +1,5 @@
+
+#SUBDIRS = @BUILD_SERVICES@
+
+SUBDIRS = classify
+
