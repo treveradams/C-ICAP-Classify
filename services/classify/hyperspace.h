@@ -68,26 +68,26 @@ typedef struct {
 	uint16_t totalDocuments;
 	uint32_t totalFeatures;
 	uint16_t *documentKnownHashes; // documents[TextCategory.totalDocuments] with the value being the number of known hashes
-} TextCategory;
+} FHSTextCategory;
 
 typedef struct {
-	TextCategory *categories;
+	FHSTextCategory *categories;
 	uint16_t used;
 	uint16_t slots;
-} TextCategoryExt;
+} FHSTextCategoryExt;
 
 typedef struct __attribute__ ((__packed__)) {
 //	uint16_t category;
 //	uint16_t document;
 	uint_least16_t category;
 	uint_least16_t document;
-} hashJudgeUsers;
+} FHSHashJudgeUsers;
 
 typedef uint_least64_t hyperspaceFeature;
 
 typedef struct __attribute__ ((__packed__)) {
 	hyperspaceFeature hash;
-	hashJudgeUsers *users;
+	FHSHashJudgeUsers *users;
 //	uint16_t used;
 	uint_least16_t used;
 } hyperspaceFeatureExt;
@@ -123,7 +123,7 @@ extern void deinitHyperSpaceClassifier(void);
 #define HYPERSPACE_CATEGORY_INC 10
 
 #ifndef IN_HYPERSPACE
-extern TextCategoryExt HSCategories;
+extern FHSTextCategoryExt HSCategories;
 extern HashListExt HSJudgeHashList;
 #endif
 

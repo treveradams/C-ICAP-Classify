@@ -18,17 +18,26 @@
  */
 
 
-#define HYPERSPACE_MAX_FEATURE_COUNT 500000
-#define MAX_HYPSERSPACE_CATEGORY_NAME 100
+#define FBC_MAX_FEATURE_COUNT 500000
+#define MAX_NAIVEBAYES_CATEGORY_NAME 100
 
-#define HYPERSPACE_FORMAT_VERSION 1
+#define FBC_FORMAT_VERSION 1
 #define UNICODE_BYTE_MARK 0xFEFF
+
+#define	MARKOV_C1	16	/* Markov C1 */
+#define MARKIV_C2	1	/* Markov C2 */
 
 typedef struct {
 	char *name;
 	double probability;
 	double probScaled;
-} bcClassification;
+} FBCClassification;
+
+typedef struct {
+	double naiveBayesNum;
+	double naiveBayesDen;
+	double naiveBayesResult;
+} FBCJudge;
 
 // Fast Hyper Space File Format Version 1 is as follows
 // Header
@@ -37,95 +46,95 @@ typedef struct {
 //      F H S
 // ID = 3 characters, Ver UINT16_T, UBM is Unicode byte mark se we know if we
 // have the correct byte ordering (hash function is not endian neutral)
-// Qty is UINT16_T, this is the number of records in the file
+// Qty is UINT32_T, this is the number of records in the file
 // Records
 // BYTE 1 2 3 4 5 6 7 8 9 10 .... END
-//      Qty H HQTY H HQTY H HQTY H   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
-// Qty is the number of 64-bit hashes in the record w/ associated HQTY. 8 bytes per Hash
-// HQTY is 32bit unsigned integer of how many of the hash were trained positive (negatives
-// are the positives of all other categories).
+//      H H H H H H   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+// H is a UINT64_T
 // END is a 128 bit all zero delimiter to allow for verifying the file
 // END is currently not written nor checked
 
 #define FBC_HEADERv1_ID_SIZE 3
 #define FBC_HEADERv1_VERSION_SIZE sizeof(uint_least16_t)
-#define FBC_HEADERv1_UBM_SIZE sizeof(uint_least16_t)
+#define FBC_HEADERv1_UBM_SIZE sizeof(uint_least32_t)
 #define FBC_HEADERv1_RECORDS_QTY_SIZE sizeof(uint_least16_t)
 #define FBC_v1_QTY_SIZE sizeof(uint_least16_t)
 #define FBC_v1_HASH_SIZE sizeof(uint_least64_t)
 
-#define FBC_HEADERv1_RECORDS_QTY_MAX UINT_LEAST16_MAX
+#define FBC_HEADERv1_RECORDS_QTY_MAX UINT_LEAST32_MAX
 #define FBC_v1_QTY_MAX UINT_LEAST16_MAX
 
 typedef struct {
 	char ID[3];
 	uint_least16_t version;
 	uint_least16_t UBM;
-	uint_least16_t records;
+	uint_least32_t records;
 } FBC_HEADERv1;
 
 typedef struct {
 	char *name;
-	uint16_t totalDocuments;
 	uint32_t totalFeatures;
-	uint16_t *documentKnownHashes; // documents[TextCategory.totalDocuments] with the value being the number of known hashes
-} TextCategory;
+} FBCTextCategory;
 
 typedef struct {
-	TextCategory *categories;
+	FBSTextCategory *categories;
 	uint16_t used;
 	uint16_t slots;
-} TextCategoryExt;
+} FBCTextCategoryExt;
 
 typedef struct __attribute__ ((__packed__)) {
-	double probability;
-} bayesHashJudgeUsers;
+	uint_least16_t category;
+        union {
+		float probability;
+		uint32_t count;
+	} data;
+} FBCHashJudgeUsers;
 
-typedef uint_least64_t bayesFeature;
+typedef uint_least64_t FBCFeature;
 
 typedef struct __attribute__ ((__packed__)) {
-	bayesFeature hash;
-	hashJudgeUsers *users;
+	FBCFeature hash;
+	FBCHashJudgeUsers *users;
 	uint_least16_t used;
-} bayesFeature;
+} FBCFeature;
 
 typedef struct  {
-	bayesFeatureEx *hashes;
+	FBCFeatureEx *hashes;
 	uint32_t used;
 	uint32_t slots;
-} bayesHashListExt;
+} FBCHashListExt;
 
-#ifdef IN_HYPSERSPACE
+#ifdef IN_BAYES
 void writeFBCHeader(int file, FBC_HEADERv1 *header);
 int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
 void writeFBCHashes(int file, FBC_HEADERv1 *header, HashList *hashes_list);
 int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *hashes_list);
 void computeHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
-int preLoadHyperSpace(char *fbc_name);
-int loadHyperSpaceCategory(char *fbc_name, char *cat_name);
-hsClassification doHSPrepandClassify(HashList *toClassify);
-void initHyperSpaceClassifier(void);
-void deinitHyperSpaceClassifier(void);
+int preLoadFBC(char *fbc_name);
+int loadFBCCategory(char *fbc_name, char *cat_name);
+hsClassification doFBCPrepandClassify(HashList *toClassify);
+void initBayesClassifier(void);
+void deinitBayesClassifier(void);
 #else
 extern void writeFBCHeader(int file, FBC_HEADERv1 *header);
 extern int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
 extern int writeFBCHashes(int file, FBC_HEADERv1 *header, HashList *hashes_list);
 extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *hashes_list);
 extern int preLoadHyperSpace(char *fbc_name);
-extern int loadHyperSpaceCategory(char *fbc_name, char *cat_name);
-extern hsClassification doHSPrepandClassify(HashList *toClassify);
+extern int loadFBCCategory(char *fbc_name, char *cat_name);
+extern FBCClassification doFBCPrepandClassify(HashList *toClassify);
 extern void initBayesClassifier(void);
 extern void deinitBayesClassifier(void);
 #endif
 
-#define HYPERSPACE_CATEGORY_INC 10
+#define BAYES_CATEGORY_INC 10
 
-#ifndef IN_HYPERSPACE
-extern TextCategoryExt HSCategories;
-extern HashListExt HSJudgeHashList;
+#ifndef IN_BAYES
+extern FBCTextCategoryExt NBCategories;
+extern FBCHashListExt NBJudgeHashList;
 #endif
 
-#ifndef IN_HYPERSPACE
+#ifndef IN_BAYES
 extern uint32_t HASHSEED1;
 extern uint32_t HASHSEED2;
 #endif

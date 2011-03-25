@@ -49,7 +49,7 @@
 #include "hyperspace.h"
 
 
-TextCategoryExt HSCategories;
+FHSTextCategoryExt HSCategories;
 HashListExt HSJudgeHashList;
 
 void initHyperSpaceClassifier(void)
@@ -58,7 +58,7 @@ void initHyperSpaceClassifier(void)
 	HSJudgeHashList.hashes = NULL;
 	HSJudgeHashList.used = 0;
 	HSCategories.slots = HYPERSPACE_CATEGORY_INC;
-	HSCategories.categories = calloc(HSCategories.slots, sizeof(TextCategory));
+	HSCategories.categories = calloc(HSCategories.slots, sizeof(FHSTextCategory));
 	HSCategories.used = 0;
 }
 
@@ -326,7 +326,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 	if(HSCategories.used == HSCategories.slots)
 	{
 		HSCategories.slots += HYPERSPACE_CATEGORY_INC;
-		HSCategories.categories = realloc(HSCategories.categories, HSCategories.slots * sizeof(TextCategory));
+		HSCategories.categories = realloc(HSCategories.categories, HSCategories.slots * sizeof(FHSTextCategory));
 	}
 	HSCategories.categories[HSCategories.used].name = strndup(cat_name, MAX_HYPSERSPACE_CATEGORY_NAME);
 	HSCategories.categories[HSCategories.used].totalDocuments = header.records;
@@ -367,7 +367,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 					{
 						if (shortcut == 0)
 						{
-							HSJudgeHashList.hashes[BSRet].users = realloc(HSJudgeHashList.hashes[BSRet].users, (HSJudgeHashList.hashes[BSRet].used+1) * sizeof(hashJudgeUsers));
+							HSJudgeHashList.hashes[BSRet].users = realloc(HSJudgeHashList.hashes[BSRet].users, (HSJudgeHashList.hashes[BSRet].used+1) * sizeof(FHSHashJudgeUsers));
 //							ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu16"), updating\n", docHashes[j], z);
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].category = HSCategories.used;
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].document = i;
@@ -384,7 +384,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 //				ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", docHashes[j]);
 				HSJudgeHashList.hashes[HSJudgeHashList.used].hash = docHashes[j];
 				HSJudgeHashList.hashes[HSJudgeHashList.used].used = 0;
-				HSJudgeHashList.hashes[HSJudgeHashList.used].users = calloc(1, sizeof(hashJudgeUsers));
+				HSJudgeHashList.hashes[HSJudgeHashList.used].users = calloc(1, sizeof(FHSHashJudgeUsers));
 				HSJudgeHashList.hashes[HSJudgeHashList.used].users[HSJudgeHashList.hashes[HSJudgeHashList.used].used].category = HSCategories.used;
 				HSJudgeHashList.hashes[HSJudgeHashList.used].users[HSJudgeHashList.hashes[HSJudgeHashList.used].used].document = i;
 				HSJudgeHashList.hashes[HSJudgeHashList.used].used++;
@@ -517,8 +517,8 @@ uint16_t numHashes=0;
 
 static hsClassification doHyperSpaceClassify(uint32_t **categories, HashList *unknown)
 {
-double total_radiance = 0;
-double remainder = 0;
+double total_radiance = DBL_MIN;
+double remainder = DBL_MIN;
 double *class_radiance = malloc(HSCategories.used * sizeof(double));
 
 uint32_t bestseen=0;

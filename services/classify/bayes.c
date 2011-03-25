@@ -49,34 +49,76 @@
 #include "bayes.h"
 
 
-TextCategoryExt HSCategories;
-HashListExt HSJudgeHashList;
+FBCTextCategoryExt NBCategories;
+FBCHashListExt NBJudgeHashList;
+int FBC_LOCKED = 0;
+
 
 void initBayesClassifier(void)
 {
-	HSJudgeHashList.slots = 0;
-	HSJudgeHashList.hashes = NULL;
-	HSJudgeHashList.used = 0;
-	HSCategories.slots = Bayes_CATEGORY_INC;
-	HSCategories.categories = calloc(HSCategories.slots, sizeof(TextCategory));
-	HSCategories.used = 0;
+	NBJudgeHashList.slots = 0;
+	NBJudgeHashList.hashes = NULL;
+	NBJudgeHashList.used = 0;
+	NBCategories.slots = Bayes_CATEGORY_INC;
+	NBCategories.categories = calloc(FBCCategories.slots, sizeof(FBCTextCategory));
+	NBCategories.used = 0;
 }
 
 void deinitBayesClassifier(void)
 {
 uint32_t i=0;
-	for(i=0; i < HSCategories.used; i++)
+	for(i=0; i < NBCategories.used; i++)
 	{
-		free(HSCategories.categories[i].name);
-		free(HSCategories.categories[i].documentKnownHashes);
+		free(NBCategories.categories[i].name);
+		free(NBCategories.categories[i].documentKnownHashes);
 	}
-	free(HSCategories.categories);
+	free(NBCategories.categories);
 
 	for(i=0; i < HSJudgeHashList.used; i++)
 	{
 		free(HSJudgeHashList.hashes[i].users);
 	}
 	free(HSJudgeHashList.hashes);
+}
+
+int optimizeFBC(FBCHASHListExt *hashes)
+{
+uint64_t total;
+double den;
+
+	if(FBC_LOCKED) return -1;
+
+	// Make sure there are no skipped slots
+	// FIXME: Save total users count
+	for(uint32_t i=0; i < hashes.used; i++)
+	{
+		// FIXME: Reset last seen to -1
+		// Find missing categories for each hash and add it
+		for(uint_least16_t int j=0; j < hashes->hashes.used; j++)
+		{
+			// FIXME: If j != last seen  + 1
+			// FIXME: Then, we must lop through missing values (all last_seen + 1 to j - 1
+			// FIXME: For each of these, add it with count 0
+			// FIXME: This may be best in the loadhashes stuff, alg for that would be whenever we realloc, realloc enough for all missing categories and set count to 0 there
+		}
+	}
+
+	// Do precomputing
+	for(uint32_t i=0; i < hashes.used; i++)
+	{
+		total = 0;
+		den = 0;
+		for(uint_least16_t int j=0; j < hashes->hashes.used; j++)
+		{
+			total += hashes->hashes[i].users[j].data.count;
+		}
+		den = C1 * (total_count + C2) * 256;
+		for(uint_least16_t int j=0; j < hashes->hashes.used; j++)
+		{
+			hashes->hashes[i].users[j].data.probability = 0.5 + hashes->hashes[i].users[j].data.count / den;
+		}
+	}
+	FBC_LOCKED = 1;
 }
 
 static int hash_compare(void const *a, void const *b)
@@ -502,110 +544,41 @@ uint16_t numHashes=0;
 	return 0;
 }
 
-static hsClassification doBayesClassify(uint32_t **categories, HashList *unknown)
+static hsClassification doBayesClassify(FBCJudge *categories, HashList *unknown)
 {
 double total_probability = 0.0;
 double remainder = 1000 * DBL_MIN;
-double *class_probability = malloc(HSCategories.used * sizeof(double));
 
 uint32_t bestseen=0;
 hsClassification myReply;
 
-uint32_t cls, doc; // class and document counters
-uint32_t nfeats;   // total features
-uint32_t ufeats;   // features in this unknown
-uint32_t kfeats;   // features in the known
-
-// Basic match parameters
-float k_disjoint_u;   // features in known doc, not in unknown
-float u_disjoint_k;   // features in unknown doc, not in known
-float k_intersect_u;  // feature in both known and unknown
-
-// Distance is pseudo-pythagorean distance (sqrt(b+c) not
-// sqrt(b^2 + c^2)).
-// This is SQRT of count of complement K in U and U in K
-float distance;
-
-// Radiance - all linear waves fall off in accordance with
-// the inverse square law (1/d^2). The power (light) in this
-// case is the square of shared features between known and
-// unknown. Hence the code ammounts to 1/d^2 * shared^2.
-// Since distance and light are per document, we sum them up
-// and do the inverse square law and then sum the results in
-// a running total. The final value is per class.
-float radiance;
-float *class_radiance = malloc(HSCategories.used * sizeof(float));
-
-	ufeats = unknown->used;
-
-	for (cls = 0; cls < HSCategories.used; cls++)
-		class_radiance[cls]=0.0;
-
-	// Class-level loop
+	// Compute base probability
 	for (cls = 0; cls < HSCategories.used; cls++)
 	{
-		// Document-level loop
-		for(doc = 0 ; doc < HSCategories.categories[cls].totalDocuments; doc++)
-		{
-			kfeats = HSCategories.categories[cls].documentKnownHashes[doc];
-			k_intersect_u = categories[cls][doc];
-			u_disjoint_k = ufeats - (uint32_t) k_intersect_u;
-			k_disjoint_u = HSCategories.categories[cls].documentKnownHashes[doc] - (uint32_t) k_intersect_u;
-			nfeats = kfeats + ufeats - (uint32_t) k_intersect_u;
-
-			if (nfeats > 10)
-			{
-				// This is not proper Pythagorean (Euclidean) distance.
-				// Proper would be sqrtf(u_disjoint_k^2 + k_disjoint_u^2).
-				// Proper distance is not used because it would tend to
-				// "repulse" things from the right class. Using something
-				// that weakens radiance for differences, but doesn't
-				// "repulse."
-				// We don't actually take a square root here, because our only
-				// use is in the radience formula (inverse square law), where
-				// we just square it again.
-				distance = u_disjoint_k + k_disjoint_u;
-
-				// This formula was the best found in the MIT `SC 2006 paper.
-				// It works well because by doing k_intersect_u^2, we get a "pulling"
-				// effect which helps "pull" things into the right class.
-				// The first line is inverse square law, the .000001 is to avoid
-				// divide by zero.
-				// We don't bother squaring the distance as it is effectively
-				// squared already.
-				radiance = 1.0 / (distance + .FLT_MIN);
-				radiance = radiance * k_intersect_u * k_intersect_u;
-
-				class_radiance[cls] += radiance;
-			}
-		}
+		categories[cls].result = categories[cls].naiveBayesNum / ( categories[cls].naiveBayesNum + categories[cls].naiveBayesDen );
 	}
+
 
 	// Renormalize radiance to probability
 	for (cls = 0; cls < HSCategories.used; cls++)
 	{
 		// Avoid divide by zero and keep value small, for log10(remainder) below
-		class_probability[cls] = class_radiance[cls];
-		if (class_probability[cls] < DBL_MIN * 100)
-			class_probability[cls] = DBL_MIN * 100;
-		total_probability += class_probability[cls];
+		if (categories[cls].result < DBL_MIN * 100)
+			categories[cls].result = DBL_MIN * 100;
+		total_probability += categories[cls].result;
 	}
 
 	for (cls = 0; cls < HSCategories.used; cls++) // Order of instructions in this loop matters!
 	{
-		class_probability[cls] = class_probability[cls] / total_probability; // fix-up probability
-		if (class_probability[cls] > class_probability[bestseen]) bestseen = cls; // are we the best
-		remainder += class_probability[cls]; // add up remainder
+		categories[cls].result = categories[cls].result / total_probability; // fix-up probability
+		if (categories[cls].result > categories[bestseen].result) bestseen = cls; // are we the best
+		remainder += categories[cls].result; // add up remainder
 	}
-	remainder -= class_probability[bestseen]; // fix-up remainder
+	remainder -= categories[bestseen].result; // fix-up remainder
 
-	myReply.probability = class_probability[bestseen];
-	myReply.probScaled = 10 * (log10(class_probability[bestseen]) - log10(remainder));
+	myReply.probability = categories[bestseen].result;
+	myReply.probScaled = 10 * (log10(categories[besteen].result) - log10(remainder));
 	myReply.name = HSCategories.categories[bestseen].name;
-
-	// cleanup time!
-	free(class_probability);
-	free(class_radiance);
 
 return myReply;
 }
@@ -613,25 +586,29 @@ return myReply;
 bayesClassification doHSPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
-uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
+uint32_t *categories = malloc(HSCategories.used * sizeof(FBCJudge));
 int64_t BSRet=-1;
-bayesClassification data;
+FBCClassification data;
 
-	// alloc data for document hash match stats
-	for(i=0; i < HSCategories.used; i++)
-	{
-		categories[i]=calloc(HSCategories.categories[i].totalDocuments, sizeof(uint32_t));
-	}
 
-	// set the hash as having been seen on each category/document pair
+	// Set numerator and denominator to 1 so we don't have 0's as all answers
 	for(i=0; i < toClassify->used; i++)
 	{
-		if((BSRet=HSBinarySearch(&HSJudgeHashList, 0, HSJudgeHashList.used-1, toClassify->hashes[i].primary, toClassify->hashes[i].secondary))>=0)
+		categories[i].numerator = 1;
+		categories[i].denominator = 1;
+	}
+
+	// do bayes multiplication
+	for(i=0; i < toClassify->used; i++)
+	{
+		if((BSRet=FBCSearch(&BayesJudgeHashList, 0, BayesJudgeHashList.used-1, toClassify->hashes[i]))>=0)
 		{
-//			printf("Found %"PRIX32" %"PRIX32"\n", toClassify->hashes[i].primary, toClassify->hashes[i].secondary);
+//			printf("Found %"PRIX64"\n", toClassify->hashes[i]);
 			for(j=0; j < HSJudgeHashList.hashes[BSRet].used; j++)
 			{
-				categories[HSJudgeHashList.hashes[BSRet].users[j].category][HSJudgeHashList.hashes[BSRet].users[j].document]++;
+				/*BAYES*/
+				categories[BayesJudgeHashList.hashes[BSRet].users[j].category].numerator *= BayesJudgeHashList.hashes[BSRet].users[j].data.probability;
+				categories[BayesJudgeHashList.hashes[BSRet].users[j].category].denominator *= (1 - BayesJudgeHashList.hashes[BSRet].users[j].data.probability);
 			}
 		}
 	}
