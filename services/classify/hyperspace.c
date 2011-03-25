@@ -206,13 +206,14 @@ int writecheck;
 	{
 		do {
 			writecheck = write(file, &hashes_list->used, sizeof(uint_least16_t));
-		while (writecheck >= 0 && writecheck < sizeof(uint_least16_t));
+			if(writecheck < sizeof(uint_least16_t)) lseek64(file, -writecheck, SEEK_CUR);
+		} while (writecheck >= 0 && writecheck < sizeof(uint_least16_t));
 		for(i=0; i < hashes_list->used; i++)
 		{
 			do {
 				writecheck = write(file, &hashes_list->hashes[i], FHS_v1_HASH_SIZE);
                                 if(writecheck < FHS_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FHS_v1_HASH_SIZE);
+			} while (writecheck >= 0 && writecheck < FHS_v1_HASH_SIZE);
 		}
 		/* Ok, have written hashes, now save new count */
 		header->records = header->records+1;
