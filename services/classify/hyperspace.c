@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2009 Trever L. Adams
+ *  Copyright (C) 2008-2010 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -641,7 +641,7 @@ hsClassification data;
 	{
 		if((BSRet = HSBinarySearch(&HSJudgeHashList, 0, HSJudgeHashList.used-1, toClassify->hashes[i]))>=0)
 		{
-//			printf("Found %"PRIX32"\n", toClassify->hashes[i]);
+//			printf("Found %"PRIX64"\n", toClassify->hashes[i]);
 			for(j = 0; j < HSJudgeHashList.hashes[BSRet].used; j++)
 			{
 				categories[HSJudgeHashList.hashes[BSRet].users[j].category][HSJudgeHashList.hashes[BSRet].users[j].document]++;
