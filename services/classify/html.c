@@ -731,6 +731,23 @@ int xi = 0;
 		}
 		current=current->next;
 	}
+
+	current = myHead->head;
+	while(current != NULL) // Make everything lower case -- increase accuracy and lower key count
+	{
+		myData=(wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
+		currentOffset = current->rm_so;
+		for(; currentOffset < current->rm_eo; currentOffset++)
+		{
+/*			if(iswupper(myData[currentOffset]))
+			{
+				printf("Changing %lc", myData[currentOffset]);*/
+			myData[currentOffset] = towlower(myData[currentOffset]);
+/*				printf(" to %lc\n", myData[currentOffset]);
+			}*/
+		}
+		current=current->next;
+	}
 }
 
 
