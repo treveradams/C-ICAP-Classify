@@ -38,25 +38,30 @@
 #include <wchar.h>
 #include <wctype.h>
 #include <time.h>
+#include <dirent.h>
+#include <errno.h>
+#include <string.h>
 
 #include "hash.c"
 #include "hyperspace.c"
 
 char *judge_file;
+char *fhs_dir;
 
 int readArguments(int argc, char *argv[])
 {
 int i;
-	if(argc < 7)
+	if(argc < 9)
 	{
 		printf("Format of arguments is:\n");
 		printf("\t-p PRIMARY_HASH_SEED\n");
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_FILE_TO_JUDGE\n");
+		printf("\t-d CATEGORY_FHS_FILES_DIR\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
-	for(i=1; i<7; i+=2)
+	for(i=1; i<9; i+=2)
 	{
 		if(strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
 		else if(strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
@@ -64,6 +69,13 @@ int i;
 		{
 			judge_file = malloc(strlen(argv[i+1]) + 1);
 			sscanf(argv[i+1], "%s", judge_file);
+		}
+		else if(strcmp(argv[i], "-d") == 0)
+		{
+			int len = strlen(argv[i+1]);
+			fhs_dir = malloc(len + 1);
+			sscanf(argv[i+1], "%s", fhs_dir);
+			if(fhs_dir[len-1] == '/') fhs_dir[len-1] = '\0';
 		}
 	}
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
@@ -103,68 +115,45 @@ int32_t realLen;
 
 void loadMassCategories(void)
 {
-	preLoadHyperSpace("fhs_files/preload.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.affairs.fhs", "adult.affairs.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.artnudes.fhs", "adult.artnudes.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.fhs", "adult.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.naturism.fhs", "adult.naturism.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.porn.fhs", "adult.porn.fhs");
-	loadHyperSpaceCategory("fhs_files/adult.sexuality.fhs", "adult.sexuality.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.bombmaking.fhs", "antisocial.bombmaking.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.hacking.fhs", "antisocial.hacking.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.hate.fhs", "antisocial.hate.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.spyware.fhs", "antisocial.spyware.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.violence.fhs", "antisocial.violence.fhs");
-	loadHyperSpaceCategory("fhs_files/antisocial.warez.fhs", "antisocial.warez.fhs");
-	loadHyperSpaceCategory("fhs_files/childfriendly.fhs", "childfriendly.fhs");
-	loadHyperSpaceCategory("fhs_files/clothing.fhs", "clothing.fhs");
-	loadHyperSpaceCategory("fhs_files/clothing.intimates.female.fhs", "clothing.intimates.female.fhs");
-	loadHyperSpaceCategory("fhs_files/clothing.intimates.male.fhs", "clothing.intimates.male.fhs");
-	loadHyperSpaceCategory("fhs_files/clothing.swimsuit.female.fhs", "clothing.swimsuit.female.fhs");
-	loadHyperSpaceCategory("fhs_files/clothing.swimsuit.male.fhs", "clothing.swimsuit.male.fhs");
-	loadHyperSpaceCategory("fhs_files/commerce.auctions.fhs", "commerce.auctions.fhs");
-	loadHyperSpaceCategory("fhs_files/commerce.banking.fhs", "commerce.banking.fhs");
-	loadHyperSpaceCategory("fhs_files/commerce.jewelry.fhs", "commerce.jewelry.fhs");
-	loadHyperSpaceCategory("fhs_files/commerce.payment.fhs", "commerce.payment.fhs");
-	loadHyperSpaceCategory("fhs_files/commerce.shopping.fhs", "commerce.shopping.fhs");
-	loadHyperSpaceCategory("fhs_files/downloads.cellphones.fhs", "downloads.cellphones.fhs");
-	loadHyperSpaceCategory("fhs_files/downloads.desktopsillies.fhs", "downloads.desktopsillies.fhs");
-	loadHyperSpaceCategory("fhs_files/downloads.dialers.fhs", "downloads.dialers.fhs");
-	loadHyperSpaceCategory("fhs_files/education.fhs", "education.fhs");
-	loadHyperSpaceCategory("fhs_files/e-mail.fhs", "e-mail.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.fhs", "entertainment.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.gambling.fhs", "entertainment.gambling.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.gossip.fhs", "entertainment.gossip.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.KidsTimeWasting.fhs", "entertainment.KidsTimeWasting.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.onlinegames.fhs", "entertainment.onlinegames.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.sports.fhs", "entertainment.sports.fhs");
-	loadHyperSpaceCategory("fhs_files/entertainment.vacation.fhs", "entertainment.vacation.fhs");
-	loadHyperSpaceCategory("fhs_files/government.fhs", "government.fhs");
-	loadHyperSpaceCategory("fhs_files/health.addictions.fhs", "health.addictions.fhs");
-	loadHyperSpaceCategory("fhs_files/health.fhs", "health.fhs");
-	loadHyperSpaceCategory("fhs_files/health.sexual.fhs", "health.sexual.fhs");
-	loadHyperSpaceCategory("fhs_files/information.childcare.fhs", "information.childcare.fhs");
-	loadHyperSpaceCategory("fhs_files/information.culinary.fhs", "information.culinary.fhs");
-	loadHyperSpaceCategory("fhs_files/information.gardening.fhs", "information.gardening.fhs");
-	loadHyperSpaceCategory("fhs_files/information.homerepair.fhs", "information.homerepair.fhs");
-	loadHyperSpaceCategory("fhs_files/information.news.fhs", "information.news.fhs");
-	loadHyperSpaceCategory("fhs_files/information.pets.fhs", "information.pets.fhs");
-	loadHyperSpaceCategory("fhs_files/information.weather.fhs", "information.weather.fhs");
-	loadHyperSpaceCategory("fhs_files/instantmessaging.fhs", "instantmessaging.fhs");
-	loadHyperSpaceCategory("fhs_files/intoxicants.BeerLiquor.fhs", "intoxicants.BeerLiquor.fhs");
-	loadHyperSpaceCategory("fhs_files/intoxicants.Drugs.fhs", "intoxicants.Drugs.fhs");
-	loadHyperSpaceCategory("fhs_files/jobsearch.fhs", "jobsearch.fhs");
-	loadHyperSpaceCategory("fhs_files/objectionable.HomoBiSexuality.fhs", "objectionable.HomoBiSexuality.fhs");
-	loadHyperSpaceCategory("fhs_files/personalfinance.fhs", "personalfinance.fhs");
-	loadHyperSpaceCategory("fhs_files/personalfinance.investing.fhs", "personalfinance.investing.fhs");
-	loadHyperSpaceCategory("fhs_files/radio.fhs", "radio.fhs");
-	loadHyperSpaceCategory("fhs_files/realestate.fhs", "realestate.fhs");
-	loadHyperSpaceCategory("fhs_files/religion.fhs", "religion.fhs");
-	loadHyperSpaceCategory("fhs_files/social.blogs.fhs", "social.blogs.fhs");
-	loadHyperSpaceCategory("fhs_files/social.dating.fhs", "social.dating.fhs");
-	loadHyperSpaceCategory("fhs_files/social.reconnect.fhs", "social.reconnect.fhs");
-	loadHyperSpaceCategory("fhs_files/social.telephony.fhs", "social.telephony.fhs");
-	loadHyperSpaceCategory("fhs_files/weapons.fhs", "weapons.fhs");
+DIR *dirp;
+struct dirent *dp;
+char old_dir[PATH_MAX];
+int name_len;
+char *cat_name;
+
+	getcwd(old_dir, PATH_MAX);
+	chdir(fhs_dir);
+	preLoadHyperSpace("preload.fhs");
+	chdir(old_dir);
+
+	if ((dirp = opendir(fhs_dir)) == NULL)
+	{
+		printf("couldn't open '%s'", fhs_dir);
+		return;
+	}
+
+	chdir(fhs_dir);
+	do {
+		errno = 0;
+		if ((dp = readdir(dirp)) != NULL)
+		{
+			if (strcmp(dp->d_name, "preload.fhs") != 0 && strstr(dp->d_name, ".fhs") != NULL)
+			{
+				name_len = strstr(dp->d_name, ".fhs") - dp->d_name;
+				cat_name = malloc(name_len + 1);
+				strncpy(cat_name, dp->d_name, name_len);
+				cat_name[name_len] = '\0';
+				loadHyperSpaceCategory(dp->d_name, cat_name);
+				free(cat_name);
+			}
+		}
+	} while (dp != NULL);
+	if (errno != 0)
+		perror("error reading directory");
+	else
+		(void) closedir(dirp);
+
+	chdir(old_dir);
 }
 
 int main (int argc, char *argv[])
