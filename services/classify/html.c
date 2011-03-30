@@ -812,11 +812,11 @@ int foundCJK = 0;
 			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-			hashes_list->used++;
 /*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so); */
+			hashes_list->used++;
 		}
 		// skip non-graphical characters ([[:graph:]]+)
 		while (!iswgraph(myData[currentOffset]) && currentOffset < current->rm_eo)
@@ -878,11 +878,11 @@ int foundCJK = 0;
 			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-			hashes_list->used++;
 /*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so); */
+			hashes_list->used++;
 		}
 	}
 	makeSortedUniqueHashes(hashes_list);
