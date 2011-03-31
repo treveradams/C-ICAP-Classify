@@ -50,7 +50,7 @@
 #include "hash.h"
 
 regex_t htmlFinder, superFinder, commentFinder, imageFinder, title1, title2, alt1, alt2;
-regex_t metaFinder, metaDescription, metaKeyword, metaContent, currencyFinder, nbspFinder;
+regex_t metaFinder, metaDescription, metaKeyword, metaContent, currencyFinder, spaceFinder;
 regex_t headFinder, charsetFinder;
 regex_t entityFinder, numericentityFinder;
 regex_t insaneFinder;
@@ -91,15 +91,12 @@ wchar_t myRegex[PATH_MAX+1];
 	myRegex[PATH_MAX] = L'\0';
 	tre_regwcomp(&currencyFinder, myRegex, REG_EXTENDED);
 
-	tre_regwcomp(&nbspFinder, L"(&nbsp;)+", REG_EXTENDED);
-
+	tre_regwcomp(&spaceFinder, L"(<P>|<BR>)+", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&htmlFinder, L"(<[^>]*>([[:space:]]*))+", REG_EXTENDED);
 	tre_regwcomp(&insaneFinder, L"[^[:graph:][:space:]]+", REG_EXTENDED);
-//	tre_regwcomp(&insaneFinder, L"[\u200E\u200F\u200B\u202A-\u202E\u2060\u206A-\u206F]+", REG_EXTENDED);
-//	tre_regwcomp(&entityFinder, L"&#x?([0-9a-fA-F]+);", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&entityFinder, L"&([^[:space:];&]+);", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&numericentityFinder, L"^#x?([[:xdigit:]]+$)", REG_EXTENDED | REG_ICASE);
-	// The following two commentedwere replaced by superFinder
+	// The following two commented were replaced by superFinder
 	//    <[[:space:]]*script[^>]*>.*?<[[:space:]]*/script[^>]*>
 	//    <[[:space:]]*style[^>]*>.*?<[[:space:]]*/style[^>]*>
 	tre_regwcomp(&superFinder, L"<(([[:space:]]*script[^>]*>.*?<[[:space:]]*/script[^>]*)|([[:space:]]*style[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
@@ -127,7 +124,7 @@ static void freeRegexes(void)
 {
 	tre_regfree(&currencyFinder);
 
-	tre_regfree(&nbspFinder);
+	tre_regfree(&spaceFinder);
 
 	tre_regfree(&htmlFinder);
 	tre_regfree(&insaneFinder);
@@ -188,44 +185,49 @@ static void regexRemove(regexHead *myHead, myRegmatch_t *startblock, regmatch_t 
 myRegmatch_t *current = myHead->head, *newmatch;
 	while(current != NULL)
 	{
-		if(current->data == NULL && startblock == current) // we are only processing internal data here.
+		if(startblock == current) // Is this the block we are looking for?
 		{
-			if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+			if(current->data == NULL) // we are only processing internal data here.
 			{
-//				printf("Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, myHead->main_memory + to_remove->rm_so);
-				newmatch = getEmptyRegexBlock(myHead);
-				newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
-				newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
-				current->rm_eo = to_remove->rm_so; // the old block ends where we started
-				myHead->main_memory[to_remove->rm_so] = L'\0';
-				newmatch->next = current->next; // save old next
-				current->next = newmatch; // insert new match
-				if(newmatch->next == NULL) myHead->tail = newmatch;
-				myHead->dirty = 1;
-				return;
+				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+				{
+//					printf("Head Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, myHead->main_memory + to_remove->rm_so);
+					newmatch = getEmptyRegexBlock(myHead);
+					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
+					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
+					current->rm_eo = to_remove->rm_so; // the old block ends where we started
+					newmatch->next = current->next; // save old next
+					current->next = newmatch; // insert new match
+					if(newmatch->next == NULL) myHead->tail = newmatch;
+					myHead->dirty = 1;
+//					printf("After Head Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 10 ? 10: newmatch->rm_eo - newmatch->rm_so, &myHead->main_memory[newmatch->rm_so]);
+					return;
+				}
+				else printf("regexRemove: (To remove: %d - %d, Current: %d - %d,\n", to_remove->rm_so, to_remove->rm_eo, current->rm_so, current->rm_eo);
 			}
-		}
-		else if(current->data != NULL && startblock == current) // we process private memory blocks here.
-		{
-			if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+			else if(current->data != NULL) // we process private memory blocks here.
 			{
-//				printf("Private Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, current->data + to_remove->rm_so);
-				newmatch = getEmptyRegexBlock(myHead);
-				newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
-				newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
-				current->rm_eo = to_remove->rm_so; // the old block ends where we started
-				current->data[to_remove->rm_so] = L'\0';
-				newmatch->data = current->data;
-				newmatch->next = current->next; // save old next
-				current->next = newmatch; // insert new match
-				if(newmatch->next == NULL) myHead->tail = newmatch;
-				myHead->dirty = 1;
-//				printf("After Private Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 10 ? 10: newmatch->rm_eo - newmatch->rm_so, newmatch->data + newmatch->rm_so);
-				return;
+				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+				{
+					printf("Private Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, current->data + to_remove->rm_so);
+					newmatch = getEmptyRegexBlock(myHead);
+					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
+					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
+					current->rm_eo = to_remove->rm_so; // the old block ends where we started
+					newmatch->data = current->data;
+					newmatch->next = current->next; // save old next
+					current->next = newmatch; // insert new match
+					if(newmatch->next == NULL) myHead->tail = newmatch;
+					myHead->dirty = 1;
+					printf("After Private Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 10 ? 10: newmatch->rm_eo - newmatch->rm_so, newmatch->data + newmatch->rm_so);
+					return;
+				}
 			}
 		}
 		current = current->next;
 	}
+	printf("regexRemove not handled. Ooops. (%s: %.*ls)\n", startblock->data ? "Private" : "Head", to_remove->rm_eo - to_remove->rm_so, startblock->data ? startblock->data + to_remove->rm_so : myHead->main_memory + to_remove->rm_so);
+	if(to_remove->rm_eo - to_remove->rm_so == 1) printf("Character in unhandled regexRemove %"PRIX32"\n", *(myHead->main_memory + to_remove->rm_so));
 }
 
 static void regexReplace(regexHead *myHead, myRegmatch_t *startblock, regmatch_t *to_remove, wchar_t *replaceMe, int len, int pad)
@@ -235,93 +237,92 @@ uint32_t myLen = 0;
 
 	while(current != NULL)
 	{
-		if(current->data == NULL && startblock == current) // we are only processing internal data here.
+		if(startblock == current) // Is this the block we are looking for?
 		{
-			if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+			if(current->data == NULL) // we are only processing internal data here.
 			{
-				newmatch = getEmptyRegexBlock(myHead);
-				newmatch->next = current->next; // save old data
-				newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
-				if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
+				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
 				{
-					// The following line is replaced with several memmoves to avoid overlapping problems
-					// myLen = swprintf(myHead->main_memory + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
-					if(pad) {
-						memmove(myHead->main_memory + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
-						myHead->main_memory[to_remove->rm_so] = L' ';
-						myHead->main_memory[to_remove->rm_so + 1 + len] = L' ';
-						myLen = len + 2;
+					newmatch = getEmptyRegexBlock(myHead);
+					newmatch->next = current->next; // save old data
+					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
+					if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
+					{
+						// The following line is replaced with several memmoves to avoid overlapping problems
+						// myLen = swprintf(myHead->main_memory + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						if(pad) {
+							memmove(myHead->main_memory + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
+							myHead->main_memory[to_remove->rm_so] = L' ';
+							myHead->main_memory[to_remove->rm_so + 1 + len] = L' ';
+							myLen = len + 2;
+						}
+						else {
+							memmove(myHead->main_memory + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
+							myLen = len;
+						}
+						current->rm_eo = to_remove->rm_so + myLen;
+						current->next = newmatch; // insert new match
+	//					printf("Inserted: \"%.*ls\"\n", myLen, myHead->main_memory + to_remove->rm_so);
 					}
 					else {
-						memmove(myHead->main_memory + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
-						myLen = len;
+						newdata = getEmptyRegexBlock(myHead);
+						newdata->data = malloc((len + 3) * sizeof(wchar_t));
+						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						newdata->rm_so = 0;
+						newdata->owns_memory = 1;
+						current->rm_eo = to_remove->rm_so; // the old block ends where we started
+						current->next = newdata; // insert new data
+						newdata->next = newmatch; // insert new match
+	//					printf("Inserted: %.*ls\n", newdata->rm_eo, newdata->data);
 					}
-					current->rm_eo = to_remove->rm_so + myLen;
-//					myHead->main_memory[current->rm_eo] = L'\0';
-					current->next = newmatch; // insert new match
-//					printf("Inserted: \"%.*ls\"\n", myLen, myHead->main_memory + to_remove->rm_so);
+					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
+					if(newmatch->next == NULL) myHead->tail = newmatch;
+					myHead->dirty = 1;
+					current = NULL;
 				}
-				else {
-					newdata = getEmptyRegexBlock(myHead);
-					newdata->data = malloc((len + 3) * sizeof(wchar_t));
-					newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
-					newdata->rm_so = 0;
-					newdata->owns_memory = 1;
-					current->rm_eo = to_remove->rm_so; // the old block ends where we started
-//					myHead->main_memory[current->rm_eo] = L'\0';
-					current->next = newdata; // insert new data
-					newdata->next = newmatch; // insert new match
-//					printf("Inserted: %.*ls\n", newdata->rm_eo, newdata->data);
-				}
-				newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
-				if(newmatch->next == NULL) myHead->tail = newmatch;
-				myHead->dirty = 1;
-				current = NULL;
 			}
-		}
-		else if(current->data != NULL && startblock == current) // we process private memory blocks here.
-		{
-			if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
+			else if(current->data != NULL) // we process private memory blocks here.
 			{
-				newmatch = getEmptyRegexBlock(myHead);
-				newmatch->next = current->next; // save old data
-				newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
-				newmatch->data = current->data; // This is a custom data block
-				if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
+				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
 				{
-					// The following line is replaced with several memmoves to avoid overlapping problems
-					// myLen = swprintf(current->data + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
-					if(pad) {
-						memmove(current->data + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
-						current->data[to_remove->rm_so] = L' ';
-						current->data[to_remove->rm_so + 1 + len] = L' ';
-						myLen = len + 2;
+					newmatch = getEmptyRegexBlock(myHead);
+					newmatch->next = current->next; // save old data
+					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
+					newmatch->data = current->data; // This is a custom data block
+					if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
+					{
+						// The following line is replaced with several memmoves to avoid overlapping problems
+						// myLen = swprintf(current->data + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						if(pad) {
+							memmove(current->data + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
+							current->data[to_remove->rm_so] = L' ';
+							current->data[to_remove->rm_so + 1 + len] = L' ';
+							myLen = len + 2;
+						}
+						else {
+							memmove(current->data + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
+							myLen = len;
+						}
+						current->rm_eo = to_remove->rm_so + myLen;
+						current->next = newmatch; // insert new match
+	//					printf("Inserted: \"%.*ls\"\n", myLen, current->data + to_remove->rm_so);
 					}
 					else {
-						memmove(current->data + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
-						myLen = len;
+						newdata = getEmptyRegexBlock(myHead);
+						newdata->data = malloc((len + 3) * sizeof(wchar_t));
+						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						newdata->rm_so = 0;
+						newdata->owns_memory = 1;
+						current->rm_eo = to_remove->rm_so; // the old block ends where we started
+						current->next = newdata; // insert new data
+						newdata->next = newmatch; // insert new match
+	//					printf("Inserted: \"%.*ls\"\n", newdata->rm_eo, newdata->data);
 					}
-					current->rm_eo = to_remove->rm_so + myLen;
-//					current->data[current->rm_eo] = L'\0';
-					current->next = newmatch; // insert new match
-//					printf("Inserted: \"%.*ls\"\n", myLen, current->data + to_remove->rm_so);
+					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
+					if(newmatch->next == NULL) myHead->tail = newmatch;
+					myHead->dirty = 1;
+					current = NULL;
 				}
-				else {
-					newdata = getEmptyRegexBlock(myHead);
-					newdata->data = malloc((len + 3) * sizeof(wchar_t));
-					newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
-					newdata->rm_so = 0;
-					newdata->owns_memory = 1;
-					current->rm_eo = to_remove->rm_so; // the old block ends where we started
-//					current->data[current->rm_eo] = L'\0';
-					current->next = newdata; // insert new data
-					newdata->next = newmatch; // insert new match
-//					printf("Inserted: \"%.*ls\"\n", newdata->rm_eo, newdata->data);
-				}
-				newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
-				if(newmatch->next == NULL) myHead->tail = newmatch;
-				myHead->dirty = 1;
-				current = NULL;
 			}
 		}
 		if(current) current = current->next;
@@ -334,15 +335,14 @@ static void regexAppend(regexHead *myHead, wchar_t *appendMe, int len)
 myRegmatch_t *newdata;
 uint32_t offset;
 
-	if(myHead->tail->data && (myHead->tail->rm_eo + len + 2) < regexAPPENDSIZE)
+	if(myHead->tail->data && (myHead->tail->rm_eo + len + 1) < regexAPPENDSIZE)
 	{
 		offset = myHead->tail->rm_eo;
 		newdata = myHead->tail;
 		newdata->data[offset] = L' ';
 		memcpy(newdata->data + offset + 1, appendMe, len * sizeof(wchar_t));
-		newdata->rm_eo = newdata->rm_eo + len + 1;
-		newdata->data[newdata->rm_eo] = L'\0';
-//		printf("Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo, newdata->data);
+		newdata->rm_eo = newdata->rm_eo + len + 1; // offset was newdata->rm_eo
+//		printf("regexAppend: Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo, newdata->data);
 	}
 	else {
 		newdata = getEmptyRegexBlock(myHead);
@@ -351,17 +351,17 @@ uint32_t offset;
 		//	myAPPEND[PATH_MAX]='\0';
 		//	newdata->data=wcsdup(myAPPEND);
 		newdata->rm_eo = len + 1;
-		if(len + 2 < regexAPPENDSIZE) newdata->data = malloc(regexAPPENDSIZE * sizeof(wchar_t));
-		else newdata->data = malloc((len + 2) * sizeof(wchar_t));
+		if(len + 1 < regexAPPENDSIZE) newdata->data = malloc(regexAPPENDSIZE * sizeof(wchar_t));
+		else newdata->data = malloc((len + 1) * sizeof(wchar_t));
 		newdata->data[0] = L' ';
 		//	wcsncpy(newdata->data+1, appendMe, len);
 		memcpy(newdata->data + 1, appendMe, len * sizeof(wchar_t));
-		newdata->data[len + 1] = L'\0';
 //		printf("New Appending: %.*ls\n", len, appendMe);
 		newdata->rm_so = 0;
 		newdata->owns_memory = 1;
 		myHead->tail->next = newdata;
 		myHead->tail = newdata;
+//		printf("regexAppend: rm_eo = %ld\n", newdata->rm_eo);
 	}
 	myHead->dirty = 1;
 }
@@ -393,9 +393,9 @@ unsigned long total = 0;
 	{
 		memcpy(myHead->main_memory + offset, (current->data == NULL ? old_main : current->data) + current->rm_so, (current->rm_eo - current->rm_so) * sizeof(wchar_t));
 		offset += current->rm_eo - current->rm_so;
+
 		current = current->next;
 	}
-	myHead->main_memory[total] = L'\0';
 	free(old_main);
 
 	current = myHead->head;
@@ -456,7 +456,6 @@ int len;
 			currencyMatch[4].rm_eo += currentOffset;
 			len = swprintf(replace, 101, L"$ %.*ls%ls%.*ls", currencyMatch[3].rm_eo - currencyMatch[3].rm_so, XS, (currencyMatch[4].rm_eo - currencyMatch[4].rm_so > 0 ? L"." : L""),
 				(currencyMatch[4].rm_eo - currencyMatch[4].rm_so > 0 ? (currencyMatch[4].rm_eo - currencyMatch[4].rm_so) - 1 : 0), XS);
-			replace[100] = L'\0';
 //			printf("Currency %.*ls to %.*ls\n", currencyMatch[0].rm_eo - currencyMatch[0].rm_so, myData + currencyMatch[0].rm_so, len, replace);
 			regexReplace(myHead, current, &currencyMatch[0], replace, len, 0);
 			currentOffset = currencyMatch[0].rm_eo;
@@ -533,7 +532,7 @@ int xi = 0;
 	{
 		myData = (wchar_t *)(current->data==NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
-		while(current->rm_eo>currentOffset && tre_regwnexec(&metaFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
+		while(current->rm_eo > currentOffset && tre_regwnexec(&metaFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
@@ -568,7 +567,7 @@ int xi = 0;
 					tripleMatch[0].rm_eo += singleMatch[1].rm_so;
 					tripleMatch[1].rm_so += singleMatch[1].rm_so;
 					tripleMatch[1].rm_eo += singleMatch[1].rm_so;
-					for(metacount = 0; metacount < tripleMatch[1].rm_eo-tripleMatch[1].rm_so; metacount++)
+					for(metacount = 0; metacount < tripleMatch[1].rm_eo - tripleMatch[1].rm_so; metacount++)
 						if(*(myData + tripleMatch[1].rm_so + metacount) == L',') *(myData + tripleMatch[1].rm_so + metacount) = L' ';
 //					printf("Saving Meta Keywords: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
 					regexReplace(myHead, current, &singleMatch[0], myData + tripleMatch[1].rm_so, tripleMatch[1].rm_eo - tripleMatch[1].rm_so, 1);
@@ -588,7 +587,7 @@ int xi = 0;
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
-		while(current->rm_eo>currentOffset && tre_regwnexec(&imageFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
+		while(current->rm_eo > currentOffset && tre_regwnexec(&imageFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
@@ -634,11 +633,27 @@ int xi = 0;
 	}
 
 	current = myHead->head;
+	while(current != NULL) // kill all space tags <BR>,<P>
+	{
+		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
+		currentOffset = current->rm_so;
+		while(current->rm_eo > currentOffset && tre_regwnexec(&spaceFinder, myData + currentOffset, current->rm_eo-currentOffset, 1, singleMatch, 0) != REG_NOMATCH)
+		{
+			singleMatch[0].rm_so += currentOffset;
+			singleMatch[0].rm_eo += currentOffset;
+//			printf("Killing Space Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
+			regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
+			currentOffset = singleMatch[0].rm_eo;
+		}
+		current = current->next;
+	}
+
+	current = myHead->head;
 	while(current != NULL) // kill all unused tags
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
-		while(current->rm_eo>currentOffset && tre_regwnexec(&htmlFinder, myData + currentOffset, current->rm_eo-currentOffset, 3, singleMatch, 0) != REG_NOMATCH)
+		while(current->rm_eo > currentOffset && tre_regwnexec(&htmlFinder, myData + currentOffset, current->rm_eo-currentOffset, 3, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
@@ -650,21 +665,21 @@ int xi = 0;
 		current = current->next;
 	}
 
-	current = myHead->head;
-	while(current != NULL) // nbsps, must be second to last
+/*	current = myHead->head;
+	while(current != NULL) // kill nbsp , must be second to last
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
-		while(tre_regwnexec(&nbspFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
+		while(current->rm_eo > currentOffset && tre_regwnexec(&nbspFinder, myData + currentOffset, current->rm_eo - currentOffset, 1, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
-//			printf("Killing nbsp: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
+//			printf("Killing Spaces: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
 			regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
 			currentOffset = singleMatch[0].rm_eo;
 		}
 		current = current->next;
-	}
+	} */
 
 	current = myHead->head;
 	// http://www.w3.org/TR/html5/named-character-references.html
@@ -673,7 +688,7 @@ int xi = 0;
 	{
 		myData=(wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset=current->rm_so;
-		while(current->rm_eo > currentOffset && tre_regwnexec(&entityFinder, myData+currentOffset, current->rm_eo-currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
+		while(current->rm_eo > currentOffset && tre_regwnexec(&entityFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
@@ -718,7 +733,7 @@ int xi = 0;
 	{
 		myData=(wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
-		while(tre_regwnexec(&insaneFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
+		while(currentOffset < current->rm_eo && tre_regwnexec(&insaneFinder, myData + currentOffset, current->rm_eo - currentOffset, 1, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
@@ -812,10 +827,10 @@ int foundCJK = 0;
 			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so); */
+				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so);
 			hashes_list->used++;
 		}
 		// skip non-graphical characters ([[:graph:]]+)
@@ -878,10 +893,10 @@ int foundCJK = 0;
 			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so); */
+				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so);
 			hashes_list->used++;
 		}
 	}
