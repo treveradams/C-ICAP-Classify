@@ -195,6 +195,7 @@ hsClassification classification;
 	free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 	free(judge_file);
+	free(fhs_dir);
 	deinitHyperSpaceClassifier();
 	deinitHTML();
 	return 0;
