@@ -493,10 +493,10 @@ uint16_t numHashes=0;
 					HSJudgeHashList.used++;
 					break;
 				case 0:
-					ci_debug_printf(1, "Keys: %"PRIX64" already loaded. Preload file %s corrupted?!?!\n", docHashes[j], fhs_name);
+					ci_debug_printf(1, "Key: %"PRIX64" already loaded. Preload file %s corrupted?!?!\n", docHashes[j], fhs_name);
 					break;
 				case 1:
-					ci_debug_printf(1, "Keys: %"PRIX64" out of order. Preload file %s is corrupted!!!\n" \
+					ci_debug_printf(1, "Key: %"PRIX64" out of order. Preload file %s is corrupted!!!\n" \
 								"Aborting preload as is.\n", docHashes[j], fhs_name);
 					closeDocument(docHashes);
 					return -1;

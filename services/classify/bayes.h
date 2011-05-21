@@ -19,13 +19,13 @@
 
 
 #define FBC_MAX_FEATURE_COUNT 500000
-#define MAX_NAIVEBAYES_CATEGORY_NAME 100
+#define MAX_BAYES_CATEGORY_NAME 100
 
 #define FBC_FORMAT_VERSION 1
 #define UNICODE_BYTE_MARK 0xFEFF
 
 #define	MARKOV_C1	16	/* Markov C1 */
-#define MARKIV_C2	1	/* Markov C2 */
+#define MARKOV_C2	1	/* Markov C2 */
 
 typedef struct {
 	char *name;
@@ -49,8 +49,9 @@ typedef struct {
 // Qty is UINT32_T, this is the number of records in the file
 // Records
 // BYTE 1 2 3 4 5 6 7 8 9 10 .... END
-//      H H H H H H   0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+//      H COUNT H COUNT H COUNT H COUNT H COUNT H COUNT  0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 // H is a UINT64_T
+// COUNT is UINT32_T
 // END is a 128 bit all zero delimiter to allow for verifying the file
 // END is currently not written nor checked
 
@@ -60,6 +61,7 @@ typedef struct {
 #define FBC_HEADERv1_RECORDS_QTY_SIZE sizeof(uint_least16_t)
 #define FBC_v1_QTY_SIZE sizeof(uint_least16_t)
 #define FBC_v1_HASH_SIZE sizeof(uint_least64_t)
+#define FBC_v1_HASH_USE_COUNT sizeof(uint_least32_t)
 
 #define FBC_HEADERv1_RECORDS_QTY_MAX UINT_LEAST32_MAX
 #define FBC_v1_QTY_MAX UINT_LEAST16_MAX
@@ -77,7 +79,7 @@ typedef struct {
 } FBCTextCategory;
 
 typedef struct {
-	FBSTextCategory *categories;
+	FBCTextCategory *categories;
 	uint16_t used;
 	uint16_t slots;
 } FBCTextCategoryExt;
@@ -96,32 +98,35 @@ typedef struct __attribute__ ((__packed__)) {
 	FBCFeature hash;
 	FBCHashJudgeUsers *users;
 	uint_least16_t used;
-} FBCFeature;
+} FBCFeatureExt;
 
 typedef struct  {
-	FBCFeatureEx *hashes;
+	FBCFeatureExt *hashes;
 	uint32_t used;
 	uint32_t slots;
-} FBCHashListExt;
+	int FBC_LOCKED; // FBC_LOCKED is used to keep from loading more data or writing data if we are in an optimized state.
+} FBCHashList;
 
 #ifdef IN_BAYES
 void writeFBCHeader(int file, FBC_HEADERv1 *header);
 int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
-void writeFBCHashes(int file, FBC_HEADERv1 *header, HashList *hashes_list);
-int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *hashes_list);
+int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point);
+int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list);
 void computeHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
 int preLoadFBC(char *fbc_name);
 int loadFBCCategory(char *fbc_name, char *cat_name);
-hsClassification doFBCPrepandClassify(HashList *toClassify);
+int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
+FBCClassification doFBCPrepandClassify(HashList *toClassify);
 void initBayesClassifier(void);
 void deinitBayesClassifier(void);
 #else
 extern void writeFBCHeader(int file, FBC_HEADERv1 *header);
 extern int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
-extern int writeFBCHashes(int file, FBC_HEADERv1 *header, HashList *hashes_list);
+int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point);
 extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *hashes_list);
 extern int preLoadHyperSpace(char *fbc_name);
 extern int loadFBCCategory(char *fbc_name, char *cat_name);
+extern int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
 extern FBCClassification doFBCPrepandClassify(HashList *toClassify);
 extern void initBayesClassifier(void);
 extern void deinitBayesClassifier(void);

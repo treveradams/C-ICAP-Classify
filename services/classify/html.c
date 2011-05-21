@@ -488,7 +488,7 @@ wchar_t *myData = NULL;
 regoff_t currentOffset = 0;
 regmatch_t singleMatch[11], doubleMatch[4], tripleMatch[2];
 myRegmatch_t *current = myHead->head;
-wchar_t unicode_entity;
+wchar_t unicode_entity[4];
 int32_t entity;
 wchar_t *unicode_end;
 int metacount;
@@ -695,14 +695,15 @@ int xi = 0;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				unicode_end = myData + doubleMatch[1].rm_eo;
 				if(myData[doubleMatch[0].rm_so + 2] == L'X' || myData[doubleMatch[0].rm_so + 2] == L'x') { // Check for hex
-					unicode_entity = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
+					unicode_entity[0] = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
 //					ci_debug_printf(10,"Converting Hexadecimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
 				else {
-					unicode_entity = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
+					unicode_entity[0] = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
 //					ci_debug_printf(10, "Converting Decimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
-				regexReplace(myHead, current, &singleMatch[0], &unicode_entity, 1, 0); // We are replacing characters, do not add padding!
+                                unicode_entity[1] = L'\0';
+				regexReplace(myHead, current, &singleMatch[0], unicode_entity, wcslen(unicode_entity), 0); // We are replacing characters, do not add padding!
 			}
 
 			else if((entity=findEntityBS(0, sizeof( htmlentities ) / sizeof( htmlentities[0] ) - 1, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so)) >= 0)

@@ -137,7 +137,7 @@ int fhs_file;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 	fhs_file = openFHS(fhs_out_file, &header, 1);
-	if(writeFHSHashes(fhs_file, &header, &myHashes)==-1)
+	if(writeFHSHashes(fhs_file, &header, &myHashes) == -1)
 		printf("MAJOR PROBLEM: Input file: %s had no hashed data!\n", learn_in_file);
 	close(fhs_file);
 
