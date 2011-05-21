@@ -260,7 +260,10 @@ int writecheck;
 		/* Ok, have written hashes, now save new count */
 		header->records = hashes_list->used;
 		lseek64(file, 7, SEEK_SET);
-		write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
+		do {
+			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
+			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+		} while (writecheck >=0 && writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE);
 		return 0;
 	}
 	return -1;
