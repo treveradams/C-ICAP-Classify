@@ -71,6 +71,38 @@ int ret;
 return 0; // Equal
 }
 
+int HTMLhash_compare(void const *a, void const *b)
+{
+HTMLFeature *ha, *hb;
+
+	ha = (HTMLFeature *) a;
+	hb = (HTMLFeature *) b;
+	if(*ha < *hb)
+		return -1;
+	if(*ha > *hb)
+		return 1;
+
+return 0;
+}
+
+void makeSortedUniqueHashes(HashList *hashes_list)
+{
+uint32_t i = 1, j = 0;
+	qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare );
+//	printf("\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
+	for(i = 1; i < hashes_list->used; i++)
+	{
+		if(hashes_list->hashes[i] != hashes_list->hashes[j])
+		{
+			hashes_list->hashes[j+1] = hashes_list->hashes[i];
+			j++;
+		}
+	}
+	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
+//	for(i=0; i<hashes_list->used; i++) printf("Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
+//	printf("Total unique features: %"PRIu32"\n", hashes_list->used);
+}
+
 void initHTML(void)
 {
 	compileRegexes();

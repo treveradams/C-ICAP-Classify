@@ -45,61 +45,6 @@
 char *learn_in_file;
 char *fbc_out_file;
 
-const int SQL_SIZE=4096;
-
-/*int open_database(const char *filename, void **handle, char *category)
-{
-char sql[SQL_SIZE];
-int error;
-	switch((error=sqlite3_open(filename, (sqlite3 **) handle)))
-	{
-		case SQLITE_OK:
-			sqlite3_exec(*handle,
-				"CREATE TABLE IF NOT EXISTS categories ( cat_key int, category text, " \
-				"CONSTRAINT bayes_key PRIMARY KEY (cat_key, category) ON CONFLICT " \
-				" REPLACE);", NULL, NULL, NULL);
-			sqlite3_exec(*handle,
-				"CREATE TABLE IF NOT EXISTS bayes_data ( "\
-				"	key1 int," \
-				"	cat_key int," \
-				"	count int," \
-				"	FOREIGN KEY(cat_key) REFERENCES categories(cat_key)" \
-				"	CONSTRAINT bayes_key PRIMARY KEY" \
-				"		(key1, cat_key) ON CONFLICT REPLACE" \
-				"		);", NULL, NULL, NULL);
-			snprintf(sql, SQL_SIZE-1, "INSERT OR REPLACE INTO categories (cat_key, category) VALUES (coalesce((select cat_key from categories where category ='%s'),(coalesce((select max(cat_key)+1 from categories), 0))), '%s');", category, category);
-			sql[SQL_SIZE-1]='\0';
-			sqlite3_exec((sqlite3 *) *handle, sql, NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA journal_mode=TRUNCATE;", NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA cache_size=10000;", NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA auto_vacuum=NONE;", NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA synchronous=OFF;", NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA count_changes=OFF;", NULL, NULL, NULL);
-			sqlite3_exec(*handle, "PRAGMA temp_store=MEMORY;", NULL, NULL, NULL);
-			printf("Database opened ok\n");
-			return SQLITE_OK;
-			break;
-		default:
-			printf("Database NOT opened ok\n");
-			return error;
-			break;
-	}
-}
-
-int close_database(void *handle)
-{
-	return sqlite3_close((sqlite3 *) handle);
-}
-
-int update_count(void *handle, char *category, uint64_t hash1)
-{
-char sql[SQL_SIZE];
-	snprintf(sql, SQL_SIZE-1, "INSERT OR REPLACE INTO bayes_data (key1, cat_key, count) VALUES (%"PRIu64", (select cat_key from categories where category='%s'), coalesce((select count+1 from bayes_data where key1=%"PRIu64" and cat_key=(select cat_key from categories where category='%s')), 1));", hash1, category, hash1, category);
-	sql[SQL_SIZE-1]='\0';
-	return sqlite3_exec((sqlite3 *) handle, sql, NULL, NULL, NULL);
-} */
-
-
 int readArguments(int argc, char *argv[])
 {
 int i;
@@ -109,7 +54,7 @@ int i;
 		printf("\t-p PRIMARY_HASH_SEED\n");
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_FILE_TO_LEARN\n");
-		printf("\t-o OUTPUT_FBC_FILE\n");
+		printf("\t-o OUTPUT_FNB_FILE\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -131,7 +76,7 @@ int i;
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", learn_in_file);
-	printf("FHS Output File: %s\n", fbs_database_file);*/
+	printf("FNV Output File: %s\n", fbc_out_file);*/
 	return 0;
 }
 
@@ -164,22 +109,6 @@ int32_t realLen;
 	return myData;
 }
 
-/*int writeSQLFBSHashes(void *handle, char *category, HashList *hashes_list)
-{
-uint16_t i;
-	if(hashes_list->used) // check before we write
-	{
-		sqlite3_exec(handle, "BEGIN;", NULL, NULL, NULL);
-		for(i=0; i < hashes_list->used; i++)
-		{
-			update_count(handle, category, hashes_list->hashes[i]);
-		}
-		sqlite3_exec(handle, "COMMIT;", NULL, NULL, NULL);
-		return 0;
-	}
-	return -1;
-}*/
-
 
 int main (int argc, char *argv[])
 {
@@ -202,7 +131,7 @@ int fbc_file;
 
 //	printf("%ls\n", myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(FBCFeature) * FBC_MAX_FEATURE_COUNT);
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * FBC_MAX_FEATURE_COUNT);
 	myHashes.slots = FBC_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 
@@ -218,6 +147,7 @@ int fbc_file;
 	freeRegexHead(&myRegexHead);
 	free(learn_in_file);
 	free(fbc_out_file);
+	deinitBayesClassifier();
 	deinitHTML();
 	return 0;
 }

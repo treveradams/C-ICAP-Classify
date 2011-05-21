@@ -53,8 +53,10 @@ typedef struct {
 	myRegmatchArray *lastarray;
 } regexHead;
 
+typedef uint_least64_t HTMLFeature;
+
 typedef struct {
-	uint_least64_t *hashes;
+	HTMLFeature *hashes;
 	uint32_t used;
 	uint32_t slots;
 } HashList;
@@ -77,6 +79,8 @@ extern regex_t headFinder, charsetFinder;
 extern void initHTML(void);
 extern void deinitHTML(void);
 extern void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
+extern int HTMLhash_compare(void const *a, void const *b);
+extern void makeSortedUniqueHashes(HashList *hashes_list);
 #endif
 
 extern void makeSortedUniqueHashes(HashList *hashes_list);

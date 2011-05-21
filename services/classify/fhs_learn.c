@@ -132,7 +132,7 @@ int fhs_file;
 
 //	printf("%ls\n", myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(hyperspaceFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
 	myHashes.slots = HYPERSPACE_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);

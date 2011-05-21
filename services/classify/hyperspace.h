@@ -83,10 +83,8 @@ typedef struct __attribute__ ((__packed__)) {
 	uint_least16_t document;
 } FHSHashJudgeUsers;
 
-typedef uint_least64_t hyperspaceFeature;
-
 typedef struct __attribute__ ((__packed__)) {
-	hyperspaceFeature hash;
+	HTMLFeature hash;
 	FHSHashJudgeUsers *users;
 //	uint16_t used;
 	uint_least16_t used;

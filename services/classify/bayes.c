@@ -104,20 +104,6 @@ double den;
         return 0;
 }
 
-static int FBChash_compare(void const *a, void const *b)
-{
-FBCFeature *ha, *hb;
-
-	ha = (FBCFeature *) a;
-	hb = (FBCFeature *) b;
-	if(*ha < *hb)
-		return -1;
-	if(*ha > *hb)
-		return 1;
-
-return 0;
-}
-
 static int FBCjudgeHash_compare(void const *a, void const *b)
 {
 FBCFeatureExt *ha, *hb;
@@ -131,7 +117,6 @@ FBCFeatureExt *ha, *hb;
 
 return 0;
 }
-
 
 static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 {
@@ -211,34 +196,42 @@ int file=0;
 
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point)
 {
-uint16_t i, j;
+uint32_t i;
+uint_least32_t qty = 0;
+uint16_t j;
 int writecheck;
+
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	lseek64(file, 11, SEEK_SET);
+//	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
-		for(i=0; i < hashes_list->used; i++)
+		for(i = 0; i < hashes_list->used; i++)
 		{
-			for(j=0; j < hashes_list->hashes[i].used; j++)
+			for(j = 0; j < hashes_list->hashes[i].used; j++)
 			{
 				// Make sure that this is the right category and that we have enough counts to write (not <= zero_point)
 				if(hashes_list->hashes[i].users[j].category == category && hashes_list->hashes[i].users[j].data.count > zero_point)
 				{
+					qty++;
 					do { // write hash
 						writecheck = write(file, &hashes_list->hashes[i].hash, FBC_v1_HASH_SIZE);
 				                if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 					} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
 					do { // write use count
-						writecheck = write(file, &hashes_list->hashes[i].users[j].data.count, FBC_v1_HASH_USE_COUNT);
-				                if(writecheck < FBC_v1_HASH_USE_COUNT) lseek64(file, -writecheck, SEEK_CUR);
-					} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT);
+						writecheck = write(file, &hashes_list->hashes[i].users[j].data.count, FBC_v1_HASH_USE_COUNT_SIZE);
+				                if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+					} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
 				}
 			}
 		}
 		/* Ok, have written hashes, now save new count */
-		header->records = hashes_list->used;
+//		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
+		header->records = qty;
 		lseek64(file, 7, SEEK_SET);
-		write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
+		do {
+			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
+			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+		} while (writecheck >=0 && writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE);
 		return 0;
 	}
 	return -1;
@@ -246,11 +239,11 @@ int writecheck;
 
 int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list)
 {
-uint16_t i;
+uint32_t i;
 const uint_least32_t ZERO_COUNT = 0;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	lseek64(file, 0, SEEK_END);
+	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
 		for(i=0; i < hashes_list->used; i++)
@@ -260,35 +253,17 @@ int writecheck;
 		                if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 			} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
 			do { // write use count
-				writecheck = write(file, &ZERO_COUNT, FBC_v1_HASH_USE_COUNT);
-		                if(writecheck < FBC_v1_HASH_USE_COUNT) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT);
+				writecheck = write(file, &ZERO_COUNT, FBC_v1_HASH_USE_COUNT_SIZE);
+		                if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+			} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
 		}
 		/* Ok, have written hashes, now save new count */
-		header->records = header->records + 1;
+		header->records = hashes_list->used;
 		lseek64(file, 7, SEEK_SET);
 		write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 		return 0;
 	}
 	return -1;
-}
-
-void makeSortedUniqueHashes(HashList *hashes_list)
-{
-uint32_t i = 1, j = 0;
-	qsort(hashes_list->hashes, hashes_list->used, sizeof(FBCFeature), &FBChash_compare );
-//	printf("\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
-	for(i = 1; i < hashes_list->used; i++)
-	{
-		if(hashes_list->hashes[i] != hashes_list->hashes[j])
-		{
-			hashes_list->hashes[j+1] = hashes_list->hashes[i];
-			j++;
-		}
-	}
-	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
-//	for(i=0; i<hashes_list->used; i++) printf("Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
-//	printf("Total unique features: %"PRIu32"\n", hashes_list->used);
 }
 
 static int64_t FBCBinarySearch(FBCHashList *hashes_list, int64_t start, int64_t end, uint64_t key)
@@ -327,8 +302,8 @@ int64_t BSRet=-1;
 int64_t offsets[NBC_OFFSET_MAX+1];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
-FBCFeature hash;
-uint32_t count;
+HTMLFeature hash;
+uint_least32_t count;
 int status;
 
         if(NBJudgeHashList.FBC_LOCKED) return -1; // We cannot load if we are optimized
@@ -351,18 +326,19 @@ int status;
 
 //	printf("Going to read %"PRIu32" records from %s\n", header.records, cat_name);
 	offsets[1] = NBJudgeHashList.used;
+
 	for(i = 0; i < header.records; i++)
 	{
 		do { // read hash
 			status = read(fbc_file, &hash, FBC_v1_HASH_SIZE);
-                        if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
+			if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_SIZE);
 		do { // read use count
-			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT);
-                        if(status < FBC_v1_HASH_USE_COUNT) lseek64(fbc_file, -status, SEEK_CUR);
-		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT);
+			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT_SIZE);
+			if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
+		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 
-//		printf("Loading key: %"PRIX64" in Category: %s Document:%"PRIu16"\n", hash, cat_name, i);
+//		printf("Loading key: %"PRIX64" in Category: %s\n", hash, cat_name);
 		if(i > 0 || offsets[0] != offsets[1])
 		{
 			shortcut = 0;
@@ -387,7 +363,7 @@ int status;
 		}
 		else {
 			STORE_NEW:
-//			ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", hash);
+//			ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", hashes[i].feature);
 			NBJudgeHashList.hashes[NBJudgeHashList.used].hash = hash;
 			NBJudgeHashList.hashes[NBJudgeHashList.used].used = 0;
 			NBJudgeHashList.hashes[NBJudgeHashList.used].users = calloc(1, sizeof(FBCHashJudgeUsers));
@@ -462,10 +438,10 @@ uint32_t startHashes = NBJudgeHashList.used;
 					{
 						for(used = 0; used < NBJudgeHashList.hashes[BSRet].used; used++)
 						{
-							if(NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category == cat_num)
+							if(NBJudgeHashList.hashes[BSRet].users[used].category == cat_num)
 							{
-//								ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") with category %"PRIu16", incrementing count\n", docHashes->hashes[i], z, cat_num);
-								NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count += 1;
+								NBJudgeHashList.hashes[BSRet].users[used].data.count++;
+//								ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") with category %"PRIu16", incrementing count to %"PRIu32"\n", docHashes->hashes[i], z, cat_num, NBJudgeHashList.hashes[BSRet].users[used].data.count);
 								handled++;
 								break;
 							}
@@ -479,7 +455,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 							NBJudgeHashList.hashes[BSRet].used++;
 						}
 					}
-					else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
+//					else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 					shortcut++;
 				}
 			}
@@ -538,8 +514,8 @@ int preLoadBayes(char *fbc_name)
 int fbc_file;
 uint32_t i, j;
 FBC_HEADERv1 header;
-FBCFeature hash;
-uint32_t count;
+HTMLFeature hash;
+uint_least32_t count;
 int status;
 
 	if(NBJudgeHashList.used > 0)
@@ -563,9 +539,9 @@ int status;
                         if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_SIZE);
 		do { // read use count
-			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT);
-                        if(status < FBC_v1_HASH_USE_COUNT) lseek64(fbc_file, -status, SEEK_CUR);
-		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT);
+			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT_SIZE);
+                        if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
+		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 
 		if(NBJudgeHashList.used + header.records > NBJudgeHashList.slots)
 		{
@@ -604,6 +580,7 @@ int status;
 		NBJudgeHashList.slots = NBJudgeHashList.used;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
+
 	close(fbc_file);
 	return 0;
 }

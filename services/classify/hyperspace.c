@@ -79,20 +79,6 @@ uint32_t i=0;
 	free(HSJudgeHashList.hashes);
 }
 
-static int hash_compare(void const *a, void const *b)
-{
-hyperspaceFeature *ha, *hb;
-
-	ha = (hyperspaceFeature *) a;
-	hb = (hyperspaceFeature *) b;
-	if(*ha < *hb)
-		return -1;
-	if(*ha > *hb)
-		return 1;
-
-return 0; // Equal
-}
-
 static int judgeHash_compare(void const *a, void const *b)
 {
 hyperspaceFeatureExt *ha, *hb;
@@ -208,7 +194,7 @@ int writecheck;
 			writecheck = write(file, &hashes_list->used, sizeof(uint_least16_t));
 			if(writecheck < sizeof(uint_least16_t)) lseek64(file, -writecheck, SEEK_CUR);
 		} while (writecheck >= 0 && writecheck < sizeof(uint_least16_t));
-		for(i=0; i < hashes_list->used; i++)
+		for(i = 0; i < hashes_list->used; i++)
 		{
 			do {
 				writecheck = write(file, &hashes_list->hashes[i], FHS_v1_HASH_SIZE);
@@ -282,9 +268,9 @@ struct stat stat_buf;
 		FHS_HEADERv1_RECORDS_QTY_SIZE) - (header->records * sizeof(FHS_v1_QTY_SIZE))) / (FHS_v1_HASH_SIZE) + 1;
 }
 
-hyperspaceFeature *loadDocument(char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
+HTMLFeature *loadDocument(char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
 {
-hyperspaceFeature *hashes=NULL;
+HTMLFeature *hashes=NULL;
 int status = 0;
 int bytes = 0;
 int to_read = FHS_v1_HASH_SIZE * numHashes;
@@ -317,7 +303,7 @@ int fhs_file;
 uint16_t i, j, z, shortcut=0, offsetPos=2;
 int64_t BSRet=-1;
 int64_t offsets[HS_OFFSET_MAX+1];
-hyperspaceFeature *docHashes;
+HTMLFeature *docHashes;
 FHS_HEADERv1 header;
 uint16_t numHashes=0;
 uint32_t startHashes = HSJudgeHashList.used;
@@ -422,24 +408,6 @@ static int preload_hash_compare(const uint_least64_t a, const uint_least64_t b)
 		return 1;
 
 return 0;
-}
-
-void makeSortedUniqueHashes(HashList *hashes_list)
-{
-uint32_t i = 1, j = 0;
-	qsort(hashes_list->hashes, hashes_list->used, sizeof(hyperspaceFeature), &hash_compare );
-//	printf("\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
-	for(i = 1; i < hashes_list->used; i++)
-	{
-		if(hashes_list->hashes[i] != hashes_list->hashes[j])
-		{
-			hashes_list->hashes[j+1] = hashes_list->hashes[i];
-			j++;
-		}
-	}
-	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
-//	for(i=0; i<hashes_list->used; i++) printf("Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
-//	printf("Total unique features: %"PRIu32"\n", hashes_list->used);
 }
 
 // This function just used to be a slimmed down version of loadHyperSpaceCategory.

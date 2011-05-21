@@ -182,7 +182,7 @@ hsClassification classification;
 
 //	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(hyperspaceFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
 	myHashes.slots = HYPERSPACE_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
