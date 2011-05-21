@@ -50,7 +50,7 @@
 
 
 FBCTextCategoryExt NBCategories;
-FBCHashList NBJudgeHashList = { .FBC_LOCKED = 9 };
+FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
 
 void initBayesClassifier(void)
 {
@@ -137,7 +137,7 @@ static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 {
 	lseek64(fbc_file, 0, SEEK_SET);
 	read(fbc_file, &header->ID, 3);
-	if(memcmp(header->ID, "FBC", FBC_HEADERv1_ID_SIZE)!=0)
+	if(memcmp(header->ID, "FNB", FBC_HEADERv1_ID_SIZE) != 0)
 	{
 //		printf("Not a FastBayesClassifer file\n");
 		return -1;
@@ -155,7 +155,7 @@ static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 //		printf("FastBayesClassifier file of incompatible endianness\n");
 		return -3;
 	}
-	if(read(fbc_file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE)!=2)
+	if(read(fbc_file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE) != 4)
 	{
 //		printf("FastBayesClassifier file has invalid header: no records count\n");
 		return -4;
@@ -166,16 +166,16 @@ static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 void writeFBCHeader(int file, FBC_HEADERv1 *header)
 {
 int i;
-	memcpy(&header->ID, "FBC", 3);
+	memcpy(&header->ID, "FNB", 3);
 	header->version = FBC_FORMAT_VERSION;
 	header->UBM = UNICODE_BYTE_MARK;
-	header->records=0;
+	header->records = 0;
 	i = ftruncate(file, 0);
 	lseek64(file, 0, SEEK_SET);
         do {
-		i = write(file, "FBC", 3);
-		if(i < 3) lseek64(file, -i, SEEK_CUR);
-        } while (i >= 0 && i < 3);
+		i = write(file, "FNB", FBC_HEADERv1_ID_SIZE);
+		if(i < FBC_HEADERv1_ID_SIZE) lseek64(file, -i, SEEK_CUR);
+        } while (i >= 0 && i < FBC_HEADERv1_ID_SIZE);
 
         do {
 		i = write(file, &header->version, FBC_HEADERv1_VERSION_SIZE);
@@ -199,7 +199,7 @@ int file=0;
 	file=open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
 	if(verifyFBC(file, header) < 0)
 	{
-		if(forWriting==1)
+		if(forWriting == 1)
 		{
 			writeFBCHeader(file, header);
 //			printf("Created FastBayesClassifier file: %s\n", filename);
@@ -214,10 +214,9 @@ int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uin
 uint16_t i, j;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	lseek64(file, 0, SEEK_END);
+	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
-		write(file, &hashes_list->used, sizeof(uint_least16_t));
 		for(i=0; i < hashes_list->used; i++)
 		{
 			for(j=0; j < hashes_list->hashes[i].used; j++)
@@ -232,12 +231,12 @@ int writecheck;
 					do { // write use count
 						writecheck = write(file, &hashes_list->hashes[i].users[j].data.count, FBC_v1_HASH_USE_COUNT);
 				                if(writecheck < FBC_v1_HASH_USE_COUNT) lseek64(file, -writecheck, SEEK_CUR);
-					} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
+					} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT);
 				}
 			}
 		}
 		/* Ok, have written hashes, now save new count */
-		header->records = header->records+1;
+		header->records = hashes_list->used;
 		lseek64(file, 7, SEEK_SET);
 		write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 		return 0;
@@ -263,7 +262,7 @@ int writecheck;
 			do { // write use count
 				writecheck = write(file, &ZERO_COUNT, FBC_v1_HASH_USE_COUNT);
 		                if(writecheck < FBC_v1_HASH_USE_COUNT) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
+			} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT);
 		}
 		/* Ok, have written hashes, now save new count */
 		header->records = header->records + 1;
@@ -314,7 +313,7 @@ uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 struct stat stat_buf;
 	fstat(fbc_file, &stat_buf);
         return (stat_buf.st_size - (FBC_HEADERv1_ID_SIZE + FBC_HEADERv1_VERSION_SIZE + FBC_HEADERv1_UBM_SIZE +
-		FBC_HEADERv1_RECORDS_QTY_SIZE) - (header->records * sizeof(FBC_v1_QTY_SIZE))) / (FBC_v1_HASH_SIZE) + 1;
+		FBC_HEADERv1_RECORDS_QTY_SIZE)) / (FBC_v1_HASH_SIZE) + 1;
 }
 
 // The following number is based on a lot of experimentation. It should be between 35-70. The larger the data set, the higher the number should be.
@@ -329,12 +328,13 @@ int64_t offsets[NBC_OFFSET_MAX+1];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
 FBCFeature hash;
-uint_least16_t count;
+uint32_t count;
 int status;
 
         if(NBJudgeHashList.FBC_LOCKED) return -1; // We cannot load if we are optimized
 	offsets[0] = 0;
 	if((fbc_file = openFBC(fbc_name, &header, 0)) < 0) return fbc_file;
+
 	if(NBCategories.used == NBCategories.slots)
 	{
 		NBCategories.slots += BAYES_CATEGORY_INC;
@@ -360,9 +360,9 @@ int status;
 		do { // read use count
 			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT);
                         if(status < FBC_v1_HASH_USE_COUNT) lseek64(fbc_file, -status, SEEK_CUR);
-		} while (status >=0 && status < FBC_v1_HASH_SIZE);
+		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT);
 
-//		printf("Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes[j], cat_name, i);
+//		printf("Loading key: %"PRIX64" in Category: %s Document:%"PRIu16"\n", hash, cat_name, i);
 		if(i > 0 || offsets[0] != offsets[1])
 		{
 			shortcut = 0;
@@ -373,10 +373,11 @@ int status;
 					if (shortcut == 0)
 					{
 						NBJudgeHashList.hashes[BSRet].users = realloc(NBJudgeHashList.hashes[BSRet].users, (NBJudgeHashList.hashes[BSRet].used+1) * sizeof(FBCHashJudgeUsers));
-//							ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu16"), updating\n", hash, z);
+//						ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu16"), updating\n", hash, z);
 						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category = NBCategories.used;
 						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count = count;
 						NBJudgeHashList.hashes[BSRet].used++;
+						break;
 					}
 //						else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 					shortcut++;
@@ -386,7 +387,7 @@ int status;
 		}
 		else {
 			STORE_NEW:
-//				ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", hash);
+//			ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", hash);
 			NBJudgeHashList.hashes[NBJudgeHashList.used].hash = hash;
 			NBJudgeHashList.hashes[NBJudgeHashList.used].used = 0;
 			NBJudgeHashList.hashes[NBJudgeHashList.used].users = calloc(1, sizeof(FBCHashJudgeUsers));
@@ -422,9 +423,9 @@ int status;
 
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
 {
-uint32_t i, z, shortcut=0, offsetPos=2;
+uint32_t i, z, shortcut = 0, offsetPos = 2, handled = 0;
 uint16_t used;
-int64_t BSRet=-1;
+int64_t BSRet = -1;
 int64_t offsets[NBC_OFFSET_MAX+1];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
@@ -444,15 +445,15 @@ uint32_t startHashes = NBJudgeHashList.used;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
-//	printf("Going to learn %"PRIu32" records from input file\n", hashes.used); // FIXME: learning
+//	printf("Going to learn %"PRIu32" hashes from input file\n", docHashes->used);
 	offsets[1] = NBJudgeHashList.used;
 	for(i = 0; i < docHashes->used; i++)
 	{
-
-//		printf("Learning keys: %"PRIX64" from input"\n", docHashes->hashes[j]);
+//		printf("Learning key: %"PRIX64" from input\n", docHashes->hashes[i]);
 		if(i > 0 || offsets[0] != offsets[1])
 		{
 			shortcut = 0;
+			handled = 0;
 			for(z = 1; z < offsetPos; z++)
 			{
 				if((BSRet=FBCBinarySearch(&NBJudgeHashList, offsets[z-1], offsets[z] - 1, docHashes->hashes[i])) >= 0)
@@ -463,18 +464,22 @@ uint32_t startHashes = NBJudgeHashList.used;
 						{
 							if(NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category == cat_num)
 							{
-								ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") with category %"PRIu16", incrementing count\n", docHashes->hashes[i], cat_num, z);
+//								ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") with category %"PRIu16", incrementing count\n", docHashes->hashes[i], z, cat_num);
 								NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count += 1;
+								handled++;
 								break;
 							}
 						}
-						ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") but not our category, updating\n", docHashes->hashes[i], z);
-						NBJudgeHashList.hashes[BSRet].users = realloc(NBJudgeHashList.hashes[BSRet].users, (NBJudgeHashList.hashes[BSRet].used+1) * sizeof(FBCHashJudgeUsers));
-						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category = cat_num;
-						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count = 1;
-						NBJudgeHashList.hashes[BSRet].used++;
+						if(handled == 0)
+						{
+//							ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") but not our category (%"PRIu16" != %"PRIu16"), updating\n", docHashes->hashes[i], z,NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category, cat_num);
+							NBJudgeHashList.hashes[BSRet].users = realloc(NBJudgeHashList.hashes[BSRet].users, (NBJudgeHashList.hashes[BSRet].used+1) * sizeof(FBCHashJudgeUsers));
+							NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category = cat_num;
+							NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count = 1;
+							NBJudgeHashList.hashes[BSRet].used++;
+						}
 					}
-//						else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
+					else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 					shortcut++;
 				}
 			}
@@ -482,7 +487,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 		}
 		else {
 			STORE_NEW:
-//				ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", hash);
+//			ci_debug_printf(10, "Didn't find keys: %"PRIX64" in table\n", docHashes->hashes[i]);
 			NBJudgeHashList.hashes[NBJudgeHashList.used].hash = docHashes->hashes[i];
 			NBJudgeHashList.hashes[NBJudgeHashList.used].used = 0;
 			NBJudgeHashList.hashes[NBJudgeHashList.used].users = calloc(1, sizeof(FBCHashJudgeUsers));
@@ -495,15 +500,14 @@ uint32_t startHashes = NBJudgeHashList.used;
 		if(offsetPos > NBC_OFFSET_MAX)
 		{
 			qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
-			offsetPos=2;
+			offsetPos = 2;
 		}
 		offsets[offsetPos] = NBJudgeHashList.used;
-		if(offsets[offsetPos-1] != offsets[offsetPos]) offsetPos++;
+		if(offsets[offsetPos - 1] != offsets[offsetPos]) offsetPos++;
 	}
 
 	if(startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
-//	ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
-	NBCategories.used++;
+	ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
 
 	// Fixup memory usage
 	if(NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1)
@@ -532,10 +536,10 @@ return 0;
 int preLoadBayes(char *fbc_name)
 {
 int fbc_file;
-uint16_t i, j;
+uint32_t i, j;
 FBC_HEADERv1 header;
 FBCFeature hash;
-uint_least16_t count;
+uint32_t count;
 int status;
 
 	if(NBJudgeHashList.used > 0)
@@ -561,7 +565,7 @@ int status;
 		do { // read use count
 			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT);
                         if(status < FBC_v1_HASH_USE_COUNT) lseek64(fbc_file, -status, SEEK_CUR);
-		} while (status >=0 && status < FBC_v1_HASH_SIZE);
+		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT);
 
 		if(NBJudgeHashList.used + header.records > NBJudgeHashList.slots)
 		{

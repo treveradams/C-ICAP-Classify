@@ -372,6 +372,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].category = HSCategories.used;
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].document = i;
 							HSJudgeHashList.hashes[BSRet].used++;
+							break;
 						}
 //						else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 						shortcut++;
@@ -395,7 +396,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 		if(offsetPos > HS_OFFSET_MAX)
 		{
 			qsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare );
-			offsetPos=2;
+			offsetPos = 2;
 		}
 		offsets[offsetPos] = HSJudgeHashList.used;
 		if(offsets[offsetPos-1] != offsets[offsetPos]) offsetPos++;

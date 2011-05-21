@@ -205,13 +205,10 @@ int fbc_file;
 	myHashes.hashes = malloc(sizeof(FBCFeature) * FBC_MAX_FEATURE_COUNT);
 	myHashes.slots = FBC_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
-	if(NBCategories.used == NBCategories.slots)
-	{
-		NBCategories.slots += BAYES_CATEGORY_INC;
-		NBCategories.categories = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
-	}
-	NBCategories.used++;
+
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+        if(loadBayesCategory(fbc_out_file, "LEARNING") == -1)
+		printf("Unable to open %s\n", fbc_out_file);
 	fbc_file = openFBC(fbc_out_file, &header, 1);
 	learnHashesBayesCategory(0, &myHashes);
 	if(writeFBCHashes(fbc_file, &header, &NBJudgeHashList, 0, 0) == -1)
