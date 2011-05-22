@@ -294,15 +294,12 @@ struct stat stat_buf;
 		FBC_HEADERv1_RECORDS_QTY_SIZE)) / (FBC_v1_HASH_SIZE) + 1;
 }
 
-// The following number is based on a lot of experimentation. It should be between 35-70. The larger the data set, the higher the number should be.
-// 95 is ideal for my training set.
-#define NBC_OFFSET_MAX 95
 int loadBayesCategory(char *fbc_name, char *cat_name)
 {
 int fbc_file;
-uint32_t i, z, shortcut=0, offsetPos=2;
+uint32_t i, z, shortcut=0, offsetPos=3;
 int64_t BSRet=-1;
-int64_t offsets[NBC_OFFSET_MAX+1];
+int64_t offsets[3];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
 HTMLFeature hash;
@@ -329,6 +326,7 @@ int status;
 
 //	printf("Going to read %"PRIu32" records from %s\n", header.records, cat_name);
 	offsets[1] = NBJudgeHashList.used;
+	offsets[2] = NBJudgeHashList.used;
 
 	for(i = 0; i < header.records; i++)
 	{
@@ -376,13 +374,7 @@ int status;
 			NBJudgeHashList.used++;
 		}
 
-		if(offsetPos > NBC_OFFSET_MAX)
-		{
-			qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
-			offsetPos=2;
-		}
-		offsets[offsetPos] = NBJudgeHashList.used;
-		if(offsets[offsetPos-1] != offsets[offsetPos]) offsetPos++;
+		offsets[2] = NBJudgeHashList.used;
 	}
 
 	if(startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
@@ -402,10 +394,10 @@ int status;
 
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
 {
-uint32_t i, z, shortcut = 0, offsetPos = 2, handled = 0;
+uint32_t i, z, shortcut = 0, offsetPos = 3, handled = 0;
 uint16_t used;
 int64_t BSRet = -1;
-int64_t offsets[NBC_OFFSET_MAX+1];
+int64_t offsets[3];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
 
@@ -426,6 +418,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 
 //	printf("Going to learn %"PRIu32" hashes from input file\n", docHashes->used);
 	offsets[1] = NBJudgeHashList.used;
+	offsets[2] = NBJudgeHashList.used;
 	for(i = 0; i < docHashes->used; i++)
 	{
 //		printf("Learning key: %"PRIX64" from input\n", docHashes->hashes[i]);
@@ -476,13 +469,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 			NBJudgeHashList.used++;
 		}
 
-		if(offsetPos > NBC_OFFSET_MAX)
-		{
-			qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
-			offsetPos = 2;
-		}
-		offsets[offsetPos] = NBJudgeHashList.used;
-		if(offsets[offsetPos - 1] != offsets[offsetPos]) offsetPos++;
+		offsets[2] = NBJudgeHashList.used;
 	}
 
 	if(startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
