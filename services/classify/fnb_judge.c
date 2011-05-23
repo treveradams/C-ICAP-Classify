@@ -171,6 +171,7 @@ HTMLClassification classification;
 
 	printf("Loading hashes -- be patient!\n");
 	loadMassCategories();
+	optimizeFBC(&NBJudgeHashList);
 
 	printf("Classifying\n");
 	start=clock();

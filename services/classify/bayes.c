@@ -48,6 +48,11 @@
 #define IN_BAYES 1
 #include "bayes.h"
 
+// Push high values over 1.00 so that we conserve more bits
+#define MAGIC_CONSERVE_OFFSET 0.4
+// Magic minimum should be 4-6 significant decimal places. It is used in place of ZERO, or
+// other too low of numbers to conserve bits.
+#define MAGIC_MINIMUM (0.0001 + MAGIC_CONSERVE_OFFSET)
 
 FBCTextCategoryExt NBCategories;
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
@@ -81,23 +86,28 @@ uint32_t i=0;
 int optimizeFBC(FBCHashList *hashes)
 {
 uint64_t total;
-double den;
+uint64_t count;
 
 	if(hashes->FBC_LOCKED) return -1;
 
 	// Do precomputing
 	for(uint32_t i = 0; i < hashes->used; i++)
 	{
-		total = 0;
-		den = 0;
+		total = MARKOV_C2 + 1;
 		for(uint_least16_t j = 0; j < hashes->hashes[i].used; j++)
 		{
 			total += hashes->hashes[i].users[j].data.count;
 		}
-		den = MARKOV_C1 * (total + MARKOV_C2);
+
 		for(uint_least16_t j = 0; j < hashes->hashes[i].used; j++)
 		{
-			hashes->hashes[i].users[j].data.probability = 0.9 + hashes->hashes[i].users[j].data.count / den;
+			count = hashes->hashes[i].users[j].data.count; // necessary since count and probability are a union
+			hashes->hashes[i].users[j].data.probability = ((double) count / (double) (total)); // compute P(w|C)
+			hashes->hashes[i].users[j].data.probability /= ((double) (total - count) / (double) (total)); // compute and divide by P(w|not C)
+			if(hashes->hashes[i].users[j].data.probability < MAGIC_MINIMUM) hashes->hashes[i].users[j].data.probability = MAGIC_MINIMUM;
+			else if(hashes->hashes[i].users[j].data.probability > 1) hashes->hashes[i].users[j].data.probability = 1;
+			hashes->hashes[i].users[j].data.probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathmatically accurate, but it conserves bits
+//			printf("Probability %G\n", hashes->hashes[i].users[j].data.probability);
 		}
 	}
 	hashes->FBC_LOCKED = 1;
@@ -475,11 +485,11 @@ uint32_t startHashes = NBJudgeHashList.used;
 //	ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
 
 	// Fixup memory usage
-	if(NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1)
+/*	if(NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1)
 	{
 		NBJudgeHashList.slots = NBJudgeHashList.used;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
-	}
+	}*/ // Not needed because this is a trainer
 
 	return 1;
 }
@@ -581,25 +591,14 @@ uint32_t cls;
 uint32_t bestseen = 0;
 HTMLClassification myReply;
 
-/*	for (cls = 0; cls < NBCategories.used; cls++)
-	{
-		// Avoid divide by zero and keep value small, for log10(remainder) below
-		if (categories[cls].naiveBayesDen < DBL_MIN)
-			categories[cls].naiveBayesDen = DBL_MIN * 1000;
-	}*/
-
-	// Compute base probability
-	for (cls = 0; cls < NBCategories.used; cls++)
-	{
-		categories[cls].naiveBayesResult =  categories[cls].naiveBayesNum / ( categories[cls].naiveBayesNum + categories[cls].naiveBayesDen );
-	}
-
-	// Renormalize radiance to probability
+	// Renormalize Result to probability
 	for (cls = 0; cls < NBCategories.used; cls++)
 	{
 		// Avoid divide by zero and keep value small, for log10(remainder) below
-		if (categories[cls].naiveBayesResult < DBL_MIN * 100)
-			categories[cls].naiveBayesResult = DBL_MIN * 100;
+		if (categories[cls].naiveBayesResult > DBL_MAX)
+			categories[cls].naiveBayesResult = DBL_MAX;
+		if (categories[cls].naiveBayesResult < DBL_MIN)
+			categories[cls].naiveBayesResult = DBL_MIN;
 		total_probability += categories[cls].naiveBayesResult;
 	}
 
@@ -613,10 +612,10 @@ HTMLClassification myReply;
 	if(remainder < DBL_MIN) remainder = DBL_MIN;
 
 
-	for (cls = 0; cls < NBCategories.used; cls++)
+/*	for (cls = 0; cls < NBCategories.used; cls++)
 	{
-		printf("Category %s Result %G Num %G Den %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult, categories[cls].naiveBayesNum, categories[cls].naiveBayesDen);
-	}
+		printf("Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
+	}*/
 
 	myReply.probability = categories[bestseen].naiveBayesResult;
 	myReply.probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
@@ -625,34 +624,20 @@ HTMLClassification myReply;
 return myReply;
 }
 
-void ConserveBits(FBCJudge *categories, uint16_t total)
-{
-	printf("Conserving Bits\n");
-	for(uint16_t i = 0; i < total; i++)
-	{
-		if(categories[i].naiveBayesNum < DBL_MIN) categories[i].naiveBayesNum = DBL_MIN;
-		categories[i].naiveBayesNum *= 100000000000000;
-
-		if(categories[i].naiveBayesDen < DBL_MIN) categories[i].naiveBayesDen = DBL_MIN;
-		categories[i].naiveBayesDen *= 100000000000000;
-	}
-}
-
 HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
 uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
-int64_t BSRet=-1;
+int64_t BSRet = -1;
 HTMLClassification data;
 uint64_t total;
-double den;
+double local_probability;
 
-	// Set numerator and denominator to 1 so we don't have 0's as all answers
+	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)
 	{
-		categories[i].naiveBayesNum = 1;
-		categories[i].naiveBayesDen = 1;
+		categories[i].naiveBayesResult = DBL_MAX / 20000; // Conserve bits toward a maximum
 	}
 
 	// do bayes multiplication
@@ -672,13 +657,13 @@ double den;
 						for(missing = 0; missing < nextReal; missing++)
 						{
 //							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
-							categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
-							categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 						}
 					}
 
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesDen *= (1 - NBJudgeHashList.hashes[BSRet].users[j].data.probability);
+//					printf("Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used - 1);
+
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
 
 					// Catch missing at the end or in between
 					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
@@ -689,21 +674,18 @@ double den;
 					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
 					{
 //						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
-						categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
-						categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 					}
 				}
 			}
 			else
 			{
 				/*BAYES*/
-				total = 0;
-				den = 0;
+				total = MARKOV_C2 + 1;
 				for(uint_least16_t k = 0; k < NBJudgeHashList.hashes[BSRet].used; k++)
 				{
 					total += NBJudgeHashList.hashes[BSRet].users[k].data.count;
 				}
-				den = MARKOV_C1 * (total + MARKOV_C2); // removed * 256 for testing
 
 				for(uint_least16_t j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
 				{
@@ -713,14 +695,20 @@ double den;
 						for(missing = 0; missing < nextReal; missing++)
 						{
 //							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
-							categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
-							categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 						}
 					}
 
 //					printf("Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum *= (0.9 + (NBJudgeHashList.hashes[BSRet].users[j].data.count / den));
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesDen *= (1 - categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum);
+
+					local_probability =  ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
+					local_probability /= ((double) (total - NBJudgeHashList.hashes[BSRet].users[j].data.count) / (double) (total)); // compute and divide by P(w|not C)
+					if(local_probability < MAGIC_MINIMUM) local_probability = MAGIC_MINIMUM;
+					else if(local_probability > 1) local_probability = 1;
+					local_probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathmatically accurate, but it conserves bits
+
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= local_probability;
+
 
 					// Catch missing at the end or in between
 					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
@@ -731,22 +719,22 @@ double den;
 					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
 					{
 //						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
-						categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
-						categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 					}
-/*					for(i = 0; i < NBCategories.used; i++)
-					{
-						if(categories[i].naiveBayesNum < DBL_MIN * 100000 || categories[i].naiveBayesDen < DBL_MIN * 100000) ConserveBits(categories, NBCategories.used);
-					}*/
-/*					for(i = 0; i < NBCategories.used; i++)
-					{
-						printf("Here Category %s Num %G Den %G\n", NBCategories.categories[i].name, categories[i].naiveBayesNum, categories[i].naiveBayesDen);
-					}*/
 				}
 			}
+/*			for(j = 0; j < NBCategories.used; j++)
+			{
+				printf("Here Category %s Result %G\n", NBCategories.categories[j].name, categories[j].naiveBayesResult);
+			}*/
 		}
 	}
 //	printf("Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
+
+/*	for(i = 0; i < NBCategories.used; i++)
+	{
+		printf("Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
+	}*/
 
 	data = doBayesClassify(categories, toClassify);
 

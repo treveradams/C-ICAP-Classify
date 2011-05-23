@@ -28,8 +28,6 @@
 #define MARKOV_C2	1	/* Markov C2 */
 
 typedef struct {
-	double naiveBayesNum;
-	double naiveBayesDen;
 	double naiveBayesResult;
 } FBCJudge;
 
