@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2011 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *

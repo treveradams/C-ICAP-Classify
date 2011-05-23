@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2011 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -191,9 +191,9 @@ int writecheck;
 	if(hashes_list->used) // check before we write
 	{
 		do {
-			writecheck = write(file, &hashes_list->used, sizeof(uint_least16_t));
-			if(writecheck < sizeof(uint_least16_t)) lseek64(file, -writecheck, SEEK_CUR);
-		} while (writecheck >= 0 && writecheck < sizeof(uint_least16_t));
+			writecheck = write(file, &hashes_list->used, FHS_v1_QTY_SIZE);
+			if(writecheck < FHS_v1_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+		} while (writecheck >= 0 && writecheck < FHS_v1_QTY_SIZE);
 		for(i = 0; i < hashes_list->used; i++)
 		{
 			do {
@@ -221,9 +221,9 @@ int writecheck;
 	if(hashes_list->used) // check before we write
 	{
 		do {
-			writecheck = write(file, &hashes_list->used, sizeof(uint_least16_t));
-			if(writecheck < sizeof(uint_least16_t)) lseek64(file, -writecheck, SEEK_CUR);
-		} while (writecheck >=0 && writecheck < sizeof(uint_least16_t));
+			writecheck = write(file, &hashes_list->used, FHS_v1_QTY_SIZE);
+			if(writecheck < FHS_v1_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+		} while (writecheck >=0 && writecheck < FHS_v1_QTY_SIZE);
 		for(i=0; i < hashes_list->used; i++)
 		{
 			do {
@@ -264,8 +264,8 @@ uint32_t featuresInCategory(int fhs_file, FHS_HEADERv1 *header)
 {
 struct stat stat_buf;
 	fstat(fhs_file, &stat_buf);
-        return (stat_buf.st_size - (FHS_HEADERv1_ID_SIZE + FHS_HEADERv1_VERSION_SIZE + FHS_HEADERv1_UBM_SIZE +
-		FHS_HEADERv1_RECORDS_QTY_SIZE) - (header->records * sizeof(FHS_v1_QTY_SIZE))) / (FHS_v1_HASH_SIZE) + 1;
+	//(stat_buf.st_size - FHS_HEADERv1_TOTAL_SIZE - (header->records * sizeof(FHS_v1_QTY_SIZE))) / FHS_v1_HASH_SIZE + 10); -- for some reason this isn't enough!
+        return stat_buf.st_size / FHS_v1_HASH_SIZE;
 }
 
 HTMLFeature *loadDocument(char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
@@ -329,7 +329,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 	offsets[1] = HSJudgeHashList.used;
 	for(i = 0; i < header.records; i++)
 	{
-		if(read(fhs_file, &numHashes, 2)<2) ; // ERRORFIXME;
+		if(read(fhs_file, &numHashes, FHS_v1_QTY_SIZE) < FHS_v1_QTY_SIZE) ; // ERRORFIXME;
 		docHashes = loadDocument(fhs_name, cat_name, fhs_file, numHashes);
 
 		HSCategories.categories[HSCategories.used].documentKnownHashes[i] = numHashes;
@@ -358,7 +358,6 @@ uint32_t startHashes = HSJudgeHashList.used;
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].category = HSCategories.used;
 							HSJudgeHashList.hashes[BSRet].users[HSJudgeHashList.hashes[BSRet].used].document = i;
 							HSJudgeHashList.hashes[BSRet].used++;
-							break;
 						}
 //						else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 						shortcut++;
@@ -484,14 +483,14 @@ uint16_t numHashes=0;
 	return 0;
 }
 
-static hsClassification doHyperSpaceClassify(uint32_t **categories, HashList *unknown)
+static HTMLClassification doHyperSpaceClassify(uint32_t **categories, HashList *unknown)
 {
 double total_radiance = DBL_MIN;
 double remainder = DBL_MIN;
 double *class_radiance = malloc(HSCategories.used * sizeof(double));
 
 uint32_t bestseen=0;
-hsClassification myReply;
+HTMLClassification myReply;
 
 uint32_t cls, doc; // class and document counters
 uint32_t nfeats;   // total features
@@ -593,12 +592,12 @@ float radiance;
 return myReply;
 }
 
-hsClassification doHSPrepandClassify(HashList *toClassify)
+HTMLClassification doHSPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
 uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
 int64_t BSRet = -1;
-hsClassification data;
+HTMLClassification data;
 
 	// alloc data for document hash match stats
 	for(i = 0; i < HSCategories.used; i++)

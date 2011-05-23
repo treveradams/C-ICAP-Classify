@@ -28,12 +28,6 @@
 #define MARKOV_C2	1	/* Markov C2 */
 
 typedef struct {
-	char *name;
-	double probability;
-	double probScaled;
-} FBCClassification;
-
-typedef struct {
 	double naiveBayesNum;
 	double naiveBayesDen;
 	double naiveBayesResult;
@@ -113,7 +107,7 @@ void computeHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryse
 int preLoadFBC(char *fbc_name);
 int loadFBCCategory(char *fbc_name, char *cat_name);
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
-FBCClassification doFBCPrepandClassify(HashList *toClassify);
+HTMLClassification doFBCPrepandClassify(HashList *toClassify);
 void initBayesClassifier(void);
 void deinitBayesClassifier(void);
 #else
@@ -124,7 +118,7 @@ extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *ha
 extern int preLoadHyperSpace(char *fbc_name);
 extern int loadFBCCategory(char *fbc_name, char *cat_name);
 extern int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
-extern FBCClassification doFBCPrepandClassify(HashList *toClassify);
+extern HTMLClassification doFBCPrepandClassify(HashList *toClassify);
 extern void initBayesClassifier(void);
 extern void deinitBayesClassifier(void);
 #endif

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2011 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -90,14 +90,14 @@ DIR *directory;
 	directory=opendir(".");
 	if(directory==NULL)
 	{
-		printf("Unable to open FHS Directory provided!\n");
+		printf("Unable to open FNB Directory provided!\n");
 		exit(-1);
 	}
 	do {
 		current_file = readdir(directory);
-		if (current_file!=NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fbc_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fhs") == 0)
+		if (current_file!=NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fbc_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fnb") == 0)
 		{
-			printf("Loading FHS file: %s\n", current_file->d_name);
+			printf("Loading FNB file: %s\n", current_file->d_name);
 			loadBayesCategory(current_file->d_name, current_file->d_name);
 		}
 	} while (current_file != NULL);
@@ -109,8 +109,7 @@ int main(int argc, char *argv[])
 int fbc_file;
 FBC_HEADERv1 header;
 clock_t start, end;
-uint32_t realHashesUsed = 0, i = 0;
-uint_least16_t docsWritten = 0;
+uint32_t realHashesUsed = 0;
 FBCFeatureExt *realHashes;
 	initHTML();
 	initBayesClassifier();
@@ -125,36 +124,13 @@ FBCFeatureExt *realHashes;
 
 	realHashesUsed = NBJudgeHashList.used;
 	realHashes = NBJudgeHashList.hashes;
-	do {
-		// Make sure we only write out FBC_v1_QTY_MAX records per document
-		// Do this by screwing with NBJudgeHashList.used, save old, modify
-		if(NBJudgeHashList.used > FBC_v1_QTY_MAX)
-		{
-			NBJudgeHashList.used = FBC_v1_QTY_MAX - 1;
-		}
-		// Also, change NBJudgeHashList.hashes to offset for previously used ones
-		NBJudgeHashList.hashes = &NBJudgeHashList.hashes[i];
-		writeFBCHashesPreload(fbc_file, &header, &NBJudgeHashList);
-		docsWritten++;
 
-		// Restore NBJudgeHashList.hashes
-		NBJudgeHashList.hashes = realHashes;
+	writeFBCHashesPreload(fbc_file, &header, &NBJudgeHashList);
 
-		// Make sure that we never write out more than FBC_HEADERv1_RECORDS_QTY_MAX times as this is our maximum document count
-		if(docsWritten > FBC_HEADERv1_RECORDS_QTY_MAX)
-		{
-			printf("PROBLEM: We have more hashes than allowed!!\n");
-		}
-
-		// Restore NBJudgeHashList.used
-		i += NBJudgeHashList.used;
-		NBJudgeHashList.used = realHashesUsed - i;
-	} while (i < realHashesUsed);
 	close(fbc_file);
 
-
 	end=clock();
-	printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", realHashesUsed, docsWritten);
+	printf("Wrote out: %"PRIu32" hashes.\n", realHashesUsed);
 	printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
 
 	deinitBayesClassifier();

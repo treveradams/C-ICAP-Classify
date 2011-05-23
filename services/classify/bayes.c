@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2011 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -86,18 +86,18 @@ double den;
 	if(hashes->FBC_LOCKED) return -1;
 
 	// Do precomputing
-	for(uint32_t i=0; i < hashes->used; i++)
+	for(uint32_t i = 0; i < hashes->used; i++)
 	{
 		total = 0;
 		den = 0;
-		for(uint_least16_t j=0; j < hashes->hashes[i].used; j++)
+		for(uint_least16_t j = 0; j < hashes->hashes[i].used; j++)
 		{
 			total += hashes->hashes[i].users[j].data.count;
 		}
-		den = MARKOV_C1 * (total + MARKOV_C2) * 256;
-		for(uint_least16_t j=0; j < hashes->hashes[i].used; j++)
+		den = MARKOV_C1 * (total + MARKOV_C2);
+		for(uint_least16_t j = 0; j < hashes->hashes[i].used; j++)
 		{
-			hashes->hashes[i].users[j].data.probability = 0.5 + hashes->hashes[i].users[j].data.count / den;
+			hashes->hashes[i].users[j].data.probability = 0.9 + hashes->hashes[i].users[j].data.count / den;
 		}
 	}
 	hashes->FBC_LOCKED = 1;
@@ -120,6 +120,7 @@ return 0;
 
 static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 {
+	if(fbc_file < 0) return -999;
 	lseek64(fbc_file, 0, SEEK_SET);
 	read(fbc_file, &header->ID, 3);
 	if(memcmp(header->ID, "FNB", FBC_HEADERv1_ID_SIZE) != 0)
@@ -202,6 +203,7 @@ uint16_t j;
 int writecheck;
 
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
+//	ftruncate64(file, 11);
 //	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
@@ -210,7 +212,7 @@ int writecheck;
 			for(j = 0; j < hashes_list->hashes[i].used; j++)
 			{
 				// Make sure that this is the right category and that we have enough counts to write (not <= zero_point)
-				if(hashes_list->hashes[i].users[j].category == category && hashes_list->hashes[i].users[j].data.count > zero_point)
+				if(hashes_list->hashes[i].users[j].category == category && hashes_list->hashes[i].users[j].data.count >= zero_point)
 				{
 					qty++;
 					do { // write hash
@@ -243,10 +245,11 @@ uint32_t i;
 const uint_least32_t ZERO_COUNT = 0;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
+	ftruncate64(file, 12);
 	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
-		for(i=0; i < hashes_list->used; i++)
+		for(i = 0; i < hashes_list->used; i++)
 		{
 			do { // write hash
 				writecheck = write(file, &hashes_list->hashes[i].hash, FBC_v1_HASH_SIZE);
@@ -288,10 +291,7 @@ int64_t mid=0;
 
 uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 {
-struct stat stat_buf;
-	fstat(fbc_file, &stat_buf);
-        return (stat_buf.st_size - (FBC_HEADERv1_ID_SIZE + FBC_HEADERv1_VERSION_SIZE + FBC_HEADERv1_UBM_SIZE +
-		FBC_HEADERv1_RECORDS_QTY_SIZE)) / (FBC_v1_HASH_SIZE) + 1;
+	return header->records;
 }
 
 int loadBayesCategory(char *fbc_name, char *cat_name)
@@ -354,9 +354,8 @@ int status;
 						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category = NBCategories.used;
 						NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count = count;
 						NBJudgeHashList.hashes[BSRet].used++;
-						break;
 					}
-//						else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
+					else ci_debug_printf(10, "PROBLEM IN THE CITY\n");
 					shortcut++;
 				}
 			}
@@ -473,7 +472,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 	}
 
 	if(startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
-	ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
+//	ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
 
 	// Fixup memory usage
 	if(NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1)
@@ -485,7 +484,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 	return 1;
 }
 
-static int preload_hash_compare(const uint_least32_t a, const uint_least32_t b)
+static int preload_hash_compare(const uint_least64_t a, const uint_least64_t b)
 {
 	if(a < b)
 		return -1;
@@ -502,7 +501,7 @@ return 0;
 int preLoadBayes(char *fbc_name)
 {
 int fbc_file;
-uint32_t i, j;
+uint32_t i;
 FBC_HEADERv1 header;
 HTMLFeature hash;
 uint_least32_t count;
@@ -540,28 +539,25 @@ int status;
 			NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 		}
 
-		for(j = 0; j < header.records; j++)
+//		ci_debug_printf(10, "Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes->hashes[j], cat_name, i);
+		if(NBJudgeHashList.used == 0) goto ADD_HASH;
+		switch(preload_hash_compare(NBJudgeHashList.hashes[NBJudgeHashList.used-1].hash, hash))
 		{
-//			ci_debug_printf(10, "Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes->hashes[j], cat_name, i);
-			if(NBJudgeHashList.used == 0) goto ADD_HASH;
-			switch(preload_hash_compare(NBJudgeHashList.hashes[NBJudgeHashList.used-1].hash, hash))
-			{
-				case -1:
-					ADD_HASH:
-					NBJudgeHashList.hashes[NBJudgeHashList.used].hash = hash;
-					NBJudgeHashList.hashes[NBJudgeHashList.used].used = 0;
-					NBJudgeHashList.hashes[NBJudgeHashList.used].users = NULL;
-					NBJudgeHashList.used++;
-					break;
-				case 0:
-					ci_debug_printf(1, "Key: %"PRIX64" already loaded. Preload file %s corrupted?!?!\n", hash, fbc_name);
-					break;
-				case 1:
-					ci_debug_printf(1, "Key: %"PRIX64" out of order. Preload file %s is corrupted!!!\n" \
-								"Aborting preload as is.\n", hash, fbc_name);
-					return -1;
-					break;
-			}
+			case -1:
+				ADD_HASH:
+				NBJudgeHashList.hashes[NBJudgeHashList.used].hash = hash;
+				NBJudgeHashList.hashes[NBJudgeHashList.used].used = 0;
+				NBJudgeHashList.hashes[NBJudgeHashList.used].users = NULL;
+				NBJudgeHashList.used++;
+				break;
+			case 0:
+				ci_debug_printf(1, "Key: %"PRIX64" already loaded. Preload file %s corrupted?!?!\n", hash, fbc_name);
+				break;
+			case 1:
+				ci_debug_printf(1, "Key: %"PRIX64" out of order. Preload file %s is corrupted!!!\n" \
+							"Aborting preload as is.\n", hash, fbc_name);
+				return -1;
+				break;
 		}
 	}
 	// Fixup memory usage
@@ -575,22 +571,28 @@ int status;
 	return 0;
 }
 
-static FBCClassification doBayesClassify(FBCJudge *categories, HashList *unknown)
+static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown)
 {
-double total_probability = 0.0;
-double remainder = 1000 * DBL_MIN;
+double total_probability = DBL_MIN;
+double remainder = DBL_MIN;
 
 uint32_t cls;
 
 uint32_t bestseen = 0;
-FBCClassification myReply;
+HTMLClassification myReply;
+
+/*	for (cls = 0; cls < NBCategories.used; cls++)
+	{
+		// Avoid divide by zero and keep value small, for log10(remainder) below
+		if (categories[cls].naiveBayesDen < DBL_MIN)
+			categories[cls].naiveBayesDen = DBL_MIN * 1000;
+	}*/
 
 	// Compute base probability
 	for (cls = 0; cls < NBCategories.used; cls++)
 	{
-		categories[cls].naiveBayesResult = categories[cls].naiveBayesNum / ( categories[cls].naiveBayesNum + categories[cls].naiveBayesDen );
+		categories[cls].naiveBayesResult =  categories[cls].naiveBayesNum / ( categories[cls].naiveBayesNum + categories[cls].naiveBayesDen );
 	}
-
 
 	// Renormalize radiance to probability
 	for (cls = 0; cls < NBCategories.used; cls++)
@@ -608,6 +610,13 @@ FBCClassification myReply;
 		remainder += categories[cls].naiveBayesResult; // add up remainder
 	}
 	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
+	if(remainder < DBL_MIN) remainder = DBL_MIN;
+
+
+	for (cls = 0; cls < NBCategories.used; cls++)
+	{
+		printf("Category %s Result %G Num %G Den %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult, categories[cls].naiveBayesNum, categories[cls].naiveBayesDen);
+	}
 
 	myReply.probability = categories[bestseen].naiveBayesResult;
 	myReply.probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
@@ -616,18 +625,31 @@ FBCClassification myReply;
 return myReply;
 }
 
-FBCClassification doHSPrepandClassify(HashList *toClassify)
+void ConserveBits(FBCJudge *categories, uint16_t total)
+{
+	printf("Conserving Bits\n");
+	for(uint16_t i = 0; i < total; i++)
+	{
+		if(categories[i].naiveBayesNum < DBL_MIN) categories[i].naiveBayesNum = DBL_MIN;
+		categories[i].naiveBayesNum *= 100000000000000;
+
+		if(categories[i].naiveBayesDen < DBL_MIN) categories[i].naiveBayesDen = DBL_MIN;
+		categories[i].naiveBayesDen *= 100000000000000;
+	}
+}
+
+HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
-uint16_t missing;
+uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
 int64_t BSRet=-1;
-FBCClassification data;
+HTMLClassification data;
 uint64_t total;
 double den;
 
 	// Set numerator and denominator to 1 so we don't have 0's as all answers
-	for(i=0; i < toClassify->used; i++)
+	for(i = 0; i < NBCategories.used; i++)
 	{
 		categories[i].naiveBayesNum = 1;
 		categories[i].naiveBayesDen = 1;
@@ -636,48 +658,97 @@ double den;
 	// do bayes multiplication
 	for(i=0; i < toClassify->used; i++)
 	{
-		if((BSRet=FBCBinarySearch(&NBJudgeHashList, 0, NBJudgeHashList.used-1, toClassify->hashes[i]))>=0)
+		if((BSRet=FBCBinarySearch(&NBJudgeHashList, 0, NBJudgeHashList.used-1, toClassify->hashes[i])) >= 0)
 		{
 //			printf("Found %"PRIX64"\n", toClassify->hashes[i]);
-			for(j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
+			if(NBJudgeHashList.FBC_LOCKED)
 			{
-				/*BAYES*/
-				if(NBJudgeHashList.FBC_LOCKED)
+				for(j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
 				{
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesDen *= (1 - NBJudgeHashList.hashes[BSRet].users[j].data.probability);
-					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < NBJudgeHashList.hashes[BSRet].users[j + 1].category; missing++)
+					/*BAYES*/
+					if(j == 0) // Catch missing at the beginning
 					{
-						categories[missing].naiveBayesNum *= .5;
-						categories[missing].naiveBayesDen *= .5;
-					}
-				}
-				else
-				{
-					total = 0;
-					den = 0;
-					for(uint_least16_t k=0; k < NBJudgeHashList.hashes[BSRet].used; k++)
-					{
-						total += NBJudgeHashList.hashes[BSRet].users[k].data.count;
-					}
-					den = MARKOV_C1 * (total + MARKOV_C2) * 256;
-					for(uint_least16_t k=0; k < NBJudgeHashList.hashes[BSRet].used; k++)
-					{
-						categories[NBJudgeHashList.hashes[BSRet].users[k].category].naiveBayesNum *= (0.5 + NBJudgeHashList.hashes[BSRet].users[k].data.count / den);
-						categories[NBJudgeHashList.hashes[BSRet].users[k].category].naiveBayesDen *= (1 - categories[NBJudgeHashList.hashes[BSRet].users[k].category].naiveBayesNum);
-						for(missing = NBJudgeHashList.hashes[BSRet].users[k].category + 1; missing < NBJudgeHashList.hashes[BSRet].users[k + 1].category; missing++)
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
+						for(missing = 0; missing < nextReal; missing++)
 						{
-							categories[missing].naiveBayesNum *= .5;
-							categories[missing].naiveBayesDen *= .5;
+//							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+							categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
+							categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
 						}
 					}
+
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesDen *= (1 - NBJudgeHashList.hashes[BSRet].users[j].data.probability);
+
+					// Catch missing at the end or in between
+					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
+					}
+					else nextReal = NBCategories.used;
+					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
+					{
+//						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+						categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
+						categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+					}
+				}
+			}
+			else
+			{
+				/*BAYES*/
+				total = 0;
+				den = 0;
+				for(uint_least16_t k = 0; k < NBJudgeHashList.hashes[BSRet].used; k++)
+				{
+					total += NBJudgeHashList.hashes[BSRet].users[k].data.count;
+				}
+				den = MARKOV_C1 * (total + MARKOV_C2); // removed * 256 for testing
+
+				for(uint_least16_t j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
+				{
+					if(j == 0) // Catch missing at the beginning
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
+						for(missing = 0; missing < nextReal; missing++)
+						{
+//							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+							categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
+							categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+						}
+					}
+
+//					printf("Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum *= (0.9 + (NBJudgeHashList.hashes[BSRet].users[j].data.count / den));
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesDen *= (1 - categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesNum);
+
+					// Catch missing at the end or in between
+					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
+					}
+					else nextReal = NBCategories.used;
+					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
+					{
+//						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+						categories[missing].naiveBayesNum *= (0.7 + DBL_MIN * 100);
+						categories[missing].naiveBayesDen *= (1 - categories[missing].naiveBayesNum);
+					}
+/*					for(i = 0; i < NBCategories.used; i++)
+					{
+						if(categories[i].naiveBayesNum < DBL_MIN * 100000 || categories[i].naiveBayesDen < DBL_MIN * 100000) ConserveBits(categories, NBCategories.used);
+					}*/
+/*					for(i = 0; i < NBCategories.used; i++)
+					{
+						printf("Here Category %s Num %G Den %G\n", NBCategories.categories[i].name, categories[i].naiveBayesNum, categories[i].naiveBayesDen);
+					}*/
 				}
 			}
 		}
 	}
 //	printf("Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
 
-	data=doBayesClassify(categories, toClassify);
+	data = doBayesClassify(categories, toClassify);
 
 	// cleanup
 	free(categories);

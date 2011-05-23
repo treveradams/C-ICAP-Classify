@@ -61,6 +61,12 @@ typedef struct {
 	uint32_t slots;
 } HashList;
 
+typedef struct {
+	char *name;
+	double probability;
+	double probScaled;
+} HTMLClassification;
+
 #ifdef IN_HTML
 void normalizeCurrency(regexHead *myHead);
 void removeHTML(regexHead *myHead);

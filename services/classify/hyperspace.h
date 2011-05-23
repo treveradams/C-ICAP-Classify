@@ -24,13 +24,6 @@
 #define HYPERSPACE_FORMAT_VERSION 1
 #define UNICODE_BYTE_MARK 0xFEFF
 
-
-typedef struct {
-	char *name;
-	double probability;
-	double probScaled;
-} hsClassification;
-
 // Fast Hyper Space File Format Version 1 is as follows
 // Header
 // BYTE 1 2 3 4 5 6 7 8 9
@@ -50,6 +43,7 @@ typedef struct {
 #define FHS_HEADERv1_VERSION_SIZE sizeof(uint_least16_t)
 #define FHS_HEADERv1_UBM_SIZE sizeof(uint_least16_t)
 #define FHS_HEADERv1_RECORDS_QTY_SIZE sizeof(uint_least16_t)
+#define FHS_HEADERv1_TOTAL_SIZE (FHS_HEADERv1_ID_SIZE + FHS_HEADERv1_VERSION_SIZE + FHS_HEADERv1_UBM_SIZE + FHS_HEADERv1_RECORDS_QTY_SIZE)
 #define FHS_v1_QTY_SIZE sizeof(uint_least16_t)
 #define FHS_v1_HASH_SIZE sizeof(uint_least64_t)
 
@@ -103,7 +97,7 @@ void writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list);
 int writeFHSHashesPreload(int file, FHS_HEADERv1 *header, HashListExt *hashes_list);
 int preLoadHyperSpace(char *fhs_name);
 int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
-hsClassification doHSPrepandClassify(HashList *toClassify);
+HTMLClassification doHSPrepandClassify(HashList *toClassify);
 void initHyperSpaceClassifier(void);
 void deinitHyperSpaceClassifier(void);
 #else
@@ -113,7 +107,7 @@ extern int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
 extern int writeFHSHashesPreload(int file, FHS_HEADERv1 *header, HashListExt *hashes_list);
 extern int preLoadHyperSpace(char *fhs_name);
 extern int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
-extern hsClassification doHSPrepandClassify(HashList *toClassify);
+extern HTMLClassification doHSPrepandClassify(HashList *toClassify);
 extern void initHyperSpaceClassifier(void);
 extern void deinitHyperSpaceClassifier(void);
 #endif

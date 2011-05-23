@@ -43,10 +43,10 @@
 #include <string.h>
 
 #include "hash.c"
-#include "hyperspace.c"
+#include "bayes.c"
 
 char *judge_file;
-char *fhs_dir;
+char *fbc_dir;
 
 int readArguments(int argc, char *argv[])
 {
@@ -57,7 +57,7 @@ int i;
 		printf("\t-p PRIMARY_HASH_SEED\n");
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_FILE_TO_JUDGE\n");
-		printf("\t-d CATEGORY_FHS_FILES_DIR\n");
+		printf("\t-d CATEGORY_FNB_FILES_DIR\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -73,9 +73,9 @@ int i;
 		else if(strcmp(argv[i], "-d") == 0)
 		{
 			int len = strlen(argv[i+1]);
-			fhs_dir = malloc(len + 1);
-			sscanf(argv[i+1], "%s", fhs_dir);
-			if(fhs_dir[len-1] == '/') fhs_dir[len-1] = '\0';
+			fbc_dir = malloc(len + 1);
+			sscanf(argv[i+1], "%s", fbc_dir);
+			if(fbc_dir[len-1] == '/') fbc_dir[len-1] = '\0';
 		}
 	}
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
@@ -122,28 +122,28 @@ int name_len;
 char *cat_name;
 
 	getcwd(old_dir, PATH_MAX);
-	chdir(fhs_dir);
-	preLoadHyperSpace("preload.fhs");
+	chdir(fbc_dir);
+	preLoadBayes("preload.fnb");
 	chdir(old_dir);
 
-	if ((dirp = opendir(fhs_dir)) == NULL)
+	if ((dirp = opendir(fbc_dir)) == NULL)
 	{
-		printf("couldn't open '%s'", fhs_dir);
+		printf("couldn't open '%s'", fbc_dir);
 		return;
 	}
 
-	chdir(fhs_dir);
+	chdir(fbc_dir);
 	do {
 		errno = 0;
 		if ((dp = readdir(dirp)) != NULL)
 		{
-			if (strcmp(dp->d_name, "preload.fhs") != 0 && strstr(dp->d_name, ".fhs") != NULL)
+			if (strcmp(dp->d_name, "preload.fnb") != 0 && strstr(dp->d_name, ".fnb") != NULL)
 			{
-				name_len = strstr(dp->d_name, ".fhs") - dp->d_name;
+				name_len = strstr(dp->d_name, ".fnb") - dp->d_name;
 				cat_name = malloc(name_len + 1);
 				strncpy(cat_name, dp->d_name, name_len);
 				cat_name[name_len] = '\0';
-				loadHyperSpaceCategory(dp->d_name, cat_name);
+				loadBayesCategory(dp->d_name, cat_name);
 				free(cat_name);
 			}
 		}
@@ -165,7 +165,7 @@ clock_t start, end;
 HTMLClassification classification;
 	checkMakeUTF8();
 	initHTML();
-	initHyperSpaceClassifier();
+	initBayesClassifier();
 	if(readArguments(argc, argv)==-1) exit(-1);
 	myData=makeData(judge_file);
 
@@ -182,12 +182,12 @@ HTMLClassification classification;
 
 //	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
-	myHashes.slots = HYPERSPACE_MAX_FEATURE_COUNT;
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * FBC_MAX_FEATURE_COUNT);
+	myHashes.slots = FBC_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 
-	classification=doHSPrepandClassify(&myHashes);
+	classification=doBayesPrepandClassify(&myHashes);
 	end=clock();
 	printf("Classification took %lf milliseconds\n", (double)((end-start)/(CLOCKS_PER_SEC/1000)));
 	printf("Best match: %s prob: %lf pR: %lf\n", classification.name, classification.probability, classification.probScaled);
@@ -195,8 +195,8 @@ HTMLClassification classification;
 	free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 	free(judge_file);
-	free(fhs_dir);
-	deinitHyperSpaceClassifier();
+	free(fbc_dir);
+	deinitBayesClassifier();
 	deinitHTML();
 	return 0;
 }
