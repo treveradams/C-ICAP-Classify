@@ -38,8 +38,6 @@
 #include <wchar.h>
 #include <wctype.h>
 #include <time.h>
-#include <dirent.h>
-#include <errno.h>
 #include <string.h>
 
 #include "hash.c"
@@ -113,49 +111,6 @@ int32_t realLen;
 	return myData;
 }
 
-void loadMassCategories(void)
-{
-DIR *dirp;
-struct dirent *dp;
-char old_dir[PATH_MAX];
-int name_len;
-char *cat_name;
-
-	getcwd(old_dir, PATH_MAX);
-	chdir(fhs_dir);
-	preLoadHyperSpace("preload.fhs");
-	chdir(old_dir);
-
-	if ((dirp = opendir(fhs_dir)) == NULL)
-	{
-		printf("couldn't open '%s'", fhs_dir);
-		return;
-	}
-
-	chdir(fhs_dir);
-	do {
-		errno = 0;
-		if ((dp = readdir(dirp)) != NULL)
-		{
-			if (strcmp(dp->d_name, "preload.fhs") != 0 && strstr(dp->d_name, ".fhs") != NULL)
-			{
-				name_len = strstr(dp->d_name, ".fhs") - dp->d_name;
-				cat_name = malloc(name_len + 1);
-				strncpy(cat_name, dp->d_name, name_len);
-				cat_name[name_len] = '\0';
-				loadHyperSpaceCategory(dp->d_name, cat_name);
-				free(cat_name);
-			}
-		}
-	} while (dp != NULL);
-	if (errno != 0)
-		perror("error reading directory");
-	else
-		(void) closedir(dirp);
-
-	chdir(old_dir);
-}
-
 int main (int argc, char *argv[])
 {
 regexHead myRegexHead;
@@ -170,7 +125,7 @@ HTMLClassification classification;
 	myData=makeData(judge_file);
 
 	printf("Loading hashes -- be patient!\n");
-	loadMassCategories();
+	loadMassHSCategories(fhs_dir);
 
 	printf("Classifying\n");
 	start=clock();
@@ -182,8 +137,8 @@ HTMLClassification classification;
 
 //	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
-	myHashes.slots = HYPERSPACE_MAX_FEATURE_COUNT;
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+	myHashes.slots = HTML_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 

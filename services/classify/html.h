@@ -23,6 +23,8 @@
 #define regexEDITS 250
 #define regexAPPENDSIZE 512
 
+#define HTML_MAX_FEATURE_COUNT 500000
+
 
 // From hash.c
 extern uint32_t HASHSEED1;

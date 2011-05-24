@@ -42,6 +42,9 @@
 #include <wctype.h>
 #include <float.h>
 #include <math.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
 
 #include "html.h"
 
@@ -205,6 +208,20 @@ int file=0;
 	return file;
 }
 
+int isBayes(char *filename)
+{
+FBC_HEADERv1 header;
+int file;
+
+	file = openFBC(filename, &header, 0);
+	if(file > 0)
+	{
+		close(file);
+		return 1;
+	}
+return -1;
+}
+
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point)
 {
 uint32_t i;
@@ -299,7 +316,7 @@ int64_t mid=0;
 	return -1; // This should never be reached
 }
 
-uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
+static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 {
 	return header->records;
 }
@@ -581,6 +598,50 @@ int status;
 	return 0;
 }
 
+int loadMassBayesCategories(char *fbc_dir)
+{
+DIR *dirp;
+struct dirent *dp;
+char old_dir[PATH_MAX];
+int name_len;
+char *cat_name;
+
+	getcwd(old_dir, PATH_MAX);
+	chdir(fbc_dir);
+	preLoadBayes("preload.fnb");
+	chdir(old_dir);
+
+	if ((dirp = opendir(fbc_dir)) == NULL)
+	{
+		printf("couldn't open '%s'", fbc_dir);
+		return -1;
+	}
+
+	chdir(fbc_dir);
+	do {
+		errno = 0;
+		if ((dp = readdir(dirp)) != NULL)
+		{
+			if (strcmp(dp->d_name, "preload.fnb") != 0 && strstr(dp->d_name, ".fnb") != NULL)
+			{
+				name_len = strstr(dp->d_name, ".fnb") - dp->d_name;
+				cat_name = malloc(name_len + 1);
+				strncpy(cat_name, dp->d_name, name_len);
+				cat_name[name_len] = '\0';
+				loadBayesCategory(dp->d_name, cat_name);
+				free(cat_name);
+			}
+		}
+	} while (dp != NULL);
+	if (errno != 0)
+		perror("error reading directory");
+	else
+		(void) closedir(dirp);
+
+	chdir(old_dir);
+	return 0;
+}
+
 static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown)
 {
 double total_probability = DBL_MIN;
@@ -630,9 +691,11 @@ uint32_t i, j;
 uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
 int64_t BSRet = -1;
-HTMLClassification data;
+HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 };
 uint64_t total;
 double local_probability;
+
+	if(NBCategories.used < 1) return data;
 
 	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)

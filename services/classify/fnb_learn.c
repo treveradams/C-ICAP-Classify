@@ -143,8 +143,8 @@ HashList myHashes;
 
 //	printf("%ls\n", myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * FBC_MAX_FEATURE_COUNT);
-	myHashes.slots = FBC_MAX_FEATURE_COUNT;
+	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+	myHashes.slots = HTML_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);

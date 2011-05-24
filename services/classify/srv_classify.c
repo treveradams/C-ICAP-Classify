@@ -58,6 +58,7 @@ const wchar_t *WCNULL = L"\0";
 #endif
 
 #include "html.h"
+#include "bayes.h"
 #include "hyperspace.h"
 
 #ifdef HAVE_OPENCV
@@ -133,6 +134,8 @@ void srvclassify_parse_args(classify_req_data_t * data, char *args);
 int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata);
 int cfg_DoTextPreload(char *directive, char **argv, void *setdata);
 int cfg_AddTextCategory(char *directive, char **argv, void *setdata);
+int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata);
+int cfg_AddTextCategoryDirectoryBayes(char *directive, char **argv, void *setdata);
 int cfg_TextHashSeeds(char *directive, char **argv, void *setdata);
 int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
 int cfg_TmpDir(char *directive, char **argv, void *setdata);
@@ -163,6 +166,8 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"TextPreload", NULL, cfg_DoTextPreload, NULL},
      {"TextCategory", NULL, cfg_AddTextCategory, NULL},
+     {"TextCategoryDirectoryHS", NULL, cfg_AddTextCategoryDirectoryHS, NULL},
+     {"TextCategoryDirectoryBayes", NULL, cfg_AddTextCategoryDirectoryBayes, NULL},
      {"TextHashSeeds", NULL, cfg_TextHashSeeds, NULL},
      {"MaxObjectSize", &MAX_OBJECT_SIZE, ci_cfg_size_off, NULL},
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
@@ -236,6 +241,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
      if(!utf8_mode) setlocale(LC_ALL, "en_US.utf8");
 //#ifdef HAVE_TRE
+     initBayesClassifier();
      initHyperSpaceClassifier();
 //#endif
      initHTML();
@@ -261,6 +267,7 @@ void srvclassify_close_service()
      if(classifygroups) free(classifygroups);
      classifygroups = NULL;
 //#ifdef HAVE_TRE
+     deinitBayesClassifier();
      deinitHyperSpaceClassifier();
 //#endif
      deinitHTML();
@@ -500,7 +507,7 @@ char reply[2*CI_MAX_PATH+1];
 char type[20];
 regexHead myRegexHead;
 HashList myHashes;
-HTMLClassification classification;
+HTMLClassification HSclassification, NBclassification;
 
      // sanity check
      if(!data->uncompressedbody)
@@ -519,12 +526,13 @@ HTMLClassification classification;
      normalizeCurrency(&myRegexHead);
      regexMakeSingleBlock(&myRegexHead);
 
-     myHashes.hashes = malloc(sizeof(hyperspaceFeature) * HYPERSPACE_MAX_FEATURE_COUNT);
-     myHashes.slots = HYPERSPACE_MAX_FEATURE_COUNT;
+     myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+     myHashes.slots = HTML_MAX_FEATURE_COUNT;
      myHashes.used = 0;
      computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 
-     classification = doHSPrepandClassify(&myHashes);
+     HSclassification = doHSPrepandClassify(&myHashes);
+     NBclassification = doBayesPrepandClassify(&myHashes);
 
      free(myHashes.hashes);
      freeRegexHead(&myRegexHead);
@@ -533,21 +541,42 @@ HTMLClassification classification;
      // modify headers
      if (!ci_http_response_headers(req))
           ci_http_response_create(req, 1, 1);
-     if(classification.probScaled >= (float) Ambiguous && classification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-     else if(classification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
-     else strcpy(type,"NEAREST");
-     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY: %s", classification.name);
-     reply[CI_MAX_PATH]='\0';
-     ci_http_response_add_header(req, reply);
-     ci_debug_printf(10, "Added header: %s\n", reply);
-     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL: %f", classification.probScaled);
-     reply[CI_MAX_PATH]='\0';
-     ci_http_response_add_header(req, reply);
-     ci_debug_printf(10, "Added header: %s\n", reply);
-     snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-CONFIDENCE: %s", type);
-     reply[CI_MAX_PATH]='\0';
-     ci_http_response_add_header(req, reply);
-     ci_debug_printf(10, "Added header: %s\n", reply);
+     if(HSclassification.name != NULL)
+     {
+          if(HSclassification.probScaled >= (float) Ambiguous && HSclassification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+          else if(HSclassification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          else strcpy(type,"NEAREST");
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-HS: %s", HSclassification.name);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-HS: %f", HSclassification.probScaled);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-CONFIDENCE-HS: %s", type);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+     }
+     if(NBclassification.name != NULL)
+     {
+          if(NBclassification.probScaled >= (float) Ambiguous && NBclassification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+          else if(NBclassification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          else strcpy(type,"NEAREST");
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-NB: %s", NBclassification.name);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-NB: %f", NBclassification.probScaled);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-CONFIDENCE-NB: %s", type);
+          reply[CI_MAX_PATH]='\0';
+          ci_http_response_add_header(req, reply);
+          ci_debug_printf(10, "Added header: %s\n", reply);
+     }
      // Release Read Lock
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
@@ -1002,11 +1031,14 @@ int cfg_DoTextPreload(char *directive, char **argv, void *setdata)
           ci_debug_printf(1, "Format: %s LOCATION_OF_FHS_PRELOAD_FILE\n", directive);
           return 0;
      }
-    ci_debug_printf(1, "BE PATIENT -- Preloading Text Classification: FHS File: %s\n", argv[0]);
-    ci_thread_rwlock_wrlock(&textclassify_rwlock);
-    preLoadHyperSpace(argv[0]);
-    ci_thread_rwlock_unlock(&textclassify_rwlock);
-    return 1;
+     ci_debug_printf(1, "BE PATIENT -- Preloading Text Classification File: %s\n", argv[0]);
+     ci_thread_rwlock_wrlock(&textclassify_rwlock);
+     if(isHyperSpace(argv[0]))
+          preLoadHyperSpace(argv[0]);
+     else if(isBayes(argv[0]))
+          preLoadBayes(argv[0]);
+     ci_thread_rwlock_unlock(&textclassify_rwlock);
+     return 1;
 }
 
 int cfg_AddTextCategory(char *directive, char **argv, void *setdata)
@@ -1017,12 +1049,46 @@ int val = 0;
           ci_debug_printf(1, "Format: %s NAME LOCATION_OF_FHS_FILE\n", directive);
           return val;
      }
-    ci_debug_printf(1, "BE PATIENT -- Loading and optimizing Text Category: %s from FHS File: %s\n", argv[0], argv[1]);
-    ci_thread_rwlock_wrlock(&textclassify_rwlock);
-    val = loadHyperSpaceCategory(argv[1], argv[0]);
-    ci_thread_rwlock_unlock(&textclassify_rwlock);
-    return val;
+     ci_debug_printf(1, "BE PATIENT -- Loading and optimizing Text Category: %s from File: %s\n", argv[0], argv[1]);
+     ci_thread_rwlock_wrlock(&textclassify_rwlock);
+     if(isHyperSpace(argv[1]))
+          val = loadHyperSpaceCategory(argv[1], argv[0]);
+     if(isBayes(argv[1]))
+          val = loadBayesCategory(argv[1], argv[0]);
+     ci_thread_rwlock_unlock(&textclassify_rwlock);
+     return val;
 }
+
+int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata)
+{
+int val = 0;
+     if (argv == NULL || argv[0] == NULL) {
+          ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
+          ci_debug_printf(1, "Format: %s LOCATION_OF_FHS_FILES\n", directive);
+          return val;
+     }
+     ci_debug_printf(1, "BE PATIENT -- Mass Loading and optimizing Text Categories from directory: %s\n", argv[0]);
+     ci_thread_rwlock_wrlock(&textclassify_rwlock);
+     val = loadMassHSCategories(argv[0]);
+     ci_thread_rwlock_unlock(&textclassify_rwlock);
+     return val;
+}
+
+int cfg_AddTextCategoryDirectoryBayes(char *directive, char **argv, void *setdata)
+{
+int val = 0;
+     if (argv == NULL || argv[0] == NULL) {
+          ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
+          ci_debug_printf(1, "Format: %s LOCATION_OF_FNB_FILES\n", directive);
+          return val;
+     }
+     ci_debug_printf(1, "BE PATIENT -- Mass Loading and optimizing Text Categories from directory: %s\n", argv[0]);
+     ci_thread_rwlock_wrlock(&textclassify_rwlock);
+     val = loadMassBayesCategories(argv[0]);
+     ci_thread_rwlock_unlock(&textclassify_rwlock);
+     return val;
+}
+
 
 int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
 {
@@ -1034,8 +1100,8 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
      sscanf(argv[0], "%x", &HASHSEED1);
      sscanf(argv[1], "%x", &HASHSEED2);
 
-    ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
-    return 1;
+     ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
+     return 1;
 }
 
 char *myStrDup(char *string)

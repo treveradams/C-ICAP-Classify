@@ -17,8 +17,6 @@
  *  along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#define FBC_MAX_FEATURE_COUNT 500000
 #define MAX_BAYES_CATEGORY_NAME 100
 
 #define FBC_FORMAT_VERSION 1
@@ -31,7 +29,7 @@ typedef struct {
 	double naiveBayesResult;
 } FBCJudge;
 
-// Fast Hyper Space File Format Version 1 is as follows
+// Fast Naive Bayes File Format Version 1 is as follows
 // Header
 // BYTE 1 2 3 4 5 6 7 8 9
 //      ID    Ver UBM Qty
@@ -103,29 +101,33 @@ int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uin
 int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list);
 void computeHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
 int preLoadFBC(char *fbc_name);
-int loadFBCCategory(char *fbc_name, char *cat_name);
+int loadBayesCategory(char *fbc_name, char *cat_name);
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
-HTMLClassification doFBCPrepandClassify(HashList *toClassify);
+HTMLClassification doBayesPrepandClassify(HashList *toClassify);
 void initBayesClassifier(void);
 void deinitBayesClassifier(void);
+int isBayes(char *filename);
+int loadMassBayesCategories(char *fbc_dir);
 #else
 extern void writeFBCHeader(int file, FBC_HEADERv1 *header);
 extern int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point);
-extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashListExt *hashes_list);
-extern int preLoadHyperSpace(char *fbc_name);
-extern int loadFBCCategory(char *fbc_name, char *cat_name);
+extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashList *hashes_list);
+extern int preLoadFBC(char *fbc_name);
+extern int loadBayesCategory(char *fbc_name, char *cat_name);
 extern int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
-extern HTMLClassification doFBCPrepandClassify(HashList *toClassify);
+extern HTMLClassification doBayesPrepandClassify(HashList *toClassify);
 extern void initBayesClassifier(void);
 extern void deinitBayesClassifier(void);
+extern int isBayes(char *filename);
+extern int loadMassBayesCategories(char *fbc_dir);
 #endif
 
 #define BAYES_CATEGORY_INC 10
 
 #ifndef IN_BAYES
 extern FBCTextCategoryExt NBCategories;
-extern FBCHashListExt NBJudgeHashList;
+extern FBCHashList NBJudgeHashList;
 #endif
 
 #ifndef IN_BAYES

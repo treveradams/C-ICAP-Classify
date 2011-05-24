@@ -17,8 +17,6 @@
  *  along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-
-#define HYPERSPACE_MAX_FEATURE_COUNT 500000
 #define MAX_HYPSERSPACE_CATEGORY_NAME 100
 
 #define HYPERSPACE_FORMAT_VERSION 1
@@ -100,6 +98,8 @@ int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
 HTMLClassification doHSPrepandClassify(HashList *toClassify);
 void initHyperSpaceClassifier(void);
 void deinitHyperSpaceClassifier(void);
+int isHyperSpace(char *filename);
+int loadMassHSCategories(char *fhs_dir);
 #else
 extern void writeFHSHeader(int file, FHS_HEADERv1 *header);
 extern int openFHS(char *filename, FHS_HEADERv1 *header, int forWriting);
@@ -110,6 +110,8 @@ extern int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
 extern HTMLClassification doHSPrepandClassify(HashList *toClassify);
 extern void initHyperSpaceClassifier(void);
 extern void deinitHyperSpaceClassifier(void);
+extern int isHyperSpace(char *filename);
+extern int loadMassHSCategories(char *fhs_dir);
 #endif
 
 #define HYPERSPACE_CATEGORY_INC 10

@@ -42,6 +42,9 @@
 #include <wctype.h>
 #include <float.h>
 #include <math.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <errno.h>
 
 #include "html.h"
 
@@ -183,6 +186,20 @@ int file=0;
 	return file;
 }
 
+int isHyperSpace(char *filename)
+{
+FHS_HEADERv1 header;
+int file;
+
+	file = openFHS(filename, &header, 0);
+	if(file > 0)
+	{
+		close(file);
+		return 1;
+	}
+return -1;
+}
+
 int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
 {
 uint16_t i;
@@ -260,7 +277,7 @@ int64_t mid=0;
 	return -1; // This should never be reached
 }
 
-uint32_t featuresInCategory(int fhs_file, FHS_HEADERv1 *header)
+static uint32_t featuresInCategory(int fhs_file, FHS_HEADERv1 *header)
 {
 struct stat stat_buf;
 	fstat(fhs_file, &stat_buf);
@@ -483,6 +500,50 @@ uint16_t numHashes=0;
 	return 0;
 }
 
+int loadMassHSCategories(char *fhs_dir)
+{
+DIR *dirp;
+struct dirent *dp;
+char old_dir[PATH_MAX];
+int name_len;
+char *cat_name;
+
+	getcwd(old_dir, PATH_MAX);
+	chdir(fhs_dir);
+	preLoadHyperSpace("preload.fhs");
+	chdir(old_dir);
+
+	if ((dirp = opendir(fhs_dir)) == NULL)
+	{
+		printf("couldn't open '%s'", fhs_dir);
+		return -1;
+	}
+
+	chdir(fhs_dir);
+	do {
+		errno = 0;
+		if ((dp = readdir(dirp)) != NULL)
+		{
+			if (strcmp(dp->d_name, "preload.fhs") != 0 && strstr(dp->d_name, ".fhs") != NULL)
+			{
+				name_len = strstr(dp->d_name, ".fhs") - dp->d_name;
+				cat_name = malloc(name_len + 1);
+				strncpy(cat_name, dp->d_name, name_len);
+				cat_name[name_len] = '\0';
+				loadHyperSpaceCategory(dp->d_name, cat_name);
+				free(cat_name);
+			}
+		}
+	} while (dp != NULL);
+	if (errno != 0)
+		perror("error reading directory");
+	else
+		(void) closedir(dirp);
+
+	chdir(old_dir);
+	return 0;
+}
+
 static HTMLClassification doHyperSpaceClassify(uint32_t **categories, HashList *unknown)
 {
 double total_radiance = DBL_MIN;
@@ -597,7 +658,9 @@ HTMLClassification doHSPrepandClassify(HashList *toClassify)
 uint32_t i, j;
 uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
 int64_t BSRet = -1;
-HTMLClassification data;
+HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 };
+
+	if(HSCategories.used < 1) return data;
 
 	// alloc data for document hash match stats
 	for(i = 0; i < HSCategories.used; i++)
