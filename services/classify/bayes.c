@@ -695,7 +695,7 @@ HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 
 uint64_t total;
 double local_probability;
 
-	if(NBCategories.used < 1) return data;
+	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 
 	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)

@@ -1,0 +1,47 @@
+##srv_classify may be used to classify text and images. It does not do access control but adds
+##headers which can be used for access control.
+
+#Sets the temp directory which we may use to store temporary text files
+srv_classify.TmpDir /var/tmp/c_icap
+#Sets the lowest level which will be considered ambiguous for text classifications instead of nearest
+srv_classify.TextAmbiguous -2
+#Sets the lowest level which will be considered solid for text classifications instead of ambiguous
+srv_classify.TextSolidMatch 2.3
+#Sets the text file types to be classified
+srv_classify.TextFileTypes TEXT
+#Sets the image file types to be classified
+srv_classify.ImageFileTypes PNG GIF JPEG BMP ICO
+#Sets whether the classify module allows 204 responses
+srv_classify.Allow204Responces on
+# The Maximum object to be classified.
+srv_classify.MaxObjectSize 40M
+#Number of cascades to load per image cateogry
+#Number of cascades to load per image cateogry
+srv_classify.ImageCategoryCopies 85
+#Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or debugDemonstrateMarked is activated
+srv_classify.ImageCategory CATEGORY_NAME FILE RED_CIRCLE_COLOR BLUE_CIRCLE_COLOR GREEN_CIRCLE_COLOR
+
+#Save the Original image
+#srv_classify.debugSaveOriginal 1
+#Save the detected parts
+srv_classify.debugSaveParts 1
+#Save the original image with detected parts marked
+#srv_classify.debugSaveMarked 1
+#Demonstrate the detection by returning the marked image from above
+srv_classify.debugDemonstrate 1
+#Demonstrate the detection by returning a mask with the objects circled (but not visible)
+#srv_classify.debugDemonstrateMasked 1
+#Type of interpolation to use for images. NN (fastest), LINEAR (default), AREA, BICUBIC (slowest).
+srv_classify.ImageInterpolation LINEAR
+#Coalesce image if overlap is in X category with 80% overlap (1 is 100%)
+srv_classify.ImageCoalesceOverlap CATEGORY_NAME PERCENT_OVERLAP
+
+# Add text categories.
+# srv_classify.TextHashSeeds Sets the key for the hash seed. It acts as copyprotection and other functions. IT IS SHARED BETWEEN FHS/FNB!
+srv_classify.TextHashSeeds PARTA_HEX_32BITS PARTB_HEX_32BITS
+srv_classify.TextPreload PRELOAD_FILE_FULLPATH
+# The following adds a text category (do multiple for multipe categories... 2 categories needed to be sane). May handle FHS (Fast HyperSpace) or FNB (Fast NaiveBayes) files
+srv_classify.TextCategory CATEGORY_NAME FILE_FULL_PATH
+# OR, you can load a full directory of FHS or FNB files, depending on which of the following you use, with the CATEGORY_NAME being the file name minus the suffix (.fnb/.fhs)
+AddTextCategoryDirectoryHS FHS_DIRECTORY_PATH
+AddTextCategoryDirectoryNB FNB_DIRECTORY_PATH

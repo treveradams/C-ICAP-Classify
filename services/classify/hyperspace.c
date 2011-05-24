@@ -660,7 +660,7 @@ uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
 int64_t BSRet = -1;
 HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 };
 
-	if(HSCategories.used < 1) return data;
+	if(HSCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 
 	// alloc data for document hash match stats
 	for(i = 0; i < HSCategories.used; i++)
