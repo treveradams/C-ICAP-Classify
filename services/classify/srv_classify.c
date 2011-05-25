@@ -137,6 +137,7 @@ int cfg_AddTextCategory(char *directive, char **argv, void *setdata);
 int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata);
 int cfg_AddTextCategoryDirectoryNB(char *directive, char **argv, void *setdata);
 int cfg_TextHashSeeds(char *directive, char **argv, void *setdata);
+int cfg_OptimizeFNB(char *directive, char **argv, void *setdata);
 int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
 int cfg_TmpDir(char *directive, char **argv, void *setdata);
 /*General functions*/
@@ -169,6 +170,7 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextCategoryDirectoryHS", NULL, cfg_AddTextCategoryDirectoryHS, NULL},
      {"TextCategoryDirectoryNB", NULL, cfg_AddTextCategoryDirectoryNB, NULL},
      {"TextHashSeeds", NULL, cfg_TextHashSeeds, NULL},
+     {"OptimizeFNB", NULL, cfg_OptimizeFNB, NULL},
      {"MaxObjectSize", &MAX_OBJECT_SIZE, ci_cfg_size_off, NULL},
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
      {"Allow204Responces", &ALLOW204, ci_cfg_onoff, NULL},
@@ -1101,6 +1103,14 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
      sscanf(argv[1], "%x", &HASHSEED2);
 
      ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
+     return 1;
+}
+
+int cfg_OptimizeFNB(char *directive, char **argv, void *setdata)
+{
+     optimizeFBC(&NBJudgeHashList);
+
+     ci_debug_printf(1, "Optimizing FBC Data\n");
      return 1;
 }
 

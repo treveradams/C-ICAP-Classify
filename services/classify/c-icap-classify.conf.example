@@ -45,3 +45,5 @@ srv_classify.TextCategory CATEGORY_NAME FILE_FULL_PATH
 # OR, you can load a full directory of FHS or FNB files, depending on which of the following you use, with the CATEGORY_NAME being the file name minus the suffix (.fnb/.fhs)
 AddTextCategoryDirectoryHS FHS_DIRECTORY_PATH
 AddTextCategoryDirectoryNB FNB_DIRECTORY_PATH
+#If you are using FNB, you will want to have this after you load all of your data files
+srv_classify.OptimizeFNB
