@@ -133,33 +133,46 @@ return 0;
 
 static int verifyFBC(int fbc_file, FBC_HEADERv1 *header)
 {
+int offsetFixup;
 	if(fbc_file < 0) return -999;
 	lseek64(fbc_file, 0, SEEK_SET);
-	read(fbc_file, &header->ID, 3);
-	if(memcmp(header->ID, "FNB", FBC_HEADERv1_ID_SIZE) != 0)
+	do {
+		offsetFixup = read(fbc_file, &header->ID, 3);
+		if(offsetFixup < 3) lseek64(fbc_file, -offsetFixup, SEEK_CUR);
+	} while(offsetFixup > 0 && offsetFixup < 3);
+	if(offsetFixup > 0) // Less than or equal to 0 is an empty file
 	{
-//		printf("Not a FastBayesClassifer file\n");
-		return -1;
+		if(memcmp(header->ID, "FNB", FBC_HEADERv1_ID_SIZE) != 0)
+		{
+			ci_debug_printf(10, "Not a FastNaiveBayes file\n");
+			return -1;
+		}
+		do {
+			offsetFixup = read(fbc_file, &header->version, FBC_HEADERv1_VERSION_SIZE);
+			if(offsetFixup < FBC_HEADERv1_VERSION_SIZE) lseek64(fbc_file, -offsetFixup, SEEK_CUR);
+		} while(offsetFixup > 0 && offsetFixup < FBC_HEADERv1_VERSION_SIZE);
+		if(header->version != FBC_FORMAT_VERSION)
+		{
+			ci_debug_printf(10, "Wrong version of FastNaiveBayes file\n");
+			return -2;
+		}
+		do {
+			offsetFixup = read(fbc_file, &header->UBM, FBC_HEADERv1_UBM_SIZE);
+			if(offsetFixup < FBC_HEADERv1_UBM_SIZE) lseek64(fbc_file, -offsetFixup, SEEK_CUR);
+		} while(offsetFixup > 0 && offsetFixup < FBC_HEADERv1_UBM_SIZE);
+		if(header->UBM != UNICODE_BYTE_MARK)
+		{
+			ci_debug_printf(10, "FastNaiveBayes file of incompatible endianness\n");
+			return -3;
+		}
+		if(read(fbc_file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE) != FBC_HEADERv1_RECORDS_QTY_SIZE)
+		{
+			ci_debug_printf(10, "FastNaiveBayes file has invalid header: no records count\n");
+			return -4;
+		}
+		return 0;
 	}
-	read(fbc_file, &header->version, FBC_HEADERv1_VERSION_SIZE);
-	if(header->version != FBC_FORMAT_VERSION)
-	{
-//		printf("Wrong version of FastBayesClassifier file\n");
-		return -2;
-	}
-	read(fbc_file, &header->UBM, FBC_HEADERv1_UBM_SIZE);
-	if(header->UBM != UNICODE_BYTE_MARK)
-	if(header->version != FBC_FORMAT_VERSION)
-	{
-//		printf("FastBayesClassifier file of incompatible endianness\n");
-		return -3;
-	}
-	if(read(fbc_file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE) != 4)
-	{
-//		printf("FastBayesClassifier file has invalid header: no records count\n");
-		return -4;
-	}
-	return 0;
+	else return -5; // Empty FNB file
 }
 
 void writeFBCHeader(int file, FBC_HEADERv1 *header)

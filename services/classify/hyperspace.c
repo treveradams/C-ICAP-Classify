@@ -109,7 +109,7 @@ int offsetFixup;
 	{
 		if(memcmp(header->ID, "FHS", FHS_HEADERv1_ID_SIZE) != 0)
 		{
-//			printf("Not a FastHyperSpace file\n");
+			ci_debug_printf(10, "Not a FastHyperSpace file\n");
 			return -1;
 		}
 		do {
@@ -118,7 +118,7 @@ int offsetFixup;
 		} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv1_VERSION_SIZE);
 		if(header->version != HYPERSPACE_FORMAT_VERSION)
 		{
-//			printf("Wrong version of FastHyperSpace file\n");
+			ci_debug_printf(10, "Wrong version of FastHyperSpace file\n");
 			return -2;
 		}
 		do {
@@ -127,12 +127,12 @@ int offsetFixup;
 		} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv1_UBM_SIZE);
 		if(header->UBM != UNICODE_BYTE_MARK)
 		{
-//			printf("FastHyperSpace file of incompatible endianness\n");
+			ci_debug_printf(10, "FastHyperSpace file of incompatible endianness\n");
 			return -3;
 		}
-		if(read(fhs_file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE) != 2)
+		if(read(fhs_file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE) != FHS_HEADERv1_RECORDS_QTY_SIZE)
 		{
-//			printf("FastHyperSpace file has invalid header: no records count\n");
+			ci_debug_printf(10, "FastHyperSpace file has invalid header: no records count\n");
 			return -4;
 		}
 		return 0;
