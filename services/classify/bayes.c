@@ -219,7 +219,7 @@ int file;
 		close(file);
 		return 1;
 	}
-return -1;
+return 0;
 }
 
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point)
@@ -272,7 +272,7 @@ uint32_t i;
 const uint_least32_t ZERO_COUNT = 0;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	ftruncate64(file, 12);
+	i = ftruncate64(file, 12);
 	lseek64(file, 11, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
@@ -613,7 +613,7 @@ char *cat_name;
 
 	if ((dirp = opendir(fbc_dir)) == NULL)
 	{
-		printf("couldn't open '%s'", fbc_dir);
+		ci_debug_printf(3, "couldn't open '%s'", fbc_dir);
 		return -1;
 	}
 
@@ -639,7 +639,7 @@ char *cat_name;
 		(void) closedir(dirp);
 
 	chdir(old_dir);
-	return 0;
+	return 1;
 }
 
 static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown)

@@ -135,7 +135,7 @@ int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata);
 int cfg_DoTextPreload(char *directive, char **argv, void *setdata);
 int cfg_AddTextCategory(char *directive, char **argv, void *setdata);
 int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata);
-int cfg_AddTextCategoryDirectoryBayes(char *directive, char **argv, void *setdata);
+int cfg_AddTextCategoryDirectoryNB(char *directive, char **argv, void *setdata);
 int cfg_TextHashSeeds(char *directive, char **argv, void *setdata);
 int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
 int cfg_TmpDir(char *directive, char **argv, void *setdata);
@@ -167,7 +167,7 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextPreload", NULL, cfg_DoTextPreload, NULL},
      {"TextCategory", NULL, cfg_AddTextCategory, NULL},
      {"TextCategoryDirectoryHS", NULL, cfg_AddTextCategoryDirectoryHS, NULL},
-     {"TextCategoryDirectoryBayes", NULL, cfg_AddTextCategoryDirectoryBayes, NULL},
+     {"TextCategoryDirectoryNB", NULL, cfg_AddTextCategoryDirectoryNB, NULL},
      {"TextHashSeeds", NULL, cfg_TextHashSeeds, NULL},
      {"MaxObjectSize", &MAX_OBJECT_SIZE, ci_cfg_size_off, NULL},
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
@@ -1053,7 +1053,7 @@ int val = 0;
      ci_thread_rwlock_wrlock(&textclassify_rwlock);
      if(isHyperSpace(argv[1]))
           val = loadHyperSpaceCategory(argv[1], argv[0]);
-     if(isBayes(argv[1]))
+     else if(isBayes(argv[1]))
           val = loadBayesCategory(argv[1], argv[0]);
      ci_thread_rwlock_unlock(&textclassify_rwlock);
      return val;
@@ -1074,7 +1074,7 @@ int val = 0;
      return val;
 }
 
-int cfg_AddTextCategoryDirectoryBayes(char *directive, char **argv, void *setdata)
+int cfg_AddTextCategoryDirectoryNB(char *directive, char **argv, void *setdata)
 {
 int val = 0;
      if (argv == NULL || argv[0] == NULL) {

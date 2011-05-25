@@ -197,7 +197,7 @@ int file;
 		close(file);
 		return 1;
 	}
-return -1;
+return 0;
 }
 
 int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
@@ -515,7 +515,7 @@ char *cat_name;
 
 	if ((dirp = opendir(fhs_dir)) == NULL)
 	{
-		printf("couldn't open '%s'", fhs_dir);
+		ci_debug_printf(3, "couldn't open '%s'", fhs_dir);
 		return -1;
 	}
 
@@ -541,7 +541,7 @@ char *cat_name;
 		(void) closedir(dirp);
 
 	chdir(old_dir);
-	return 0;
+	return 1;
 }
 
 static HTMLClassification doHyperSpaceClassify(uint32_t **categories, HashList *unknown)
