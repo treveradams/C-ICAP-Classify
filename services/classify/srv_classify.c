@@ -35,6 +35,7 @@
 
 #define __USE_GNU
 #define _GNU_SOURCE
+#include <string.h>
 #include <strings.h>
 #include <wchar.h>
 #include <wctype.h>
@@ -61,7 +62,7 @@ const wchar_t *WCNULL = L"\0";
 #include "bayes.h"
 #include "hyperspace.h"
 
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 extern int categorize_image(ci_request_t * req);
 extern int cfg_AddImageCategory(char *directive, char **argv, void *setdata);
 extern int cfg_ImageInterpolation(char *directive, char **argv, void *setdata);
@@ -98,7 +99,7 @@ static int MAX_WINDOW = 4096; // This is for sliding window buffers
 ci_thread_rwlock_t textclassify_rwlock;
 
 /* Image processing information */
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 #include <opencv/cv.h>
 int ImageScaleDimension = 240; // Scale to this dimension
 int ImageMaxScale = 4; // Maximum rescale
@@ -174,7 +175,7 @@ static struct ci_conf_entry conf_variables[] = {
      {"MaxObjectSize", &MAX_OBJECT_SIZE, ci_cfg_size_off, NULL},
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
      {"Allow204Responces", &ALLOW204, ci_cfg_onoff, NULL},
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      {"ImageFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ImageScaleDimension", &ImageScaleDimension, ci_cfg_set_int, NULL},
      {"ImageInterpolation", NULL, cfg_ImageInterpolation, NULL},
@@ -217,7 +218,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 
      ci_thread_rwlock_init(&textclassify_rwlock);
      ci_thread_rwlock_wrlock(&textclassify_rwlock);
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      ci_thread_rwlock_init(&imageclassify_rwlock);
      ci_thread_rwlock_wrlock(&imageclassify_rwlock);
 #endif
@@ -248,7 +249,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 //#endif
      initHTML();
      ci_thread_rwlock_unlock(&textclassify_rwlock);
-#ifdef HAVE_OPENCV
+#if defined HAVE_OPENCV
      ci_thread_rwlock_unlock(&imageclassify_rwlock);
 #endif
 
@@ -258,7 +259,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 
 void srvclassify_close_service()
 {
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      classifyImagePrepReload();
 #endif
 
@@ -353,7 +354,9 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
 
      /*Going to determine the file type, get_filetype can take preview_data as null ....... */
      file_type = get_filetype(req, preview_data, preview_data_len);
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      data->type_name = ci_data_type_name(magic_db, file_type);
+#endif
      if ((data->must_classify = must_classify(file_type, data)) == 0) {
           ci_debug_printf(8, "Not in \"must classify list\". Allow it...... \n");
           return CI_MOD_ALLOW204;
@@ -484,7 +487,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           if(make_utf32(req) == CI_OK) // We should only categorize text if this reteurns >= 0
                categorize_text(req);
      }
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      else if (data->must_classify == IMAGE)
      {
           ci_debug_printf(8, "Classifying IMAGE from file\n");

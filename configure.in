@@ -135,9 +135,12 @@ OLD_CFLAGS=$CFLAGS
 OLD_LIBS=$LIBS
 LIBS=$opencvlib
 CFLAGS=$opencvinc
-opencv="yes"
+opencv="no";
 dnl -------------------------------------------------------------
-AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])], [opencv=no])
+AC_MSG_CHECKING([for OpenCV older than 2.2.x])
+AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui";  opencv="yes"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])])
+AC_MSG_CHECKING([for OpenCV 2.2.x or newer])
+AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d";  opencv="yes"; AC_DEFINE(HAVE_OPENCV_22X, 1, [Define HAVE_OPENCV if OpenCV installed])])
 AC_SUBST(OPENCV_ADD_LDFLAG)
 CFLAGS=$OLD_CFLAGS
 LIBS=$OLD_LIBS

@@ -1,7 +1,7 @@
 
 INCLUDES = -I$(top_srcdir)
 CONFIGDIR = @CONFDIR@
-
+cicapdatadir=@DATADIR@
 cicapmoduledir=@MODSDIR@
 cicapmodule_LTLIBRARIES=srv_classify.la
 

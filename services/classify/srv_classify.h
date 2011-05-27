@@ -29,7 +29,7 @@ typedef struct classify_req_data {
      ci_simple_file_t *body;
      ci_membuf_t *uncompressedbody;
      ci_request_t *req;
-#ifdef HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      char *type_name;
 #endif
      int must_classify;

@@ -466,8 +466,14 @@ LinkedCascade *cascade;
 			cascade = getFreeCascade(current->category);
 			// There can be more than one object in an image. So create a growable sequence of detected objects.
 			// Detect the objects and store them in the sequence
+#ifdef HAVE_OPENCV
 			current->detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
 								1.1, 1, 0, cvSize(0, 0) );
+#endif
+#ifdef HAVE_OPENCV_22X
+			current->detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
+								1.1, 1, 0, cvSize(0, 0), cvSize(mySession->rightImage->width, mySession->rightImage->height));
+#endif
 			unBusyCascade(current->category, cascade);
 		}
 		t = cvGetTickCount() - t;
