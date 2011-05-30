@@ -21,9 +21,9 @@
 // Image Categorization
 
 /* TODO:
-	* Add code to cleanup categories on reload
-	* Add code to add headers
-	* Add object correction
+	* Add object correction - butts and breats gets confused, etc. sometimes
+	* Add escalation acl so that if soo many objects, etc. get detected, referrer gets reloaded (requires db backend and cooperation with srv_classify).
+	* Add referrer classification header (requires db backend, and for srv_classify to store the data for anything it classifies)
 */
 
 #include "autoconf.h"
@@ -206,6 +206,7 @@ static void createImageClassificationHeaders(ImageSession *mySession)
 {
 ImageDetected *current = mySession->detected;
 char header[myMAX_HEADER+1];
+const char *rating = "#########+";
 int i;
 
 	// modify headers
@@ -228,7 +229,7 @@ int i;
 		if(current->detected->total)
 		{
 			char *oldHeader = myStrDup(header);
-			snprintf(header, myMAX_HEADER, "%s %s(%d)", oldHeader, current->category->name, current->detected->total);
+			snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (current->detected->total > 10 ? 10 : current->detected->total), rating);
 			free(oldHeader);
 		}
 		mySession->featuresDetected += current->detected->total;
