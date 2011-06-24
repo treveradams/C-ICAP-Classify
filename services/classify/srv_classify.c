@@ -152,6 +152,10 @@ static void addTextErrorHeaders(ci_request_t *req, int error, char *extra_info);
 /*External functions*/
 extern char *strcasestr(const char *haystack, const char *needle);
 
+// PICS label handling
+regex_t picslabel;
+int make_pics_header(ci_request_t * req);
+
 /*It is dangerous to pass directly fields of the limits structure in conf_variables,
   because in the feature some of this fields will change type (from int to unsigned int
   or from long to long long etc)
@@ -246,6 +250,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 //#ifdef HAVE_TRE
      initBayesClassifier();
      initHyperSpaceClassifier();
+     tre_regwcomp(&picslabel, L"<meta http-equiv=\"PICS-Label\" content='\\(PICS-1.1 ([^']*)'.*/?>", REG_EXTENDED | REG_ICASE);
 //#endif
      initHTML();
      ci_thread_rwlock_unlock(&textclassify_rwlock);
@@ -270,6 +275,7 @@ void srvclassify_close_service()
      if(classifygroups) free(classifygroups);
      classifygroups = NULL;
 //#ifdef HAVE_TRE
+     tre_regfree(&picslabel);
      deinitBayesClassifier();
      deinitHyperSpaceClassifier();
 //#endif
@@ -485,7 +491,10 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
                classify_uncompress(req);
           #endif
           if(make_utf32(req) == CI_OK) // We should only categorize text if this reteurns >= 0
+          {
+               make_pics_header(req);
                categorize_text(req);
+          }
      }
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      else if (data->must_classify == IMAGE)
@@ -586,6 +595,34 @@ HTMLClassification HSclassification, NBclassification;
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
      return CI_OK;
+}
+
+int make_pics_header(ci_request_t * req)
+{
+char *orig_header;
+char header[1501];
+regmatch_t singleMatch[2];
+classify_req_data_t *data = ci_service_data(req);
+
+	// modify headers
+	if (!ci_http_response_headers(req))
+		ci_http_response_create(req, 1, 1);
+	orig_header = ci_http_response_get_header(req, "PICS-Label");
+	if(orig_header != NULL)
+	{
+		strncpy(header, orig_header, 1500);
+		header[1500] = '\0';
+		header[strlen(header) - 1] = '\0';
+	}
+	else snprintf(header, 1500, "PICS-Label: (PICS-1.1");
+
+	if(tre_regwexec(&picslabel, (wchar_t *) data->uncompressedbody->buf, 2, singleMatch, 0) != REG_NOMATCH)
+	{
+		snprintf(header + strlen(header), 1500 - strlen(header), " %.*ls", singleMatch[1].rm_eo - singleMatch[1].rm_so, (wchar_t *) data->uncompressedbody->buf + singleMatch[1].rm_so);
+	        ci_http_response_add_header(req, header);
+		return 0;
+	}
+	return 1;
 }
 
 int make_utf32(ci_request_t * req)
