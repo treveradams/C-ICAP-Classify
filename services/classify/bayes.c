@@ -666,15 +666,26 @@ uint32_t bestseen = 0;
 HTMLClassification myReply;
 
 	// Renormalize Result to probability
-	for (cls = 0; cls < NBCategories.used; cls++)
-	{
-		// Avoid divide by zero and keep value small, for log10(remainder) below
-		if (categories[cls].naiveBayesResult > DBL_MAX)
-			categories[cls].naiveBayesResult = DBL_MAX;
-		if (categories[cls].naiveBayesResult < DBL_MIN)
-			categories[cls].naiveBayesResult = DBL_MIN;
-		total_probability += categories[cls].naiveBayesResult;
-	}
+	do {
+		if(total_probability > DBL_MAX) // reset total_probability so that we are not overflowing
+		{
+			total_probability = DBL_MIN;
+			for (cls = 0; cls < NBCategories.used; cls++)
+			{
+				categories[cls].naiveBayesResult /= 100;
+			}
+		}
+
+		for (cls = 0; cls < NBCategories.used; cls++)
+		{
+			// Avoid divide by zero and keep value small, for log10(remainder) below
+			if (categories[cls].naiveBayesResult > DBL_MAX)
+				categories[cls].naiveBayesResult = DBL_MAX;
+			if (categories[cls].naiveBayesResult < DBL_MIN)
+				categories[cls].naiveBayesResult = DBL_MIN;
+			total_probability += categories[cls].naiveBayesResult;
+		}
+	} while (total_probability > DBL_MAX); // Do until we are a valid double number
 
 	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
 	{

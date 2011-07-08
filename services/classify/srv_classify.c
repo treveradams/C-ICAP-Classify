@@ -377,7 +377,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
              strstr(content_type, "text/css"))
           {
                ci_debug_printf(8, "Non-content MIME type (%s). Allow it......\n", content_type);
-               data->must_classify=NO_CLASSIFY; // these are not likely to contain data and confuse our classifier
+               data->must_classify = NO_CLASSIFY; // these are not likely to contain data and confuse our classifier
                return CI_MOD_ALLOW204;
           }
      }
