@@ -890,10 +890,14 @@ int foundCJK = 0;
 			prime2 = HASHSEED2;
 			pos++;
 			if(pos>4) pos=0;
-			if(hashes_list->used + 4 == hashes_list->slots)
+			if(hashes_list->used + 4 >= hashes_list->slots)
 			{
-				printf("This file creates too many hashes\n");
-				return;
+				makeSortedUniqueHashes(hashes_list); // Attempt to make more room by removing duplicates
+				if(hashes_list->used + 4 >= hashes_list->slots) // If this is still the condition, we cannot handle more hashes
+				{
+					printf("This file creates too many hashes\n");
+					return;
+				}
 			}
 			hashword2((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
 		}
