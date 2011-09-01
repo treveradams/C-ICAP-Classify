@@ -42,7 +42,6 @@
 
 #include "hash.c"
 #include "bayes.c"
-#include "sqlite3.h"
 
 char *learn_in_file;
 char *fbc_out_file;

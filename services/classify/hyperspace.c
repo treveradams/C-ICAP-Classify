@@ -73,13 +73,13 @@ uint32_t i=0;
 		free(HSCategories.categories[i].name);
 		free(HSCategories.categories[i].documentKnownHashes);
 	}
-	free(HSCategories.categories);
+	if(HSCategories.used) free(HSCategories.categories);
 
 	for(i=0; i < HSJudgeHashList.used; i++)
 	{
 		free(HSJudgeHashList.hashes[i].users);
 	}
-	free(HSJudgeHashList.hashes);
+	if(HSJudgeHashList.used) free(HSJudgeHashList.hashes);
 }
 
 static int judgeHash_compare(void const *a, void const *b)
@@ -550,8 +550,8 @@ double total_radiance = DBL_MIN;
 double remainder = DBL_MIN;
 double *class_radiance = malloc(HSCategories.used * sizeof(double));
 
-uint32_t bestseen=0;
-HTMLClassification myReply;
+uint32_t bestseen=0, secondbest=0;
+HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0 };
 
 uint32_t cls, doc; // class and document counters
 uint32_t nfeats;   // total features
@@ -643,9 +643,32 @@ float radiance;
 	}
 	remainder -= class_radiance[bestseen]; // fix-up remainder
 
-	myReply.probability = class_radiance[bestseen];
-	myReply.probScaled = 10 * (log10(class_radiance[bestseen]) - log10(remainder));
-	myReply.name = HSCategories.categories[bestseen].name;
+	for(int i = 0; i < number_secondaries; i++)
+	{
+		if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+		{
+			remainder -= class_radiance[secondbest];
+			myReply.secondary_probability = class_radiance[secondbest];
+			myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
+			myReply.secondary_name = HSCategories.categories[secondbest].name;
+			i = number_secondaries;
+		}
+		else if(secondary_compares[i].bidirectional == 1)
+		{
+			if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
+			{
+				remainder -= class_radiance[secondbest];
+				myReply.secondary_probability = class_radiance[secondbest];
+				myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
+				myReply.secondary_name = HSCategories.categories[secondbest].name;
+				i = number_secondaries;
+			}
+		}
+	}
+
+	myReply.primary_probability = class_radiance[bestseen];
+	myReply.primary_probScaled = 10 * (log10(class_radiance[bestseen]) - log10(remainder));
+	myReply.primary_name = HSCategories.categories[bestseen].name;
 
 	// cleanup time!
 	free(class_radiance);
@@ -658,7 +681,7 @@ HTMLClassification doHSPrepandClassify(HashList *toClassify)
 uint32_t i, j;
 uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
 int64_t BSRet = -1;
-HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 };
+HTMLClassification data;
 
 	if(HSCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 

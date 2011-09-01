@@ -110,7 +110,6 @@ int fbc_file;
 FBC_HEADERv1 header;
 clock_t start, end;
 uint32_t realHashesUsed = 0;
-FBCFeatureExt *realHashes;
 	initHTML();
 	initBayesClassifier();
 	if(readArguments(argc, argv) == -1) exit(-1);
@@ -123,7 +122,6 @@ FBCFeatureExt *realHashes;
 	fbc_file = openFBC(fbc_out_file, &header, 1);
 
 	realHashesUsed = NBJudgeHashList.used;
-	realHashes = NBJudgeHashList.hashes;
 
 	writeFBCHashesPreload(fbc_file, &header, &NBJudgeHashList);
 

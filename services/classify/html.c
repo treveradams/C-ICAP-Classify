@@ -55,6 +55,9 @@ regex_t headFinder, charsetFinder;
 regex_t entityFinder, numericentityFinder;
 regex_t insaneFinder;
 
+secondaries_t *secondary_compares = NULL;
+int number_secondaries = 0;
+
 static int entity_compare(void const *a, void const *b)
 {
 _htmlentity *ea, *eb;
@@ -111,6 +114,13 @@ void initHTML(void)
 
 void deinitHTML(void)
 {
+	for(int i = 0; i < number_secondaries; i++)
+	{
+		tre_regfree(&secondary_compares[i].primary_regex);
+		tre_regfree(&secondary_compares[i].secondary_regex);
+	}
+	free(secondary_compares);
+	secondary_compares = NULL;
 	freeRegexes();
 }
 

@@ -64,10 +64,19 @@ typedef struct {
 } HashList;
 
 typedef struct {
-	char *name;
-	double probability;
-	double probScaled;
+	char *primary_name;
+	double primary_probability;
+	double primary_probScaled;
+	char *secondary_name;
+	double secondary_probability;
+	double secondary_probScaled;
 } HTMLClassification;
+
+typedef struct {
+	regex_t primary_regex;
+	regex_t secondary_regex;
+	int bidirectional;
+} secondaries_t;
 
 #ifdef IN_HTML
 void normalizeCurrency(regexHead *myHead);
@@ -89,6 +98,9 @@ extern void deinitHTML(void);
 extern void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
 extern int HTMLhash_compare(void const *a, void const *b);
 extern void makeSortedUniqueHashes(HashList *hashes_list);
+
+extern secondaries_t *secondary_compares;
+extern int number_secondaries;
 #endif
 
 extern void makeSortedUniqueHashes(HashList *hashes_list);

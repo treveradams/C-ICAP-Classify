@@ -147,7 +147,9 @@ HTMLClassification classification;
 	classification=doBayesPrepandClassify(&myHashes);
 	end=clock();
 	printf("Classification took %lf milliseconds\n", (double)((end-start)/(CLOCKS_PER_SEC/1000)));
-	printf("Best match: %s prob: %lf pR: %lf\n", classification.name, classification.probability, classification.probScaled);
+	printf("Best match: %s prob: %lf pR: %lf\n", classification.primary_name, classification.primary_probability, classification.primary_probScaled);
+	if(classification.secondary_name != NULL)
+		printf("Best match: %s prob: %lf pR: %lf\n", classification.secondary_name, classification.secondary_probability, classification.secondary_probScaled);
 
 	free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);

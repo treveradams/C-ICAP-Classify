@@ -755,7 +755,7 @@ int cfg_AddImageCategory(char *directive, char **argv, void *setdata)
 {
      unsigned int RED=0xFF, GREEN=0XFF, BLUE=0XFF;
 
-     if (argv == NULL || argv[0] == NULL || argv[1]==NULL) {
+     if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
           ci_debug_printf(1, "Format: %s NAME LOCATION_OF_CASCADE_XML OPTIONAL_RED_OUTLINE_HEX OPTIONAL_GREEN_OUTLINE_HEX OPTIONAL_BLUE_OUTLINE_HEX\n", directive);
           return 0;

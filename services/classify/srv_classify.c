@@ -141,6 +141,7 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata);
 int cfg_OptimizeFNB(char *directive, char **argv, void *setdata);
 int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
 int cfg_TmpDir(char *directive, char **argv, void *setdata);
+int cfg_TextSecondary(char *directive, char **argv, void *setdata);
 /*General functions*/
 int get_filetype(ci_request_t *req, char *buf, int len);
 void set_istag(ci_service_xdata_t *srv_xdata);
@@ -179,6 +180,7 @@ static struct ci_conf_entry conf_variables[] = {
      {"MaxObjectSize", &MAX_OBJECT_SIZE, ci_cfg_size_off, NULL},
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
      {"Allow204Responces", &ALLOW204, ci_cfg_onoff, NULL},
+     {"TextPrimarySecondary", NULL, cfg_TextSecondary, NULL},
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      {"ImageFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ImageScaleDimension", &ImageScaleDimension, ci_cfg_set_int, NULL},
@@ -555,16 +557,16 @@ HTMLClassification HSclassification, NBclassification;
      // modify headers
      if (!ci_http_response_headers(req))
           ci_http_response_create(req, 1, 1);
-     if(HSclassification.name != NULL)
+     if(HSclassification.primary_name != NULL)
      {
-          if(HSclassification.probScaled >= (float) Ambiguous && HSclassification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-          else if(HSclassification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          if(HSclassification.primary_probScaled >= (float) Ambiguous && HSclassification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+          else if(HSclassification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
           else strcpy(type,"NEAREST");
-          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-HS: %s", HSclassification.name);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-HS: %s", HSclassification.primary_name);
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
-          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-HS: %f", HSclassification.probScaled);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-HS: %f", HSclassification.primary_probScaled);
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
@@ -572,17 +574,35 @@ HTMLClassification HSclassification, NBclassification;
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
+          if(HSclassification.secondary_name != NULL)
+          {
+               if(HSclassification.secondary_probScaled >= (float) Ambiguous && HSclassification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+               else if(HSclassification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+               else strcpy(type,"NEAREST");
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-HS: %s", HSclassification.secondary_name);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-LEVEL-HS: %f", HSclassification.secondary_probScaled);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-CONFIDENCE-HS: %s", type);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+          }
      }
-     if(NBclassification.name != NULL)
+     if(NBclassification.primary_name != NULL)
      {
-          if(NBclassification.probScaled >= (float) Ambiguous && NBclassification.probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-          else if(NBclassification.probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          if(NBclassification.primary_probScaled >= (float) Ambiguous && NBclassification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+          else if(NBclassification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
           else strcpy(type,"NEAREST");
-          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-NB: %s", NBclassification.name);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-NB: %s", NBclassification.primary_name);
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
-          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-NB: %f", NBclassification.probScaled);
+          snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-LEVEL-NB: %f", NBclassification.primary_probScaled);
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
@@ -590,6 +610,24 @@ HTMLClassification HSclassification, NBclassification;
           reply[CI_MAX_PATH]='\0';
           ci_http_response_add_header(req, reply);
           ci_debug_printf(10, "Added header: %s\n", reply);
+          if(NBclassification.secondary_name != NULL)
+          {
+               if(NBclassification.secondary_probScaled >= (float) Ambiguous && NBclassification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+               else if(NBclassification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+               else strcpy(type,"NEAREST");
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-NB: %s", NBclassification.secondary_name);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-LEVEL-NB: %f", NBclassification.secondary_probScaled);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+               snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-CONFIDENCE-NB: %s", type);
+               reply[CI_MAX_PATH]='\0';
+               ci_http_response_add_header(req, reply);
+               ci_debug_printf(10, "Added header: %s\n", reply);
+          }
      }
      // Release Read Lock
      ci_thread_rwlock_unlock(&textclassify_rwlock);
@@ -1086,7 +1124,7 @@ int cfg_DoTextPreload(char *directive, char **argv, void *setdata)
 int cfg_AddTextCategory(char *directive, char **argv, void *setdata)
 {
 int val = 0;
-     if (argv == NULL || argv[0] == NULL || argv[1]==NULL) {
+     if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
           ci_debug_printf(1, "Format: %s NAME LOCATION_OF_FHS_FILE\n", directive);
           return val;
@@ -1134,7 +1172,7 @@ int val = 0;
 
 int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
 {
-     if (argv == NULL || argv[0] == NULL || argv[1]==NULL) {
+     if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
           ci_debug_printf(1, "Format: %s 32BIT_HASHSEED1 32BIT_HASHSEED2\n", directive);
           return 0;
@@ -1143,6 +1181,46 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
      sscanf(argv[1], "%x", &HASHSEED2);
 
      ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
+     return 1;
+}
+
+int cfg_TextSecondary(char *directive, char **argv, void *setdata)
+{
+     unsigned int bidirectional = 0;
+
+     if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
+          ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
+          ci_debug_printf(1, "Format: %s PRIMARY_CATEGORY_REGEX SECONDARY_CATEGORY_REGEX OPTIONALY_BIDIRECTIONAL_BINARY_TRUE_FALSE\n", directive);
+          return 0;
+     }
+     if(argv[2] != NULL)
+     {
+          errno = 0;
+          bidirectional = strtoll(argv[2], NULL, 10);
+          if (errno != 0)
+              return 0;
+     }
+
+     if(number_secondaries == 0 || secondary_compares == NULL)
+     {
+          secondary_compares = malloc(sizeof(secondaries_t));
+     }
+     else
+     {
+          secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+     }
+
+     if(tre_regcomp(&secondary_compares[number_secondaries].primary_regex, argv[0], REG_EXTENDED | REG_ICASE) != 0 ||
+          tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, argv[1], REG_EXTENDED | REG_ICASE) != 0)
+     {
+          number_secondaries++;
+          ci_debug_printf(1, "Invalid REGEX In Setting parameter :%s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
+          return 0;
+     }
+     secondary_compares[number_secondaries].bidirectional = bidirectional;
+
+     ci_debug_printf(1, "Setting parameter :%s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
+     number_secondaries++;
      return 1;
 }
 

@@ -77,13 +77,13 @@ uint32_t i=0;
 	{
 		free(NBCategories.categories[i].name);
 	}
-	free(NBCategories.categories);
+	if(NBCategories.used) free(NBCategories.categories);
 
 	for(i=0; i < NBJudgeHashList.used; i++)
 	{
 		free(NBJudgeHashList.hashes[i].users);
 	}
-	free(NBJudgeHashList.hashes);
+	if(NBJudgeHashList.used) free(NBJudgeHashList.hashes);
 }
 
 int optimizeFBC(FBCHashList *hashes)
@@ -662,8 +662,8 @@ double remainder = DBL_MIN;
 
 uint32_t cls;
 
-uint32_t bestseen = 0;
-HTMLClassification myReply;
+uint32_t bestseen = 0, secondbest = 0;
+HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 
 	// Renormalize Result to probability
 	do {
@@ -690,21 +690,50 @@ HTMLClassification myReply;
 	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
 	{
 		categories[cls].naiveBayesResult = categories[cls].naiveBayesResult / total_probability; // fix-up probability
-		if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult) bestseen = cls; // are we the best
+		if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
+		{
+			secondbest = bestseen;
+			bestseen = cls; // are we the best
+		}
 		remainder += categories[cls].naiveBayesResult; // add up remainder
 	}
+
 	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
 	if(remainder < DBL_MIN) remainder = DBL_MIN;
 
+	for(int i = 0; i < number_secondaries; i++)
+	{
+		if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+		{
+			remainder -= categories[secondbest].naiveBayesResult;
+			if(remainder < DBL_MIN) remainder = DBL_MIN;
+			myReply.secondary_probability = categories[secondbest].naiveBayesResult;
+			myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
+			myReply.secondary_name = NBCategories.categories[secondbest].name;
+			i = number_secondaries;
+		}
+		else if(secondary_compares[i].bidirectional == 1)
+		{
+			if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
+			{
+				remainder -= categories[secondbest].naiveBayesResult;
+				if(remainder < DBL_MIN) remainder = DBL_MIN;
+				myReply.secondary_probability = categories[secondbest].naiveBayesResult;
+				myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
+				myReply.secondary_name = NBCategories.categories[secondbest].name;
+				i = number_secondaries;
+			}
+		}
+	}
 
 /*	for (cls = 0; cls < NBCategories.used; cls++)
 	{
 		printf("Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
 	}*/
 
-	myReply.probability = categories[bestseen].naiveBayesResult;
-	myReply.probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
-	myReply.name = NBCategories.categories[bestseen].name;
+	myReply.primary_probability = categories[bestseen].naiveBayesResult;
+	myReply.primary_probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
+	myReply.primary_name = NBCategories.categories[bestseen].name;
 
 return myReply;
 }
@@ -715,7 +744,7 @@ uint32_t i, j;
 uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
 int64_t BSRet = -1;
-HTMLClassification data = { .name = NULL, .probability = 0.0, .probScaled = 0.0 };
+HTMLClassification data;
 uint64_t total;
 double local_probability;
 
