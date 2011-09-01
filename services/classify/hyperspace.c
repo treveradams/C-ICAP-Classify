@@ -643,25 +643,28 @@ float radiance;
 	}
 	remainder -= class_radiance[bestseen]; // fix-up remainder
 
-	for(int i = 0; i < number_secondaries; i++)
+	if(bestseen != secondbest)
 	{
-		if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+		for(int i = 0; i < number_secondaries; i++)
 		{
-			remainder -= class_radiance[secondbest];
-			myReply.secondary_probability = class_radiance[secondbest];
-			myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
-			myReply.secondary_name = HSCategories.categories[secondbest].name;
-			i = number_secondaries;
-		}
-		else if(secondary_compares[i].bidirectional == 1)
-		{
-			if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
+			if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
 			{
 				remainder -= class_radiance[secondbest];
 				myReply.secondary_probability = class_radiance[secondbest];
 				myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
 				myReply.secondary_name = HSCategories.categories[secondbest].name;
 				i = number_secondaries;
+			}
+			else if(secondary_compares[i].bidirectional == 1)
+			{
+				if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
+				{
+					remainder -= class_radiance[secondbest];
+					myReply.secondary_probability = class_radiance[secondbest];
+					myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
+					myReply.secondary_name = HSCategories.categories[secondbest].name;
+					i = number_secondaries;
+				}
 			}
 		}
 	}
