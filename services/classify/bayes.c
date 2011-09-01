@@ -662,7 +662,7 @@ double remainder = DBL_MIN;
 
 uint32_t cls;
 
-uint32_t bestseen = 0, secondbest = 0;
+uint32_t bestseen = 0, secondbest = 1;
 HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 
 	// Renormalize Result to probability
@@ -695,17 +695,27 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 			secondbest = bestseen;
 			bestseen = cls; // are we the best
 		}
+		else if (cls != bestseen && categories[cls].naiveBayesResult > categories[secondbest].naiveBayesResult) secondbest = cls;
 		remainder += categories[cls].naiveBayesResult; // add up remainder
 	}
 
 	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
 	if(remainder < DBL_MIN) remainder = DBL_MIN;
 
-	if(bestseen != secondbest)
+	for(int i = 0; i < number_secondaries; i++)
 	{
-		for(int i = 0; i < number_secondaries; i++)
+		if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
 		{
-			if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+			remainder -= categories[secondbest].naiveBayesResult;
+			if(remainder < DBL_MIN) remainder = DBL_MIN;
+			myReply.secondary_probability = categories[secondbest].naiveBayesResult;
+			myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
+			myReply.secondary_name = NBCategories.categories[secondbest].name;
+			i = number_secondaries;
+		}
+		else if(secondary_compares[i].bidirectional == 1)
+		{
+			if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
 			{
 				remainder -= categories[secondbest].naiveBayesResult;
 				if(remainder < DBL_MIN) remainder = DBL_MIN;
@@ -713,18 +723,6 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 				myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
 				myReply.secondary_name = NBCategories.categories[secondbest].name;
 				i = number_secondaries;
-			}
-			else if(secondary_compares[i].bidirectional == 1)
-			{
-				if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
-				{
-					remainder -= categories[secondbest].naiveBayesResult;
-					if(remainder < DBL_MIN) remainder = DBL_MIN;
-					myReply.secondary_probability = categories[secondbest].naiveBayesResult;
-					myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
-					myReply.secondary_name = NBCategories.categories[secondbest].name;
-					i = number_secondaries;
-				}
 			}
 		}
 	}

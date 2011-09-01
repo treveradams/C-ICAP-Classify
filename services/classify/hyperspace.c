@@ -550,7 +550,7 @@ double total_radiance = DBL_MIN;
 double remainder = DBL_MIN;
 double *class_radiance = malloc(HSCategories.used * sizeof(double));
 
-uint32_t bestseen=0, secondbest=0;
+uint32_t bestseen = 0, secondbest = 1;
 HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0 };
 
 uint32_t cls, doc; // class and document counters
@@ -638,33 +638,38 @@ float radiance;
 	for (cls = 0; cls < HSCategories.used; cls++) // Order of instructions in this loop matters!
 	{
 		class_radiance[cls] = class_radiance[cls] / total_radiance; // fix-up probability
-		if (class_radiance[cls] > class_radiance[bestseen]) bestseen = cls; // are we the best
+		if (class_radiance[cls] > class_radiance[bestseen])
+		{
+			secondbest = bestseen;
+			bestseen = cls; // are we the best
+		}
+		else if (cls != bestseen && class_radiance[cls] > class_radiance[secondbest]) secondbest = cls;
 		remainder += class_radiance[cls]; // add up remainder
 	}
 	remainder -= class_radiance[bestseen]; // fix-up remainder
+	if(remainder < DBL_MIN) remainder = DBL_MIN;
 
-	if(bestseen != secondbest)
+	for(int i = 0; i < number_secondaries; i++)
 	{
-		for(int i = 0; i < number_secondaries; i++)
+		if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
 		{
-			if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+			remainder -= class_radiance[secondbest];
+			if(remainder < DBL_MIN) remainder = DBL_MIN;
+			myReply.secondary_probability = class_radiance[secondbest];
+			myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
+			myReply.secondary_name = HSCategories.categories[secondbest].name;
+			i = number_secondaries;
+		}
+		else if(secondary_compares[i].bidirectional == 1)
+		{
+			if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
 			{
 				remainder -= class_radiance[secondbest];
+				if(remainder < DBL_MIN) remainder = DBL_MIN;
 				myReply.secondary_probability = class_radiance[secondbest];
 				myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
 				myReply.secondary_name = HSCategories.categories[secondbest].name;
 				i = number_secondaries;
-			}
-			else if(secondary_compares[i].bidirectional == 1)
-			{
-				if(tre_regexec(&secondary_compares[i].primary_regex, HSCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, HSCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
-				{
-					remainder -= class_radiance[secondbest];
-					myReply.secondary_probability = class_radiance[secondbest];
-					myReply.secondary_probScaled = 10 * (log10(class_radiance[secondbest]) - log10(remainder));
-					myReply.secondary_name = HSCategories.categories[secondbest].name;
-					i = number_secondaries;
-				}
 			}
 		}
 	}
