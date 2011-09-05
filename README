@@ -1,1 +1,116 @@
+GENERAL DESCRIPTION
+===================
+C-ICAP Classify is a module that allows classification (labeling) of 
+web pages, images, (and soon video) based, on content. Labels are 
+placed in HTTP Headers. Any PIC-Label META tags are exported into HTTP 
+headers. This allows for creation of very flexible filters according to 
+rules defined by the user, using the ICAP enabled proxy's ACLs. This is 
+NOT a URL filter, so implementing it with sslBump, or similar proxy 
+technologies, makes it very difficult to bypass. The Text 
+classification is done using Fast Hyperspace (based on Hyperspace from 
+CRM114) and/or a Fast Naive Bayes. Image and video (when implemented) 
+use haar feature detection from the OpenCV Library.
 
+
+DICTATORS AND CONTROL FREAKS
+============================
+This software is intended as a help for businesses to maximize 
+production by minimizing, but allowing some, personal use of the 
+Internet and blocking porn and other such material to protect them from 
+lawsuits. It is also intended for families and private organizations to 
+block material they deem inappropriate, within the networks they 
+control, by sake of ownership or agreement. It is also appropriately 
+used to block, in public places, material which the general population 
+would deem inappropriate in public places; such places being public 
+kiosks, public libraries, etc.
+
+This software is NOT intended to block content for the general 
+population in the homes of private citizens; whether by governments, 
+dictators, or any other extremist nut-jobs in charge. While nothing in 
+the license to this software prohibits such use, if you are a control 
+freak or a dictator who is trying to control people outside of the 
+intended uses above, please use other software.
+
+
+DEPENDENCIES
+============
+TRE (regex library) - Used for all text classification.
+OpenCV - Used for all image and video classification.
+C-ICAP - This is a c-icap module. It requires c-icap development 
+libraries to be compiled. It is run through C-ICAP.
+An ICAP enabled proxy which can do ACLs based on HTTP reply headers. 
+(Squid is one such proxy.)
+
+
+COMPILATION
+===========
+This uses the standard automake/autoconf system.
+
+./configure
+make
+make install
+
+Of course, it is often better to use higher level installation tools. 
+There is an example RPM SPEC file in contrib.
+
+
+CLASSIFICATION DATA
+===================
+Currently there is no publicly available data. Please, use the 
+fnb/fhs_learn programs to create your own for the text data. Each 
+category should be trained to one .fnb/.fhs file. You can train 
+multiple documents in each category. All categories should use the same 
+primary and secondary hash seed key.
+
+Training of OpenCV for image and video is beyond the scope of this 
+document. Please, refer to OpenCV documentation for details. Each 
+category should be its own haar feature cascade.
+
+Pursuant to the TRADEMARKS section below, if you choose to distribute 
+your data, permission is hereby given to use the mark "C-ICAP Classify" 
+as saying your data is designed to work with this program. However, you 
+may not use any author's/contributor's name, likeness, contact 
+information, etc. in any way without their permission. Additionally, 
+you may not claim, in any way, that your data is authorized, 
+sanctioned, approved, endorsed, certified, etc. by the C-ICAP Classify 
+Project, or any author/contributor to that project without their 
+written and signed consent. Such respect and courtesy should be 
+extended to those of the C-ICAP project as well.
+
+
+TRADEMARKS AND OTHER MARKS
+==========================
+We recognize "C-ICAP" as a trademark of Christos Tsantilas. We use it 
+in the name for this project by permission.
+Trever L. Adams claims "C-ICAP Classify" (hereafter "the mark") as a 
+trademark.
+
+Permission to use the mark "C-ICAP Classify" hereby is given for all 
+compiled/packaged copies of this software, from the original, 
+unmodified source.
+
+Permission is given to use the mark for all derivatives of this 
+software, which may reasonably be still called by the same name, 
+provided the software is marked in documentation and/or package names 
+as being a modified version, with information on the modifications 
+included and who is responsible for them placed in appropriate, easy to 
+use and find documentation. Those using the mark should attempt to 
+upstream bug-fixes and enhancements to the official source tree of the 
+project. PERMISSION TO USE THE MARK IN DERIVATIVE/MODIFIED VERSIONS MAY 
+BE REVOKED AT ANY TIME BY A NOTE TO THAT EFFECT BEING PLACED IN THE 
+"README" FILE IN THE OFFICIAL SOURCE TREE OF THE PROJECT, OR ON A CASE 
+BY CASE BASIS THROUGH EMAILS TO THE RESPONSIBLE PARTIES LISTED IN 
+DOCUMENTATION OF DERIVATIVES. Derivative/Modified versions MUST stop 
+using the mark within 30 days after such a notice being placed, or such 
+emails being sent.  It is the responsibility of those who derive and/or 
+modify this software to keep such email addresses in the documentation 
+present and current. If you cannot/do not agree, in a completely 
+binding way, to this paragraph, you are not given permission to use the 
+mark for modified or derived versions of this software. While not a 
+guarantee, permission is intended only to be revoked in the case of 
+widespread abuse of the mark, or on a case by case basis where the mark 
+is being diluted or damaged; such as these terms not being followed.
+
+
+All other marks are property of their respective owners. We apologize 
+for any place we fail to recognize the marks or their owners.
