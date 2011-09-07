@@ -56,6 +56,9 @@
 // Magic minimum should be 4-6 significant decimal places. It is used in place of ZERO, or
 // other too low of numbers to conserve bits.
 #define MAGIC_MINIMUM (0.0001 + MAGIC_CONSERVE_OFFSET)
+// How many keys can we process before we must rescale to conserve bits
+// If this turns into a configuration parameter, it must be bounded at 400 and 1000
+#define KEYS_PROCESS_BEFORE_RESCALE 800
 
 FBCTextCategoryExt NBCategories;
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
@@ -687,6 +690,7 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 		}
 	} while (total_probability > DBL_MAX); // Do until we are a valid double number
 
+	// Find the best and second best categories
 	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
 	{
 		categories[cls].naiveBayesResult = categories[cls].naiveBayesResult / total_probability; // fix-up probability
@@ -702,6 +706,7 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
 	if(remainder < DBL_MIN) remainder = DBL_MIN;
 
+	// Setup data for second best category, if applicable
 	for(int i = 0; i < number_secondaries; i++)
 	{
 		if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
@@ -729,7 +734,7 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 
 /*	for (cls = 0; cls < NBCategories.used; cls++)
 	{
-		printf("Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
+		ci_debug_printf(10, "Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
 	}*/
 
 	myReply.primary_probability = categories[bestseen].naiveBayesResult;
@@ -741,13 +746,16 @@ return myReply;
 
 HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 {
-uint32_t i, j;
+uint32_t i, j, processed = 0;
 uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
 int64_t BSRet = -1;
 HTMLClassification data;
 uint64_t total;
 double local_probability;
+// Variables for scaling
+uint32_t cls, bestseen = 0;
+double scale = 0;
 
 	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 
@@ -758,11 +766,11 @@ double local_probability;
 	}
 
 	// do bayes multiplication
-	for(i=0; i < toClassify->used; i++)
+	for(i = 0; i < toClassify->used; i++)
 	{
 		if((BSRet=FBCBinarySearch(&NBJudgeHashList, 0, NBJudgeHashList.used-1, toClassify->hashes[i])) >= 0)
 		{
-//			printf("Found %"PRIX64"\n", toClassify->hashes[i]);
+//			ci_debug_printf(10, "Found %"PRIX64"\n", toClassify->hashes[i]);
 			if(NBJudgeHashList.FBC_LOCKED)
 			{
 				for(j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
@@ -773,12 +781,12 @@ double local_probability;
 						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
 						for(missing = 0; missing < nextReal; missing++)
 						{
-//							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
 							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 						}
 					}
 
-//					printf("Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used - 1);
+//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used - 1);
 
 					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
 
@@ -790,7 +798,7 @@ double local_probability;
 					else nextReal = NBCategories.used;
 					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
 					{
-//						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
 						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 					}
 				}
@@ -811,7 +819,7 @@ double local_probability;
 						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
 						for(missing = 0; missing < nextReal; missing++)
 						{
-//							printf("Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
 							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 						}
 					}
@@ -835,23 +843,40 @@ double local_probability;
 					else nextReal = NBCategories.used;
 					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
 					{
-//						printf("Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
 						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
 					}
 				}
 			}
-/*			for(j = 0; j < NBCategories.used; j++)
+			// Do bit conservation by occassionally maximizing values
+			if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
 			{
-				printf("Here Category %s Result %G\n", NBCategories.categories[j].name, categories[j].naiveBayesResult);
-			}*/
+				// Find class with highest naiveBayesResult
+				for (cls = 0; cls < NBCategories.used; cls++)
+				{
+					if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
+					{
+						bestseen = cls; // are we the best
+					}
+				}
+				// Compute scale
+				scale = (DBL_MAX / NBCategories.used) / categories[bestseen].naiveBayesResult;
+				if(scale > DBL_MAX) scale = DBL_MAX / NBCategories.used;
+
+				// Maximize values for bit conservation
+				for (cls = 0; cls < NBCategories.used; cls++)
+				{
+					categories[cls].naiveBayesResult *= scale;
+				}
+			}
 		}
 	}
-//	printf("Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
+//	ci_debug_printf(10, "Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
 
 /*	for(i = 0; i < NBCategories.used; i++)
 	{
-		printf("Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
-	}*/
+		ci_debug_printf(10, "Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
+	} */
 
 	data = doBayesClassify(categories, toClassify);
 
