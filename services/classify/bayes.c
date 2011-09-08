@@ -57,8 +57,8 @@
 // other too low of numbers to conserve bits.
 #define MAGIC_MINIMUM (0.0001 + MAGIC_CONSERVE_OFFSET)
 // How many keys can we process before we must rescale to conserve bits
-// If this turns into a configuration parameter, it must be bounded at 400 and 1000
-#define KEYS_PROCESS_BEFORE_RESCALE 800
+// If this turns into a configuration parameter, it must be bounded at 100 and 500
+#define KEYS_PROCESS_BEFORE_RESCALE 200
 
 FBCTextCategoryExt NBCategories;
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
@@ -848,6 +848,7 @@ double scale = 0;
 					}
 				}
 			}
+			processed++;
 			// Do bit conservation by occassionally maximizing values
 			if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
 			{
