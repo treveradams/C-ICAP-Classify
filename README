@@ -60,7 +60,7 @@ Currently there is no publicly available data. Please, use the
 fnb/fhs_learn programs to create your own for the text data. Each 
 category should be trained to one .fnb/.fhs file. You can train 
 multiple documents in each category. All categories should use the same 
-primary and secondary hash seed key.
+primary and secondary hash seed key. Input files must be UTF-8.
 
 Training of OpenCV for image and video is beyond the scope of this 
 document. Please, refer to OpenCV documentation for details. Each 

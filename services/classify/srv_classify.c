@@ -49,6 +49,7 @@
 #include "cfg_param.h"
 #include "filetype.h"
 #include "commands.h"
+#define IN_SRV_CLASSIFY
 #include "srv_classify.h"
 #include "ci_threads.h"
 
@@ -61,6 +62,7 @@ const wchar_t *WCNULL = L"\0";
 #include "html.h"
 #include "bayes.h"
 #include "hyperspace.h"
+#include "hash.h"
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 extern int categorize_image(ci_request_t * req);
@@ -157,6 +159,30 @@ extern char *strcasestr(const char *haystack, const char *needle);
 regex_t picslabel;
 int make_pics_header(ci_request_t * req);
 
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+// Referrer classification handling
+#define REFERRERS_SIZE 1000
+
+typedef struct {
+	uint32_t hash;
+	char *uri;
+	HTMLClassification fhs_classification;
+	HTMLClassification fnb_classification;
+	uint32_t age;
+} REFERRERS_T;
+
+ci_thread_rwlock_t referrers_rwlock;
+REFERRERS_T *referrers;
+
+static uint32_t classify_requests = 0;
+#endif
+
+void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
+void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
+void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
+void createReferrerTable(void);
+void freeReferrerTable(void);
+
 /*It is dangerous to pass directly fields of the limits structure in conf_variables,
   because in the feature some of this fields will change type (from int to unsigned int
   or from long to long long etc)
@@ -227,6 +253,10 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      ci_thread_rwlock_init(&imageclassify_rwlock);
      ci_thread_rwlock_wrlock(&imageclassify_rwlock);
+
+     ci_thread_rwlock_init(&referrers_rwlock);
+     ci_thread_rwlock_wrlock(&referrers_rwlock);
+     createReferrerTable();
 #endif
 
      magic_db = server_conf->MAGIC_DB;
@@ -267,6 +297,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 void srvclassify_close_service()
 {
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+     freeReferrerTable();
      classifyImagePrepReload();
 #endif
 
@@ -519,7 +550,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
 int categorize_text(ci_request_t * req)
 {
 classify_req_data_t *data = ci_service_data(req);
-char reply[2*CI_MAX_PATH+1];
+char reply[2 * CI_MAX_PATH + 1];
 char type[20];
 regexHead myRegexHead;
 HashList myHashes;
@@ -629,6 +660,12 @@ HTMLClassification HSclassification, NBclassification;
                ci_debug_printf(10, "Added header: %s\n", reply);
           }
      }
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+     // Store classification so images and videos can have the data
+     char uri[MAX_URI_LENGTH + 1];
+     ci_http_request_url(req, uri, MAX_URI_LENGTH);
+     insertReferrer(uri, HSclassification, NBclassification);
+#endif
      // Release Read Lock
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
@@ -1240,3 +1277,188 @@ char *temp;
 	strcpy(temp, string);
 	return temp;
 }
+
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+/* All of this code below uses a very simple table.
+   It might be better to reimplement this using a tree of some kind. */
+void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
+{
+uint32_t primary = 0, secondary = 0;
+int oldest = 0, i;
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+
+	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
+
+	// If we already exist, update age and bail
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		if(referrers[i].hash == primary)
+		{
+			if(strcmp(uri, referrers[i].uri) == 0)
+			{
+				referrers[i].age = classify_requests;
+				ci_thread_rwlock_unlock(&referrers_rwlock);
+				return;
+			}
+		}
+	}
+
+	classify_requests++;
+
+	// Avoid wrap around problems
+	if(classify_requests == 0)
+	{
+		int largest = 0;
+		int32_t adjust;
+
+		// Find smallest -- Also the oldest
+		for(i = 0; i < REFERRERS_SIZE; i++)
+		{
+			if(referrers[i].age < referrers[oldest].age)
+				oldest = i;
+		}
+		// Adjust downward
+		adjust = referrers[oldest].age - 1;
+		for(i = 0; i < REFERRERS_SIZE; i++)
+		{
+			referrers[i].age = referrers[i].age - adjust;
+			if(referrers[i].age > referrers[largest].age) // Find largest
+				largest = i;
+		}
+		classify_requests = largest + 1; // Reset our count
+	}
+
+	// Find oldest
+	else for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		if(referrers[i].age < referrers[oldest].age || referrers[i].age == 0)
+		{
+			oldest = i;
+		}
+	}
+
+	// Replace oldest
+	referrers[oldest].hash = primary;
+	referrers[oldest].uri = myStrDup(uri);
+	referrers[oldest].fhs_classification = fhs_classification;
+	referrers[oldest].fnb_classification = fnb_classification;
+	referrers[oldest].age = classify_requests;
+
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
+{
+uint32_t primary = 0, secondary = 0;
+HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+int i;
+char *realURI, *pos;
+
+	ci_thread_rwlock_rdlock(&referrers_rwlock);
+	realURI = myStrDup(uri);
+	pos = strstr(realURI, "?");
+	if(pos != NULL) *pos = '\0';
+	hashword2((uint32_t *) realURI, strlen(realURI)/4, &primary, &secondary);
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		if(referrers[i].hash == primary)
+		{
+			if(strcmp(realURI, referrers[i].uri) == 0)
+			{
+				*fhs_classification = referrers[i].fhs_classification;
+				*fnb_classification = referrers[i].fnb_classification;
+				referrers[i].age = classify_requests;
+				free(realURI);
+				ci_thread_rwlock_unlock(&referrers_rwlock);
+				return;
+			}
+		}
+	}
+	*fhs_classification = emptyClassification;
+	*fnb_classification = emptyClassification;
+	free(realURI);
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
+{
+char reply[2 * CI_MAX_PATH + 1];
+char type[20];
+
+     if(fhs_classification.primary_name != NULL)
+     {
+	  if(fhs_classification.primary_probScaled >= (float) Ambiguous && fhs_classification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+	  else if(fhs_classification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	  else strcpy(type,"NEAREST");
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-HS: %s", fhs_classification.primary_name);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-HS: %s", type);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  if(fhs_classification.secondary_name != NULL)
+	  {
+	       if(fhs_classification.secondary_probScaled >= (float) Ambiguous && fhs_classification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+	       else if(fhs_classification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	       else strcpy(type,"NEAREST");
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-HS: %s", fhs_classification.secondary_name);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-HS: %s", type);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	  }
+     }
+     if(fnb_classification.primary_name != NULL)
+     {
+	  if(fnb_classification.primary_probScaled >= (float) Ambiguous && fnb_classification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+	  else if(fnb_classification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	  else strcpy(type,"NEAREST");
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-NB: %s", fnb_classification.primary_name);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-NB: %s", type);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  if(fnb_classification.secondary_name != NULL)
+	  {
+	       if(fnb_classification.secondary_probScaled >= (float) Ambiguous && fnb_classification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
+	       else if(fnb_classification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	       else strcpy(type,"NEAREST");
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-NB: %s", fnb_classification.secondary_name);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-NB: %s", type);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	  }
+     }
+}
+
+void createReferrerTable(void)
+{
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+	referrers = calloc(sizeof(REFERRERS_T), REFERRERS_SIZE);
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void freeReferrerTable(void)
+{
+int i;
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		free(referrers[i].uri);
+	}
+	free(referrers);
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+#endif

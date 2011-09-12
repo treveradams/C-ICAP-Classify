@@ -21,6 +21,8 @@
 #ifndef __SRV_CLASSIFY_H
 #define __SRV_CLASSIFY_H
 
+#define MAX_URI_LENGTH 2083
+
 #define myMAX_HEADER 512
 
 #define IMAGE_CATEGORY_COPIES_MIN 10
@@ -47,4 +49,9 @@ enum {NO_CLASSIFY=0, TEXT, IMAGE};
 
 char *myStrDup(char *string);
 
+#endif
+
+#ifndef IN_SRV_CLASSIFY
+extern void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
+extern void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
 #endif

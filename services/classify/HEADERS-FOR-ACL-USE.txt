@@ -1,0 +1,50 @@
+The following are HTTP headers added by C-ICAP Classify. Any of these
+may be used, if supported by your proxy, to setup your filter.
+
+TEXT HEADERS FOR ACL USE
+===================
+X-TEXT-ERROR:
+This will appear if there was some error in processing the text.
+
+X-TEXT-CATEGORY-(HS|NB):
+This is the configured category name for which there is the best match
+to the document in question.
+
+X-TEXT-CATEGORY-LEVEL-(HS|NB):
+Most likely this header is useless as it is a probability scaled using
+a base 2 log. Squid, for one, won't allow numerical comparison.
+
+X-TEXT-CATEGORY-CONFIDENCE-(HS|NB):
+This will be "SOLID" for a solid match. "AMBIGUOUS" for a possible, but
+uncertain match. "NEAREST" for the closest category.
+
+X-TEXT-SECONDARY-CATEGORY-(HS|NB)
+X-TEXT-SECONDARY-CATEGORY-LEVEL-(HS|NB)
+X-TEXT-SECONDARY-CATEGORY-CONFIDENCE-(HS|NB):
+These are the same as those without SECONDARY but only show up when you
+have configured a primary/secondary relationship.
+
+
+
+IMAGE HEADERS FOR ACL USE
+=========================
+X-IMAGE-ERROR:
+If there was some kind of error in processing the image, you will see
+this header.
+
+X-IMAGE-CATEGORIES:
+This will only show up if objects are detected in the image. The values
+for this are the name of the category/categories detected followed by a
+number sign for each of those objects detected up to 10 inside of
+parentheses. Over 10 will also have a +. Example: Breasts(###) Butts(#)
+for 3 breasts and 1 butt.
+
+X-REFERRER-TEXT-CATEGORY-CONFIDENCE-(HS|NB)
+X-REFERRER-TEXT-CATEGORY-(HS|NB)
+X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-(HS|NB)
+X-REFERRER-TEXT-SECONDARY-CATEGORY-(HS|NB):
+All of these will show up only if X-IMAGE-CATEGORIES is present. They
+have the content that the referrer had in X-TEXT-* by the same names.
+These headers are useful if images should be blocked in some cases, but
+not others. Example might be some medical nudity being allowed, but
+nudity normally being blocked.

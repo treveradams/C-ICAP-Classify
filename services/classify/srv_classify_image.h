@@ -57,9 +57,11 @@ typedef struct {
 	ImageDetected *detected;
 	int featuresDetected;
 	ci_request_t * req;
+	HTMLClassification referrer_fhs_classification;
+	HTMLClassification referrer_fnb_classification;
 } ImageSession;
 
-enum {NO_CATEGORIES=-1, NO_MEMORY=-2};
+enum {NO_IMAGE_CATEGORIES=-1, NO_IMAGE_MEMORY=-2};
 
 int categorize_image(ci_request_t * req);
 int cfg_AddImageCategory(char *directive, char **argv, void *setdata);

@@ -22,8 +22,7 @@
 
 /* TODO:
 	* Add object correction - butts and breats gets confused, etc. sometimes
-	* Add escalation acl so that if soo many objects, etc. get detected, referrer gets reloaded (requires db backend and cooperation with srv_classify).
-	* Add referrer classification header (requires db backend, and for srv_classify to store the data for anything it classifies)
+	* Add escalation acl so that if too many objects, etc. get detected, referrer gets blocked when reloaded (requires db backend and cooperation with srv_classify).
 */
 
 #include "autoconf.h"
@@ -55,6 +54,7 @@
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
 
+#include "html.h"
 #include "srv_classify.h"
 #include "srv_classify_image.h"
 
@@ -186,10 +186,10 @@ char header[myMAX_HEADER+1];
 
 	switch(error)
 	{
-		case NO_MEMORY:
+		case NO_IMAGE_MEMORY:
 			snprintf(header, myMAX_HEADER, "X-IMAGE-ERROR: OUT OF MEMORY");
 			break;
-		case NO_CATEGORIES:
+		case NO_IMAGE_CATEGORIES:
 			snprintf(header, myMAX_HEADER, "X-IMAGE-ERROR: NO CATEGORIES PROVIDED, CAN'T PROCESS");
 			break;
 		default:
@@ -244,6 +244,7 @@ int i;
 		ci_debug_printf(10, "Added header: %s\n", header);
 	}
 	// TODO: Add other headers
+	addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 }
 
 static void saveDetectedParts(ImageSession *mySession)
@@ -710,8 +711,11 @@ int minDim=0, ret=0;
 	// Obtain Read Lock
 	ci_thread_rwlock_rdlock(&imageclassify_rwlock);
 
+	// Grab Referrer Classification before it is too late
+	getReferrerClassification(ci_http_request_get_header((ci_request_t *)req, "Referer"), &mySession.referrer_fhs_classification, &mySession.referrer_fnb_classification);
+
         // Detect and add headers
-        detect(&mySession);
+	detect(&mySession);
 	doCoalesce(&mySession);
 	createImageClassificationHeaders(&mySession);
 
