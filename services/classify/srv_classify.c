@@ -1296,6 +1296,10 @@ int oldest = 0, i;
 		{
 			if(strcmp(uri, referrers[i].uri) == 0)
 			{
+				// Avoid fake outs by resetting the classification
+				referrers[i].fhs_classification = fhs_classification;
+				referrers[i].fnb_classification = fnb_classification;
+				// Reset the age as well
 				referrers[i].age = classify_requests;
 				ci_thread_rwlock_unlock(&referrers_rwlock);
 				return;
@@ -1339,6 +1343,7 @@ int oldest = 0, i;
 
 	// Replace oldest
 	referrers[oldest].hash = primary;
+	if(referrers[oldest].uri) free(referrers[oldest].uri);
 	referrers[oldest].uri = myStrDup(uri);
 	referrers[oldest].fhs_classification = fhs_classification;
 	referrers[oldest].fnb_classification = fnb_classification;
