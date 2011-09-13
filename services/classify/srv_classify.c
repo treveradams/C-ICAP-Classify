@@ -1280,16 +1280,18 @@ char *temp;
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 /* All of this code below uses a very simple table.
-   It might be better to reimplement this using a tree of some kind. */
+   It might be better to re-implement this using a tree of some kind. */
 void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
 {
 uint32_t primary = 0, secondary = 0;
 int oldest = 0, i;
-	ci_thread_rwlock_wrlock(&referrers_rwlock);
-
+	// Compute hash outside of lock
 	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
 
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+
 	// If we already exist, update age and bail
+	// While we are at it, find the oldest
 	for(i = 0; i < REFERRERS_SIZE; i++)
 	{
 		if(referrers[i].hash == primary)
@@ -1305,6 +1307,12 @@ int oldest = 0, i;
 				return;
 			}
 		}
+		// Find the oldest here to save time
+		// We don't do an else because the hash may match while URI doesn't
+		if(referrers[i].age < referrers[oldest].age)
+		{
+			oldest = i;
+		}
 	}
 
 	classify_requests++;
@@ -1315,12 +1323,8 @@ int oldest = 0, i;
 		int largest = 0;
 		int32_t adjust;
 
-		// Find smallest -- Also the oldest
-		for(i = 0; i < REFERRERS_SIZE; i++)
-		{
-			if(referrers[i].age < referrers[oldest].age)
-				oldest = i;
-		}
+		// We already found the oldest in the previous for loop
+
 		// Adjust downward
 		adjust = referrers[oldest].age - 1;
 		for(i = 0; i < REFERRERS_SIZE; i++)
@@ -1330,15 +1334,6 @@ int oldest = 0, i;
 				largest = i;
 		}
 		classify_requests = largest + 1; // Reset our count
-	}
-
-	// Find oldest
-	else for(i = 0; i < REFERRERS_SIZE; i++)
-	{
-		if(referrers[i].age < referrers[oldest].age || referrers[i].age == 0)
-		{
-			oldest = i;
-		}
 	}
 
 	// Replace oldest
@@ -1358,12 +1353,14 @@ uint32_t primary = 0, secondary = 0;
 HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 int i;
 char *realURI, *pos;
-
-	ci_thread_rwlock_rdlock(&referrers_rwlock);
+	// Process the URI to hash and remove cgi parts before lock
 	realURI = myStrDup(uri);
 	pos = strstr(realURI, "?");
 	if(pos != NULL) *pos = '\0';
 	hashword2((uint32_t *) realURI, strlen(realURI)/4, &primary, &secondary);
+
+	// lock and find
+	ci_thread_rwlock_rdlock(&referrers_rwlock);
 	for(i = 0; i < REFERRERS_SIZE; i++)
 	{
 		if(referrers[i].hash == primary)
@@ -1379,6 +1376,7 @@ char *realURI, *pos;
 			}
 		}
 	}
+	// We failed to find the URI, return empty classification
 	*fhs_classification = emptyClassification;
 	*fnb_classification = emptyClassification;
 	free(realURI);
