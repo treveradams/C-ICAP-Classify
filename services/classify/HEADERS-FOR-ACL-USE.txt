@@ -48,3 +48,9 @@ have the content that the referrer had in X-TEXT-* by the same names.
 These headers are useful if images should be blocked in some cases, but
 not others. Example might be some medical nudity being allowed, but
 nudity normally being blocked.
+==WARNING==
+The X-REFERRER-* headers are only available IF the request for the
+image in question goes through the same C-ICAP server as the referring
+page and within a short enough time it remains in the referrer cache,
+which currently is limited to 1000 web page requests. (Image and video
+files are not counted in this number.)

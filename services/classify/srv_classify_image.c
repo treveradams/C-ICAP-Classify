@@ -564,7 +564,6 @@ LinkedCascade *next;
 
 	if(top == NULL) return;
 
-        ci_debug_printf(10, "srv_classify_image.c: freeCategories started.\n");
 	if(top->next != NULL)
         {
 		freeImageCategories(top->next);

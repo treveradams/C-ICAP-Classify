@@ -21,6 +21,8 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
+#include <sys/stat.h>
 #include <inttypes.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -49,6 +51,7 @@
 #include "cfg_param.h"
 #include "filetype.h"
 #include "commands.h"
+#include "txt_format.h"
 #define IN_SRV_CLASSIFY
 #include "srv_classify.h"
 #include "ci_threads.h"
@@ -63,6 +66,12 @@ const wchar_t *WCNULL = L"\0";
 #include "bayes.h"
 #include "hyperspace.h"
 #include "hash.h"
+
+#ifdef _WIN32
+#define F_PERM S_IREAD|S_IWRITE
+#else
+#define F_PERM S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
+#endif
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 extern int categorize_image(ci_request_t * req);
@@ -86,6 +95,7 @@ static ci_off_t MAX_OBJECT_SIZE = 0;
 static struct ci_magics_db *magic_db = NULL;
 static int *classifytypes = NULL;
 static int *classifygroups = NULL;
+static external_conversion_t *externalclassifytypes = NULL;
 
 /* TMP DATA DIR */
 char *CLASSIFY_TMP_DIR = NULL;
@@ -144,12 +154,15 @@ int cfg_OptimizeFNB(char *directive, char **argv, void *setdata);
 int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
 int cfg_TmpDir(char *directive, char **argv, void *setdata);
 int cfg_TextSecondary(char *directive, char **argv, void *setdata);
+int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata);
 /*General functions*/
 int get_filetype(ci_request_t *req, char *buf, int len);
 void set_istag(ci_service_xdata_t *srv_xdata);
 int categorize_text(ci_request_t *req);
+int categorize_external_text(ci_request_t * req, int classification_type);
 char *findCharset(const char *input, int64_t);
 int make_utf32(ci_request_t *req);
+int make_utf32_from_buf(ci_request_t * req, ci_membuf_t *input);
 int classify_uncompress(ci_request_t *req);
 static void addTextErrorHeaders(ci_request_t *req, int error, char *extra_info);
 /*External functions*/
@@ -197,6 +210,11 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextAmbiguous", &Ambiguous, ci_cfg_set_int, NULL},
      {"TextSolidMatch", &SolidMatch, ci_cfg_set_int, NULL},
      {"TextFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
+     {"ExternalTextFileType", NULL, cfg_ExternalTextConversion, NULL},
+/*     {"ExternalTextMimeType", NULL, cfg_ExternalTextConversion, NULL}, // Mime type handling not yet implemented */
+// External Image handling is not yet implemented
+/*     {"ExternalImageFileType", NULL, cfg_ExternalConversion, NULL},
+     {"ExternalImageMimeType", NULL, cfg_ExternalConversion, NULL},*/
      {"TextPreload", NULL, cfg_DoTextPreload, NULL},
      {"TextCategory", NULL, cfg_AddTextCategory, NULL},
      {"TextCategoryDirectoryHS", NULL, cfg_AddTextCategoryDirectoryHS, NULL},
@@ -225,6 +243,15 @@ static struct ci_conf_entry conf_variables[] = {
      {NULL, NULL, NULL, NULL}
 };
 
+/* Template Functions and Table */
+int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, char *param);
+int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, char *param);
+
+struct ci_fmt_entry srv_classify_format_table [] = {
+    {"%CLIN", "File To Convert", fmt_srv_classify_source},
+    {"%CLOUT", "File To Read Back In For Classification", fmt_srv_classify_destination},
+    { NULL, NULL, NULL}
+};
 
 CI_DECLARE_MOD_DATA ci_service_module_t service = {
      "srv_classify",              /*Module name */
@@ -262,14 +289,14 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      magic_db = server_conf->MAGIC_DB;
      classifytypes = (int *) malloc(ci_magic_types_num(magic_db) * sizeof(int));
      classifygroups = (int *) malloc(ci_magic_groups_num(magic_db) * sizeof(int));
+     externalclassifytypes = calloc(ci_magic_types_num(magic_db), sizeof(external_conversion_t));
 
      for (i = 0; i < ci_magic_types_num(magic_db); i++)
           classifytypes[i] = 0;
      for (i = 0; i < ci_magic_groups_num(magic_db); i++)
           classifygroups[i] = 0;
 
-
-     ci_debug_printf(10, "Going to initialize srvclassify\n");
+     ci_debug_printf(10, "Going to initialize srv_classify\n");
      srv_classify_xdata = srv_xdata;      /* Needed by db_reload command */
      set_istag(srv_classify_xdata);
      ci_service_set_preview(srv_xdata, 1024);
@@ -307,6 +334,27 @@ void srvclassify_close_service()
      classifytypes = NULL;
      if(classifygroups) free(classifygroups);
      classifygroups = NULL;
+     if(externalclassifytypes)
+     {
+         int k;
+         for(int i = 0; i < ci_magic_groups_num(magic_db); i++)
+         {
+             if(externalclassifytypes[i].mime_type) free(externalclassifytypes[i].mime_type);
+             if(externalclassifytypes[i].program) free(externalclassifytypes[i].program);
+             k = 0;
+             if(externalclassifytypes[i].args)
+             {
+                  while(externalclassifytypes[i].args[k] != NULL)
+                  {
+                       free(externalclassifytypes[i].args[k]);
+                       k++;
+                  }
+                  free(externalclassifytypes[i].args);
+             }
+         }
+     }
+     free(externalclassifytypes);
+     externalclassifytypes = NULL;
 //#ifdef HAVE_TRE
      tre_regfree(&picslabel);
      deinitBayesClassifier();
@@ -380,7 +428,6 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
                                     ci_request_t * req)
 {
      ci_off_t content_size = 0;
-     int file_type;
      classify_req_data_t *data = ci_service_data(req);
      char *content_type = NULL;
 
@@ -392,11 +439,11 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
      }
 
      /*Going to determine the file type, get_filetype can take preview_data as null ....... */
-     file_type = get_filetype(req, preview_data, preview_data_len);
+     data->file_type = get_filetype(req, preview_data, preview_data_len);
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-     data->type_name = ci_data_type_name(magic_db, file_type);
+     data->type_name = ci_data_type_name(magic_db, data->file_type);
 #endif
-     if ((data->must_classify = must_classify(file_type, data)) == 0) {
+     if ((data->must_classify = must_classify(data->file_type, data)) == 0) {
           ci_debug_printf(8, "Not in \"must classify list\". Allow it...... \n");
           return CI_MOD_ALLOW204;
      }
@@ -449,7 +496,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
 
 int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
 {
-     /*We can put here scanning hor jscripts and html and raw data ...... */
+     /* We can put here scanning for jscripts and html and raw data ...... */
      classify_req_data_t *data = ci_service_data(req);
      if (!data)
           return CI_ERROR;
@@ -473,9 +520,6 @@ int srvclassify_write_to_net(char *buf, int len, ci_request_t * req)
      classify_req_data_t *data = ci_service_data(req);
      if (!data)
           return CI_ERROR;
-
-//     if (data->error_page)
-//          return ci_membuf_read(data->error_page, buf, len);
 
      bytes = ci_simple_file_read(data->body, buf, len);
      return bytes;
@@ -536,6 +580,11 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           categorize_image(req);
      }
 #endif
+     else if (data->must_classify == EXTERNAL_TEXT || data->must_classify == EXTERNAL_TEXT_PIPE)
+     {
+          ci_debug_printf(8, "Classifying EXTERNAL TEXT from file\n");
+          categorize_external_text(req, data->must_classify);
+     }
      else if (data->allow204 && !ci_req_sent_data(req)) {
           ci_debug_printf(7, "srvClassify module: Respond with allow 204\n");
           return CI_MOD_ALLOW204;
@@ -672,6 +721,103 @@ HTMLClassification HSclassification, NBclassification;
      return CI_OK;
 }
 
+int categorize_external_text(ci_request_t * req, int classification_type)
+{
+FILE *conversion_in;
+char buff[512];
+char CALL_OUT[CI_MAX_PATH + 1];
+ci_membuf_t *tempbody;
+classify_req_data_t *data;
+int i = 0;
+int ret, maxwrite;
+pid_t child_pid;
+int wait_status;
+
+	data = ci_service_data(req);
+
+	tempbody = ci_membuf_new();
+
+	if(classification_type == EXTERNAL_TEXT_PIPE)
+	{
+		maxwrite = CI_MAX_PATH;
+		strncat(CALL_OUT, externalclassifytypes[data->file_type].program, maxwrite);
+		CALL_OUT[CI_MAX_PATH] = '\0';
+		maxwrite -= strlen(CALL_OUT);
+		while(externalclassifytypes[data->file_type].args[i] != NULL)
+		{
+			ret = ci_format_text(req, externalclassifytypes[data->file_type].args[i], buff, 511, srv_classify_format_table);
+			buff[511] = '\0'; // Terminate for safety!
+			strncat(CALL_OUT, " ", maxwrite);
+			CALL_OUT[CI_MAX_PATH] = '\0';
+			strncat(CALL_OUT, buff, maxwrite);
+			CALL_OUT[CI_MAX_PATH] = '\0';
+			maxwrite -= ret;
+			i++;
+		}
+
+		CALL_OUT[CI_MAX_PATH] = '\0';
+		if (!(conversion_in = popen(CALL_OUT, "r"))) {
+			// Do error handling
+		}
+
+		/* read the output of of conversion, one line at a time */
+		while (fgets(buff, sizeof(buff), conversion_in) != NULL ) {
+			ci_membuf_write(tempbody, buff, strlen(buff), 0);
+		}
+
+		/* close the pipe */
+		pclose(conversion_in);
+	}
+	else if (classification_type == EXTERNAL_TEXT)
+	{
+		char **localargs;
+		struct stat stat_buf;
+
+		data->external_body = ci_simple_file_new(0);
+		close(data->external_body->fd); // Close early, as it will have exclusive permissions
+
+		child_pid = fork();
+		if(child_pid == 0) // We are the child
+		{
+			i = 0;
+			while(externalclassifytypes[data->file_type].args[i] != NULL)
+				i++;
+			localargs = malloc(sizeof(char *) * (i + 2));
+			i = 0;
+			while(externalclassifytypes[data->file_type].args[i] != NULL)
+			{
+				ret = ci_format_text(req, externalclassifytypes[data->file_type].args[i], buff, 511, srv_classify_format_table);
+				buff[511] = '\0'; // Terminate for safety!
+				localargs[i + 1] = myStrDup(buff);
+				ci_debug_printf(1, "localargs %d: %s\n", i, localargs[i + 1]);
+				i++;
+			}
+			localargs[i] = NULL;
+			localargs[0] = myStrDup(externalclassifytypes[data->file_type].program);
+			ret = execv(externalclassifytypes[data->file_type].program, localargs);
+		}
+		else if(child_pid < 0)
+		{
+			// Error condition
+		}
+		else { // We are the original
+			waitpid(child_pid, &wait_status, 0);
+			data->external_body->fd = open(data->external_body->filename, O_RDWR | O_EXCL, F_PERM);
+			fstat(data->external_body->fd, &stat_buf);
+			data->external_body->endpos = stat_buf.st_size;
+			while((ret = read(data->external_body->fd, buff, 512)) > 0)
+			{
+				ci_membuf_write(tempbody, buff, ret, 0);
+			}
+			ci_simple_file_destroy(data->external_body);
+		}
+	}
+
+	// do classification
+	make_utf32_from_buf(req, tempbody);
+	return categorize_text(req);
+}
+
 int make_pics_header(ci_request_t * req)
 {
 char *orig_header;
@@ -700,14 +846,16 @@ classify_req_data_t *data = ci_service_data(req);
 	return 1;
 }
 
+/* This function makes the assumption, as does much of the rest
+   of the program, that wchar_t is UTF-32 for the correct byte-order. */
 int make_utf32(ci_request_t * req)
 {
 char *charSet;
 char *buffer, *tempbuffer;
 ci_membuf_t *tempbody;
 char *outputBuffer;
-int i=0;
-size_t inBytes=0, outBytes=MAX_WINDOW, status=0;
+int i = 0;
+size_t inBytes = 0, outBytes = MAX_WINDOW, status = 0;
 classify_req_data_t *data;
 iconv_t convert;
 ci_off_t content_size = 0;
@@ -830,6 +978,79 @@ ci_off_t content_size = 0;
      //cleanup
      ci_debug_printf(7, "Conversion from |%s| to UTF-32 complete.\n", charSet);
      free(charSet);
+     return CI_OK;
+}
+
+/* This function makes the assumption, as does much of the rest
+   of the program, that wchar_t is UTF-32 for the correct byte-order.
+   Also, all input to this function must be UTF-8. */
+int make_utf32_from_buf(ci_request_t * req, ci_membuf_t *input)
+{
+char *charSet = "UTF-8";
+char *buffer;
+ci_membuf_t *tempbody;
+char *outputBuffer;
+size_t inBytes = 0, outBytes = MAX_WINDOW, status = 0;
+classify_req_data_t *data;
+iconv_t convert;
+ci_off_t content_size = 0;
+
+     data = ci_service_data(req);
+
+     // Setup and do iconv charset conversion to WCHAR_T from UTF-8
+     convert = iconv_open("WCHAR_T", charSet); // UTF-32//TRANSLIT
+     if(convert == (iconv_t)-1)
+     {
+          ci_debug_printf(2, "No conversion from |%s| to UTF-32.\n", charSet);
+          addTextErrorHeaders(req, NO_CHARSET, charSet);
+          return CI_ERROR; // no charset conversion available, so bail with error
+     }
+     content_size = input->endpos;
+     buffer = input->buf;
+     tempbody = ci_membuf_new_sized((content_size + 33) * sizeof(wchar_t)); // 33 = 1 for termination, 32 for silly fudgefactor
+     outputBuffer = (char *) tempbody->buf;
+     outBytes = (content_size + 32) * sizeof(wchar_t); // 32 is the 32 above
+     inBytes = content_size;
+     ci_debug_printf(10, "Begin conversion from |%s| to UTF-32\n", charSet);
+     while(inBytes)
+     {
+          status=iconv(convert, &buffer, &inBytes, &outputBuffer, &outBytes);
+          if(status==-1)
+          {
+               switch(errno) {
+                   case EILSEQ: // Invalid character, keep going
+                         buffer++;
+                         inBytes--;
+                         ci_debug_printf(5, "Bad sequence in conversion from %s to UTF-32.\n", charSet);
+                         break;
+                   case EINVAL:
+                         // Treat it the same as E2BIG since this is a windowed buffer.
+                   case E2BIG:
+                         ci_debug_printf(1, "Rewindowing conversion needs to be implemented.\n");
+                         inBytes = 0;
+                         break;
+                   default:
+                         ci_debug_printf(2, "Oh, crap, iconv gave us an error, which isn't documented, which we couldn't handle in srv_classify.c: make_utf8.\n");
+                         status = -10;
+                         break;
+               }
+          }
+     }
+
+     // flush iconv
+     iconv(convert, NULL, NULL, &outputBuffer, &outBytes);
+     iconv_close(convert);
+
+     // save our data
+     tempbody->endpos = ((content_size + 32) * sizeof(wchar_t)) - outBytes; // This formula MUST be the same as setting outBytes above the conversion loop - outBytes
+     // Append a Wide Character NULL (WCNULL) here as the classifier needs the NULL
+     ci_membuf_write(tempbody, (char *) WCNULL, 4, 1);
+     ci_membuf_free(input);
+     data->uncompressedbody = tempbody;
+     tempbody = NULL;
+
+     //cleanup
+     ci_debug_printf(7, "Conversion from |%s| to UTF-32 complete.\n", charSet);
      return CI_OK;
 }
 
@@ -1001,6 +1222,8 @@ int must_classify(int file_type, classify_req_data_t * data)
      }
 
      if (type == NO_CLASSIFY)
+          type = externalclassifytypes[file_type].data_type;
+     else if (type == NO_CLASSIFY)
           type = classifytypes[file_type];
 
      ci_thread_rwlock_unlock(&textclassify_rwlock);
@@ -1063,6 +1286,26 @@ void srvclassify_parse_args(classify_req_data_t * data, char *args)
      }
 }
 
+/***********************************************************************************/
+/*Template Functions                                                               */
+int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, char *param)
+{
+    classify_req_data_t *data = ci_service_data(req);
+    if (! data->body->filename)
+        return 0;
+
+    return snprintf(buf, len, "%s", data->body->filename);
+}
+
+int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, char *param)
+{
+    classify_req_data_t *data = ci_service_data(req);
+    if (! data->external_body->filename)
+        return 0;
+
+    return snprintf(buf, len, "%s", data->external_body->filename);
+}
+
 /****************************************************************************************/
 /*Configuration Functions                                                               */
 
@@ -1104,7 +1347,7 @@ int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata)
 int cfg_TmpDir(char *directive, char **argv, void *setdata)
 {
      int val = 1;
-     char fname[CI_MAX_PATH+1];
+     char fname[CI_MAX_PATH + 1];
      FILE *test;
      struct stat stat_buf;
      if (argv == NULL || argv[0] == NULL) {
@@ -1269,9 +1512,66 @@ int cfg_OptimizeFNB(char *directive, char **argv, void *setdata)
      return 1;
 }
 
+int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
+{
+     int i, id = -1, k;
+     int type = NO_CLASSIFY;
+     if(argv[0] == NULL || argv[1] == NULL || argv[2] == NULL) {
+          ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
+          if(strstr(directive, "Text") != NULL) {
+               ci_debug_printf(1, "Format: %s (STDOUT|FILE) FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...\n", directive);
+          }
+          return 0;
+     }
+     if (strcmp(directive, "ExternalTextFileType") == 0)
+     {
+          if(strcmp(argv[0], "STDOUT") == 0)
+               type = EXTERNAL_TEXT_PIPE;
+          else if(strcmp(argv[0], "FILE") == 0)
+               type = EXTERNAL_TEXT;
+          else {
+               ci_debug_printf(1, "Incorrect second argument in directive:%s\n", directive);
+               ci_debug_printf(1, "Format: %s (STDOUT|FILE) FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...\n", directive);
+               return 0;
+          }
+     }
+     else
+          return 0;
+
+     if(strstr(directive, "FileType") != NULL)
+     {
+          if ((id = ci_get_data_type_id(magic_db, argv[1])) >= 0)
+               externalclassifytypes[id].data_type = type;
+          else
+               ci_debug_printf(1, "Unknown data type %s \n", argv[1]);
+     }
+     // FIXME: Handle Mime Types here
+
+     if(id >= 0)
+     {
+          // Handle Program name
+          externalclassifytypes[id].program = myStrDup(argv[2]);
+
+          // Process argument list
+          i = 0;
+          while(argv[3 + i] != NULL)
+               i++;
+          externalclassifytypes[id].args = malloc(sizeof(char *) * (i + 1));
+          for(k = 0; k < i; k++)
+          {
+              externalclassifytypes[id].args[k] = myStrDup(argv[3 + k]);
+          }
+          externalclassifytypes[id].args[k] = NULL;
+     }
+
+     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s, receiving via: %s )\n", directive, argv[2], argv[1], argv[0]);
+     return 1;
+}
+
 char *myStrDup(char *string)
 {
 char *temp;
+	if(string == NULL) return NULL;
 
 	temp=malloc(strlen(string)+1);
 	strcpy(temp, string);
@@ -1462,6 +1762,7 @@ int i;
 		free(referrers[i].uri);
 	}
 	free(referrers);
+	referrers = NULL;
 	ci_thread_rwlock_unlock(&referrers_rwlock);
 }
 #endif

@@ -29,11 +29,13 @@
 
 typedef struct classify_req_data {
      ci_simple_file_t *body;
+     ci_simple_file_t *external_body;
      ci_membuf_t *uncompressedbody;
      ci_request_t *req;
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      char *type_name;
 #endif
+     int file_type;
      int must_classify;
      int is_compressed;
      int allow204;
@@ -45,7 +47,15 @@ typedef struct classify_req_data {
      } args;
 } classify_req_data_t;
 
-enum {NO_CLASSIFY=0, TEXT, IMAGE};
+enum {NO_CLASSIFY=0, TEXT, IMAGE, EXTERNAL_TEXT, EXTERNAL_TEXT_PIPE, EXTERNAL_IMAGE, EXTERNAL_IMAGE_PIPE};
+
+typedef struct {
+	int magic_type_num;
+	char *mime_type;
+	char *program;
+	int data_type; // Is this a read from stdout of program type or from a named file
+	char **args;
+} external_conversion_t;
 
 char *myStrDup(char *string);
 
