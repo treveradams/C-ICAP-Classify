@@ -47,14 +47,16 @@ typedef struct classify_req_data {
      } args;
 } classify_req_data_t;
 
-enum {NO_CLASSIFY=0, TEXT, IMAGE, EXTERNAL_TEXT, EXTERNAL_TEXT_PIPE, EXTERNAL_IMAGE, EXTERNAL_IMAGE_PIPE};
+enum {NO_CLASSIFY=0, TEXT = 1, IMAGE = 2, EXTERNAL_TEXT = 4, EXTERNAL_TEXT_PIPE = 8, EXTERNAL_IMAGE = 16};
 
 typedef struct {
 	int magic_type_num;
 	char *mime_type;
-	char *program;
+	char *text_program;
+	char *image_program;
 	int data_type; // Is this a read from stdout of program type or from a named file
-	char **args;
+	char **text_args;
+	char **image_args;
 } external_conversion_t;
 
 char *myStrDup(char *string);

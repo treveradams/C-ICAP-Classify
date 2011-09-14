@@ -47,6 +47,12 @@ typedef struct _Detected {
 	struct _Detected *next;
 } ImageDetected;
 
+typedef struct _DetectedCount {
+	ImageCategory *category; // Don't free this. This is a copy.
+	uint16_t count;
+	struct _DetectedCount *next;
+} ImageDetectedCount;
+
 typedef struct {
 	char fname[CI_MAX_PATH+1];
 	float scale;

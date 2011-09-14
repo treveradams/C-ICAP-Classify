@@ -35,9 +35,16 @@ this header.
 X-IMAGE-CATEGORIES:
 This will only show up if objects are detected in the image. The values
 for this are the name of the category/categories detected followed by a
-number sign for each of those objects detected up to 10 inside of
-parentheses. Over 10 will also have a +. Example: Breasts(###) Butts(#)
+number sign for each of those objects detected up to 9 inside of
+parentheses. Over 9 will also have a +. Example: Breasts(###) Butts(#)
 for 3 breasts and 1 butt.
+
+X-IMAGE-GROUP-CATEGORIES:
+This is much like X-IMAGE-CATEGORIES, but is used anytime an external
+image conversion is done. The counts in this header are the worst seen
+by category in any image. Since there may be many images,
+multi-category featuring checking (breasts + butts, etc.) may not be
+valid and may cause undesired results.
 
 X-REFERRER-TEXT-CATEGORY-CONFIDENCE-(HS|NB)
 X-REFERRER-TEXT-CATEGORY-(HS|NB)

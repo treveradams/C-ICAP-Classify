@@ -32,6 +32,7 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <strings.h>
@@ -41,6 +42,8 @@
 #include <limits.h>
 #include <time.h>
 #include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
 
 #include "c-icap.h"
 #include "service.h"
@@ -50,6 +53,8 @@
 #include "debug.h"
 #include "cfg_param.h"
 #include "ci_threads.h"
+#include "filetype.h"
+#include "txt_format.h"
 
 #include <opencv/cv.h>
 #include <opencv/highgui.h>
@@ -78,6 +83,7 @@ extern int IMAGE_DEBUG_DEMONSTRATE_MASKED;
 extern int IMAGE_INTERPOLATION;
 extern int IMAGE_CATEGORY_COPIES;
 
+extern external_conversion_t *externalclassifytypes;
 
 ImageCategory *imageCategories = NULL;
 
@@ -87,6 +93,51 @@ ci_thread_rwlock_t imageclassify_rwlock;
 // OpenCV saving types
 int png_p[] = {CV_IMWRITE_PNG_COMPRESSION, 9, 0};
 int jpeg_p[] = {CV_IMWRITE_JPEG_QUALITY, 100, 0};
+
+/* Template Functions and Table */
+int fmt_srv_classify_image_source(ci_request_t *req, char *buf, int len, char *param);
+int fmt_srv_classify_image_destination_directory(ci_request_t *req, char *buf, int len, char *param);
+
+struct ci_fmt_entry srv_classify_image_format_table [] = {
+    {"%CLIN", "File To Convert", fmt_srv_classify_image_source},
+    {"%CLDIROUT", "File To Read Back In For Classification", fmt_srv_classify_image_destination_directory},
+    { NULL, NULL, NULL}
+};
+
+static int unlink_directory(char *directory)
+{
+DIR *dirp;
+struct dirent *dp;
+char old_dir[PATH_MAX];
+
+	getcwd(old_dir, PATH_MAX);
+	chdir(directory);
+
+	if ((dirp = opendir(directory)) == NULL)
+	{
+		ci_debug_printf(3, "unlink_directory: couldn't open '%s'", directory);
+		return -1;
+	}
+
+	do {
+		errno = 0;
+		if ((dp = readdir(dirp)) != NULL)
+		{
+			if (strcmp(dp->d_name, "..") != 0 && strcmp(dp->d_name, ".") != 0)
+			{
+				remove(dp->d_name);
+			}
+		}
+	} while (dp != NULL);
+	if (errno != 0)
+		perror("error reading directory");
+	else
+		(void) closedir(dirp);
+
+	chdir(old_dir);
+	remove(directory);
+	return 1;
+}
 
 static void doCoalesce(ImageSession *mySession)
 {
@@ -172,13 +223,13 @@ int i, j;
 			current->detected = newDetected;
 			free(merged);
 		}
-		current=current->next;
+		current = current->next;
 	}
 }
 
 static void addImageErrorHeaders(ImageSession *mySession, int error)
 {
-char header[myMAX_HEADER+1];
+char header[myMAX_HEADER + 1];
 
 	// modify headers
 	if (!ci_http_response_headers(mySession->req))
@@ -197,7 +248,7 @@ char header[myMAX_HEADER+1];
 			break;
 	}
 	// add IMAGE-CATEGORIES header
-	header[myMAX_HEADER]='\0';
+	header[myMAX_HEADER] = '\0';
 	ci_http_response_add_header(mySession->req, header);
 	ci_debug_printf(3, "Added error header: %s\n", header);
 }
@@ -205,7 +256,7 @@ char header[myMAX_HEADER+1];
 static void createImageClassificationHeaders(ImageSession *mySession)
 {
 ImageDetected *current = mySession->detected;
-char header[myMAX_HEADER+1];
+char header[myMAX_HEADER + 1];
 const char *rating = "#########+";
 int i;
 
@@ -220,10 +271,10 @@ int i;
 		{
 			// Reset rectangles to original size
 			CvRect* r = (CvRect*)cvGetSeqElem( current->detected, i );
-			r->x=(int)(r->x * mySession->scale);
-			r->y=(int)(r->y * mySession->scale);
-			r->height=(int)(r->height * mySession->scale);
-			r->width=(int)(r->width * mySession->scale);
+			r->x = (int)(r->x * mySession->scale);
+			r->y = (int)(r->y * mySession->scale);
+			r->height = (int)(r->height * mySession->scale);
+			r->width = (int)(r->width * mySession->scale);
 		}
 		// add each category to header
 		if(current->detected->total)
@@ -234,7 +285,7 @@ int i;
 		}
 		mySession->featuresDetected += current->detected->total;
 
-		current=current->next;
+		current = current->next;
 	}
 	// add IMAGE-CATEGORIES header
 	header[myMAX_HEADER] = '\0';
@@ -243,14 +294,47 @@ int i;
 		ci_http_response_add_header(mySession->req, header);
 		ci_debug_printf(10, "Added header: %s\n", header);
 	}
-	// TODO: Add other headers
+	// Add other headers
+	addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
+}
+
+static void createImageGroupClassificationHeaders(ImageSession *mySession, ImageDetectedCount *count)
+{
+ImageDetectedCount *current = count;
+char header[myMAX_HEADER + 1];
+const char *rating = "#########+";
+
+	// modify headers
+	if (!ci_http_response_headers(mySession->req))
+		ci_http_response_create(mySession->req, 1, 1);
+	snprintf(header, myMAX_HEADER, "X-IMAGE-GROUP-CATEGORIES:");
+	// Loop through categories
+	while (current != NULL) {
+		// add each category to header
+		if(current->count)
+		{
+			char *oldHeader = myStrDup(header);
+			snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (count->count > 10 ? 10 : count->count), rating);
+			free(oldHeader);
+		}
+		mySession->featuresDetected += current->count;
+		current = current->next;
+	}
+	// add IMAGE-CATEGORIES header
+	header[myMAX_HEADER] = '\0';
+	if(mySession->featuresDetected)
+	{
+		ci_http_response_add_header(mySession->req, header);
+		ci_debug_printf(10, "Added header: %s\n", header);
+	}
+	// Add other headers
 	addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 }
 
 static void saveDetectedParts(ImageSession *mySession)
 {
-ImageDetected *current=mySession->detected;
-char fname[CI_MAX_PATH+1];
+ImageDetected *current = mySession->detected;
+char fname[CI_MAX_PATH + 1];
 int i;
 
 	// Loop through categories
@@ -268,7 +352,7 @@ int i;
 			cvSaveImage(fname, mySession->origImage, png_p);
 			cvResetImageROI(mySession->origImage);
 		}
-		current=current->next;
+		current = current->next;
 	}
 }
 
@@ -282,7 +366,6 @@ CvPoint pt1, pt2;
 	pt2.y = mySession->origImage->height;
 	cvRectangle( mySession->origImage, pt1, pt2, CV_RGB(30,30,30), CV_FILLED, 8, 0 );
 }
-
 
 // Function to draw on original image the detected objects
 static void drawDetected(ImageSession *mySession)
@@ -300,12 +383,6 @@ int i;
 
 			// Draw the rectangle in the input image
 			// Find the dimensions of the face,and scale it if necessary
-/*			pt1.x = r->x*myscale;
-			pt2.x = (r->x+r->width)*myscale;
-			pt1.y = r->y*myscale;
-			pt2.y = (r->y+r->height)*myscale;
-			cvRectangle( img, pt1, pt2, CV_RGB(255,0,0), 3, 8, 0 );*/
-
 			CvPoint center;
 			int radius;
 			center.x = cvRound(r->x + r->width*0.5);
@@ -315,13 +392,13 @@ int i;
 
 			ci_debug_printf(10, "%s Detected at X: %d, Y: %d, Height: %d, Width: %d\n", current->category->name, r->x, r->y, r->height, r->width);
 		}
-		current=current->next;
+		current = current->next;
 	}
 }
 
 static void saveOriginal(ImageSession *mySession)
 {
-char fname[CI_MAX_PATH+1];
+char fname[CI_MAX_PATH + 1];
 	snprintf(fname, CI_MAX_PATH, "%s/original-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
 	fname[CI_MAX_PATH] = '\0';
 	ci_debug_printf(10, "Saving Original Image To: %s\n", fname);
@@ -330,7 +407,7 @@ char fname[CI_MAX_PATH+1];
 
 static void saveMarked(ImageSession *mySession)
 {
-char fname[CI_MAX_PATH+1];
+char fname[CI_MAX_PATH + 1];
 	snprintf(fname, CI_MAX_PATH, "%s/marked-%s.png", CLASSIFY_TMP_DIR, (rindex(mySession->fname, '/'))+1);
 	fname[CI_MAX_PATH] = '\0';
 	ci_debug_printf(10, "Saving Marked Image To: %s\n", fname);
@@ -341,7 +418,7 @@ static void demonstrateDetection(ImageSession *mySession)
 {
 struct stat stat_buf;
 classify_req_data_t *data = ci_service_data(mySession->req);
-char imageFILENAME[CI_MAX_PATH+1];
+char imageFILENAME[CI_MAX_PATH + 1];
 
         ci_http_response_remove_header(mySession->req, "Content-Length");
 	data->body->readpos = 0;
@@ -413,7 +490,6 @@ int attempts = 0;
 			item->next = category->busy_cascade;
 			category->busy_cascade = item;
 			if(attempts >= 4) ci_debug_printf(3, "Had to wait on cascade %s, consider increasing ImageCategoryCopies in configuration. Currently set to %d. Retried %d times.\n", category->name, IMAGE_CATEGORY_COPIES, attempts);
-
 		}
 	}
 	else {
@@ -482,7 +558,7 @@ LinkedCascade *cascade;
 		t = t / ((double)cvGetTickFrequency() * 1000.);
 		ci_debug_printf(8, "File: %s Object: %s (%d) Detection took: %gms.\n", (rindex(mySession->fname, '/'))+1, current->category->name, current->detected->total, t);
 
-		current=current->next;
+		current = current->next;
 	}
 }
 
@@ -497,7 +573,7 @@ int copies;
 	if(current != NULL)
 	{
 		// scan for place to insert
-		while (current->next != NULL) current=current->next;
+		while (current->next != NULL) current = current->next;
 		// Save our recovery point
 		recover = current;
 		// Malloc and setup
@@ -650,6 +726,15 @@ ImageDetected *nDetected = NULL, *cDetected = NULL;
 	return 0;
 }
 
+static void clearImageDetected(ImageDetected *detected)
+{
+	if(detected==NULL) return;
+	if(detected->next!=NULL)
+        {
+		cvClearSeq( detected->detected );
+	}
+}
+
 static void freeImageDetected(ImageDetected *detected)
 {
 	if(detected==NULL) return;
@@ -657,6 +742,17 @@ static void freeImageDetected(ImageDetected *detected)
         {
 		cvClearSeq( detected->detected );
 		freeImageDetected(detected->next);
+		detected->next = NULL;
+	}
+	free(detected);
+}
+
+static void freeImageDetectedCount(ImageDetectedCount *detected)
+{
+	if(detected==NULL) return;
+	if(detected->next!=NULL)
+        {
+		freeImageDetectedCount(detected->next);
 		detected->next = NULL;
 	}
 	free(detected);
@@ -680,7 +776,7 @@ int categorize_image(ci_request_t * req)
 {
 classify_req_data_t *data = ci_service_data(req);
 ImageSession mySession;
-int minDim=0, ret=0;
+int minDim = 0, ret = 0;
 
     // Load the image from that filename
     mySession.origImage = cvLoadImage( data->body->filename, CV_LOAD_IMAGE_COLOR );
@@ -750,6 +846,207 @@ int minDim=0, ret=0;
 
     // return 0 to indicate successfull execution of the program
     return 0;
+}
+
+int categorize_external_image(ci_request_t * req)
+{
+classify_req_data_t *data = ci_service_data(req);
+ImageSession mySession;
+int minDim = 0, ret = 0;
+char buff[512];
+char CALL_OUT[CI_MAX_PATH + 1];
+int i = 0;
+pid_t child_pid;
+int wait_status;
+DIR *dirp;
+struct dirent *dp;
+char old_dir[PATH_MAX];
+char **localargs;
+ImageDetected *current_detected;
+ImageDetectedCount *nDetectedCount = NULL, *cDetectedCount = NULL, *detectedCount = NULL;
+ImageCategory *current_category = imageCategories;
+
+	data = ci_service_data(req);
+
+	snprintf(CALL_OUT, CI_MAX_PATH, "%s/EXT_IMAGE-XXXXXX", CLASSIFY_TMP_DIR);
+	data->external_body = malloc(sizeof(ci_simple_file_t));
+	strncpy(data->external_body->filename, mkdtemp(CALL_OUT), CI_MAX_PATH);
+
+	child_pid = fork();
+	if(child_pid == 0) // We are the child
+	{
+		i = 0;
+		while(externalclassifytypes[data->file_type].image_args[i] != NULL)
+			i++;
+		localargs = malloc(sizeof(char *) * (i + 2));
+		i = 0;
+		while(externalclassifytypes[data->file_type].image_args[i] != NULL)
+		{
+			ret = ci_format_text(req, externalclassifytypes[data->file_type].image_args[i], buff, 511, srv_classify_image_format_table);
+			buff[511] = '\0'; // Terminate for safety!
+			localargs[i + 1] = myStrDup(buff);
+			i++;
+		}
+		localargs[i + 1] = NULL;
+		localargs[0] = myStrDup(externalclassifytypes[data->file_type].image_program);
+		ret = execv(externalclassifytypes[data->file_type].image_program, localargs);
+	}
+	else if(child_pid < 0)
+	{
+		// Error condition
+		ci_debug_printf(3, "categorize_external_image: failed to fork\n");
+	}
+	else { // We are the original
+		waitpid(child_pid, &wait_status, 0);
+
+		getcwd(old_dir, PATH_MAX);
+		chdir(data->external_body->filename);
+
+		if ((dirp = opendir(data->external_body->filename)) == NULL)
+		{
+			ci_debug_printf(3, "categorize_external_image: couldn't open '%s'", data->external_body->filename);
+			return -1;
+		}
+
+		// Setup Session
+		ret = initImageSession(&mySession, req, imageCategories, "/categorize_external_image");
+		if(ret < 0)
+		{
+			addImageErrorHeaders(&mySession, ret);
+			deinitImageSession(&mySession);
+			unlink_directory(data->external_body->filename);
+			free(data->external_body);
+			return -1;
+		}
+
+		// Grab Referrer Classification before it is too late
+		getReferrerClassification(ci_http_request_get_header((ci_request_t *)req, "Referer"), &mySession.referrer_fhs_classification, &mySession.referrer_fnb_classification);
+
+		// Create detected count structure
+		while(current_category != NULL)
+		{
+			if((nDetectedCount = malloc(sizeof(ImageDetected))) == NULL)
+				return NO_MEMORY;
+			nDetectedCount->category = current_category;
+			nDetectedCount->count = 0;
+			nDetectedCount->next = NULL;
+			if(detectedCount == NULL)
+			{
+				detectedCount = nDetectedCount;
+				cDetectedCount = nDetectedCount;
+			}
+			else
+			{
+				cDetectedCount->next = nDetectedCount;
+				cDetectedCount = cDetectedCount->next;
+			}
+			current_category = current_category->next;
+		}
+
+		do {
+			errno = 0;
+			if ((dp = readdir(dirp)) != NULL)
+			{
+				if (strstr(dp->d_name, ".png") != NULL || strstr(dp->d_name, ".jpg") != NULL || strstr(dp->d_name, ".ppm") != NULL)
+				{
+					// Load the image from that filename
+					mySession.origImage = cvLoadImage( dp->d_name, CV_LOAD_IMAGE_COLOR );
+					// If Image is loaded succesfully, then:
+					if( mySession.origImage )
+					{
+						// test to see if we should bypass classification
+						minDim = mySession.origImage->width < mySession.origImage->height ? mySession.origImage->width : mySession.origImage->height;
+						if(ImageMinProcess >= minDim || minDim < 5)
+						{
+							ci_debug_printf(10, "categorize_external_image: Image too small for classification per configuration and/or sanity, letting pass.\n");
+							cvReleaseImage(&mySession.origImage);
+							mySession.origImage = NULL;
+						}
+						else {
+							getRightSize(&mySession);
+
+							// Obtain Read Lock
+							ci_thread_rwlock_rdlock(&imageclassify_rwlock);
+
+							// Detect
+							detect(&mySession);
+							doCoalesce(&mySession);
+
+							// Do statistics (keep worst for each class for now)
+							cDetectedCount = detectedCount;
+							current_detected = mySession.detected;
+							// Loop through categories
+							while (current_detected != NULL) {
+								// Loop the number of detected objects
+								if(current_detected->detected->total > cDetectedCount->count)
+									cDetectedCount->count = current_detected->detected->total;
+								cDetectedCount = cDetectedCount->next;
+								current_detected = current_detected->next;
+							}
+							// We won't use the detected again, clear it
+							clearImageDetected(mySession.detected);
+
+							// Release Read Lock
+							ci_thread_rwlock_unlock(&imageclassify_rwlock);
+						}
+					}
+					else {
+						ci_debug_printf(8, "categorize_external_image: Could not load image (%s) for classification.\n", data->body->filename);
+					}
+				}
+			}
+		} while (dp != NULL);
+		if (errno != 0)
+			perror("categorize_external_image: error reading directory");
+		else
+			(void) closedir(dirp);
+
+		chdir(old_dir);
+		// ADD HEADERS
+		createImageGroupClassificationHeaders(&mySession, detectedCount);
+
+		// Clean up
+		// Free Detected Count Structure
+		freeImageDetectedCount(detectedCount->next);
+
+		// Obtain Read Lock
+		ci_thread_rwlock_rdlock(&imageclassify_rwlock);
+
+		// Deinit Session
+		deinitImageSession(&mySession);
+
+		// Release Read Lock
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
+
+		// Cleanup directory and get rid of external body
+		unlink_directory(data->external_body->filename);
+		free(data->external_body);
+		data->external_body = NULL;
+
+		// return 0 to indicate successfull execution of the program
+		return 0;
+	}
+	return -1;
+}
+
+/***********************************************************************************/
+/*Template Functions                                                               */
+int fmt_srv_classify_image_source(ci_request_t *req, char *buf, int len, char *param)
+{
+    classify_req_data_t *data = ci_service_data(req);
+    if (! data->body->filename)
+        return 0;
+
+    return snprintf(buf, len, "%s", data->body->filename);
+}
+
+int fmt_srv_classify_image_destination_directory(ci_request_t *req, char *buf, int len, char *param)
+{
+    classify_req_data_t *data = ci_service_data(req);
+    if (! data->external_body->filename)
+        return 0;
+
+    return snprintf(buf, len, "%s/", data->external_body->filename);
 }
 
 /****************************************************************************************/

@@ -85,7 +85,7 @@ srv_classify.TextPrimarySecondary "adult.affairs" "social.dating" 1
 # srv_classify.ExternalTextMimeType (STDOUT|FILE) MIME_TYPE PROGRAM ARG1 ARG2 ARG3 ...
 # srv_classify.ExternalImageFileType FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...
 # srv_classify.ExternalImageMimeType MIME_TYPE PROGRAM ARG1 ARG2 ARG3 ...
-# NOTE: only ExternalTextFileType is actually supported currently
+# NOTE: ExternalTextMimeType is not supported currently
 # STDOUT means that the program will output to STDOUT
 # FILE means that you need to place %CLOUT as one of the args following
 #     the appropriate argument for the program in question, %CLOUT defines
@@ -93,11 +93,28 @@ srv_classify.TextPrimarySecondary "adult.affairs" "social.dating" 1
 # With either option, you need to place %CLIN (a variable holding the file to be
 #      converted) appropriately as one of the arguments.
 # NOTE NOTE NOTE: Any such program MUST output UTF-8
-# NOTE: Only one conversion should be provided for any given format, for things
-#     like PDF which can be converted to image and text, you can provide one for
-#     text and one for image. Once a conversion is done for a given format, it
-#     will not be done again, so providing multiple text format conversions for
-#     the same file format won't do any good.
+# NOTE: Only one conversion should be provided for any given format for text conversion.
 # NOTE: The FileTypes listed here should not appear in srv_classify.TextFileTypes
 srv_classify.ExternalTextFileType STDOUT PDF /usr/bin/pdftotext %CLIN -
 srv_classify.ExternalTextFileType FILE PDF /usr/bin/pdftotext %CLIN %CLOUT
+# To process SWF files for text, you can use http://www.swftools.org/
+srv_classify.ExternalImageFileType SWF swfstrings %CLIN
+
+# Some image formats must be converted externally before C-ICAP Classify
+# can classify them. This is done using one of the following:
+# srv_classify.ExternalImageFileType FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...
+# srv_classify.ExternalImageMimeType MIME_TYPE PROGRAM ARG1 ARG2 ARG3 ...
+# NOTE: ExternalImageMimeType is not supported currently
+# You need to place %CLIN (a variable holding the file to be
+#      converted) appropriately as one of the arguments. %CLDIROUT needs
+#      to be placed appropriately as the directory where the images will be written.
+# NOTE NOTE NOTE: Images must be exported with the appropriate types AND extensions.
+#      Supported types/extensions: .png .jpg .ppm
+# NOTE: Only one conversion should be provided for any given format for image conversion.
+# NOTE: The FileTypes listed here should not appear in srv_classify.ImageFileTypes
+# With all image extraction techniques, it may be wise to write wrapper scripts which will run
+#    fdupes %CLDIROUT -N -d to clean up duplicates.
+srv_classify.ExternalImageFileType PDF pdfimages -j %CLIN %CLDIROUT
+# To process SWF files for images, you will need to use swftools or the ilk,
+#    but you will need to write a wrapper around SWFExtract
+#    (to get IDs to then use -j and -p to extract)

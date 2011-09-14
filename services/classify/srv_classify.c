@@ -75,11 +75,13 @@ const wchar_t *WCNULL = L"\0";
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 extern int categorize_image(ci_request_t * req);
+extern int categorize_external_image(ci_request_t * req);
 extern int cfg_AddImageCategory(char *directive, char **argv, void *setdata);
 extern int cfg_ImageInterpolation(char *directive, char **argv, void *setdata);
 extern int cfg_coalesceOverlap(char *directive, char **argv, void *setdata);
 extern int cfg_imageCategoryCopies(char *directive, char **argv, void *setdata);
 extern void classifyImagePrepReload(void);
+int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata); // In this file
 #endif
 
 int must_classify(int type, classify_req_data_t * data);
@@ -95,7 +97,7 @@ static ci_off_t MAX_OBJECT_SIZE = 0;
 static struct ci_magics_db *magic_db = NULL;
 static int *classifytypes = NULL;
 static int *classifygroups = NULL;
-static external_conversion_t *externalclassifytypes = NULL;
+external_conversion_t *externalclassifytypes = NULL;
 
 /* TMP DATA DIR */
 char *CLASSIFY_TMP_DIR = NULL;
@@ -212,9 +214,6 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ExternalTextFileType", NULL, cfg_ExternalTextConversion, NULL},
 /*     {"ExternalTextMimeType", NULL, cfg_ExternalTextConversion, NULL}, // Mime type handling not yet implemented */
-// External Image handling is not yet implemented
-/*     {"ExternalImageFileType", NULL, cfg_ExternalConversion, NULL},
-     {"ExternalImageMimeType", NULL, cfg_ExternalConversion, NULL},*/
      {"TextPreload", NULL, cfg_DoTextPreload, NULL},
      {"TextCategory", NULL, cfg_AddTextCategory, NULL},
      {"TextCategoryDirectoryHS", NULL, cfg_AddTextCategoryDirectoryHS, NULL},
@@ -239,6 +238,8 @@ static struct ci_conf_entry conf_variables[] = {
      {"debugSaveMarked", &IMAGE_DEBUG_SAVE_MARKED, ci_cfg_set_int, NULL},
      {"debugDemonstrate", &IMAGE_DEBUG_DEMONSTRATE, ci_cfg_set_int, NULL},
      {"debugDemonstrateMasked", &IMAGE_DEBUG_DEMONSTRATE_MASKED, ci_cfg_set_int, NULL},
+     {"ExternalImageFileType", NULL, cfg_ExternalImageConversion, NULL},
+/*     {"ExternalImageMimeType", NULL, cfg_ExternalImageConversion, NULL}, // Mime type handling not yet implemented */
 #endif
      {NULL, NULL, NULL, NULL}
 };
@@ -340,16 +341,26 @@ void srvclassify_close_service()
          for(int i = 0; i < ci_magic_groups_num(magic_db); i++)
          {
              if(externalclassifytypes[i].mime_type) free(externalclassifytypes[i].mime_type);
-             if(externalclassifytypes[i].program) free(externalclassifytypes[i].program);
+             if(externalclassifytypes[i].text_program) free(externalclassifytypes[i].text_program);
+             if(externalclassifytypes[i].image_program) free(externalclassifytypes[i].image_program);
              k = 0;
-             if(externalclassifytypes[i].args)
+             if(externalclassifytypes[i].text_args)
              {
-                  while(externalclassifytypes[i].args[k] != NULL)
+                  while(externalclassifytypes[i].text_args[k] != NULL)
                   {
-                       free(externalclassifytypes[i].args[k]);
+                       free(externalclassifytypes[i].text_args[k]);
                        k++;
                   }
-                  free(externalclassifytypes[i].args);
+                  free(externalclassifytypes[i].text_args);
+             }
+             if(externalclassifytypes[i].image_args)
+             {
+                  while(externalclassifytypes[i].image_args[k] != NULL)
+                  {
+                       free(externalclassifytypes[i].image_args[k]);
+                       k++;
+                  }
+                  free(externalclassifytypes[i].image_args);
              }
          }
      }
@@ -567,7 +578,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE)
                classify_uncompress(req);
           #endif
-          if(make_utf32(req) == CI_OK) // We should only categorize text if this reteurns >= 0
+          if(make_utf32(req) == CI_OK) // We should only categorize text if this returns >= 0
           {
                make_pics_header(req);
                categorize_text(req);
@@ -579,12 +590,27 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           ci_debug_printf(8, "Classifying IMAGE from file\n");
           categorize_image(req);
      }
-#endif
-     else if (data->must_classify == EXTERNAL_TEXT || data->must_classify == EXTERNAL_TEXT_PIPE)
+     // The following may look screwy, but it is necessary so that both EXTERNAL IMAGE and EXTERNAL TEXT can be used
+     else if (data->must_classify & EXTERNAL_IMAGE || data->must_classify & EXTERNAL_TEXT || data->must_classify & EXTERNAL_TEXT_PIPE)
+     {
+          if (data->must_classify & EXTERNAL_IMAGE)
+          {
+               ci_debug_printf(8, "Classifying EXTERNAL IMAGE(S) from file\n");
+               categorize_external_image(req);
+          }
+          if (data->must_classify & EXTERNAL_TEXT || data->must_classify & EXTERNAL_TEXT_PIPE)
+          {
+               ci_debug_printf(8, "Classifying EXTERNAL TEXT from file\n");
+               categorize_external_text(req, data->must_classify);
+          }
+     }
+#else
+     else if (data->must_classify & EXTERNAL_TEXT || data->must_classify & EXTERNAL_TEXT_PIPE)
      {
           ci_debug_printf(8, "Classifying EXTERNAL TEXT from file\n");
           categorize_external_text(req, data->must_classify);
      }
+#endif
      else if (data->allow204 && !ci_req_sent_data(req)) {
           ci_debug_printf(7, "srvClassify module: Respond with allow 204\n");
           return CI_MOD_ALLOW204;
@@ -740,12 +766,12 @@ int wait_status;
 	if(classification_type == EXTERNAL_TEXT_PIPE)
 	{
 		maxwrite = CI_MAX_PATH;
-		strncat(CALL_OUT, externalclassifytypes[data->file_type].program, maxwrite);
+		strncat(CALL_OUT, externalclassifytypes[data->file_type].text_program, maxwrite);
 		CALL_OUT[CI_MAX_PATH] = '\0';
 		maxwrite -= strlen(CALL_OUT);
-		while(externalclassifytypes[data->file_type].args[i] != NULL)
+		while(externalclassifytypes[data->file_type].text_args[i] != NULL)
 		{
-			ret = ci_format_text(req, externalclassifytypes[data->file_type].args[i], buff, 511, srv_classify_format_table);
+			ret = ci_format_text(req, externalclassifytypes[data->file_type].text_args[i], buff, 511, srv_classify_format_table);
 			buff[511] = '\0'; // Terminate for safety!
 			strncat(CALL_OUT, " ", maxwrite);
 			CALL_OUT[CI_MAX_PATH] = '\0';
@@ -758,6 +784,7 @@ int wait_status;
 		CALL_OUT[CI_MAX_PATH] = '\0';
 		if (!(conversion_in = popen(CALL_OUT, "r"))) {
 			// Do error handling
+			ci_debug_printf(3, "categorize_external_text: failed to popen\n");
 		}
 
 		/* read the output of of conversion, one line at a time */
@@ -780,25 +807,25 @@ int wait_status;
 		if(child_pid == 0) // We are the child
 		{
 			i = 0;
-			while(externalclassifytypes[data->file_type].args[i] != NULL)
+			while(externalclassifytypes[data->file_type].text_args[i] != NULL)
 				i++;
 			localargs = malloc(sizeof(char *) * (i + 2));
 			i = 0;
-			while(externalclassifytypes[data->file_type].args[i] != NULL)
+			while(externalclassifytypes[data->file_type].text_args[i] != NULL)
 			{
-				ret = ci_format_text(req, externalclassifytypes[data->file_type].args[i], buff, 511, srv_classify_format_table);
+				ret = ci_format_text(req, externalclassifytypes[data->file_type].text_args[i], buff, 511, srv_classify_format_table);
 				buff[511] = '\0'; // Terminate for safety!
 				localargs[i + 1] = myStrDup(buff);
-				ci_debug_printf(1, "localargs %d: %s\n", i, localargs[i + 1]);
 				i++;
 			}
-			localargs[i] = NULL;
-			localargs[0] = myStrDup(externalclassifytypes[data->file_type].program);
-			ret = execv(externalclassifytypes[data->file_type].program, localargs);
+			localargs[i + 1] = NULL;
+			localargs[0] = myStrDup(externalclassifytypes[data->file_type].text_program);
+			ret = execv(externalclassifytypes[data->file_type].text_program, localargs);
 		}
 		else if(child_pid < 0)
 		{
 			// Error condition
+			ci_debug_printf(3, "categorize_external_text: failed to fork\n");
 		}
 		else { // We are the original
 			waitpid(child_pid, &wait_status, 0);
@@ -1541,7 +1568,14 @@ int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
      if(strstr(directive, "FileType") != NULL)
      {
           if ((id = ci_get_data_type_id(magic_db, argv[1])) >= 0)
-               externalclassifytypes[id].data_type = type;
+          {
+               if(externalclassifytypes[id].data_type & type)
+               {
+                    ci_debug_printf(1, "%s: already configurative to handle %s\n", directive, argv[1]);
+                    return 0;
+               }
+               else externalclassifytypes[id].data_type |= type;
+          }
           else
                ci_debug_printf(1, "Unknown data type %s \n", argv[1]);
      }
@@ -1550,23 +1584,75 @@ int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
      if(id >= 0)
      {
           // Handle Program name
-          externalclassifytypes[id].program = myStrDup(argv[2]);
+          externalclassifytypes[id].text_program = myStrDup(argv[2]);
 
           // Process argument list
           i = 0;
           while(argv[3 + i] != NULL)
                i++;
-          externalclassifytypes[id].args = malloc(sizeof(char *) * (i + 1));
+          externalclassifytypes[id].text_args = malloc(sizeof(char *) * (i + 1));
           for(k = 0; k < i; k++)
           {
-              externalclassifytypes[id].args[k] = myStrDup(argv[3 + k]);
+              externalclassifytypes[id].text_args[k] = myStrDup(argv[3 + k]);
           }
-          externalclassifytypes[id].args[k] = NULL;
+          externalclassifytypes[id].text_args[k] = NULL;
      }
 
-     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s, receiving via: %s )\n", directive, argv[2], argv[1], argv[0]);
+     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s, receiving via: %s)\n", directive, argv[2], argv[1], argv[0]);
      return 1;
 }
+
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata)
+{
+     int i, id = -1, k;
+     int type = NO_CLASSIFY;
+     if(argv[0] == NULL || argv[1] == NULL) {
+          ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
+          if(strstr(directive, "Text") != NULL) {
+               ci_debug_printf(1, "Format: %s FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...\n", directive);
+          }
+          return 0;
+     }
+     type = EXTERNAL_IMAGE;
+
+     if(strstr(directive, "FileType") != NULL)
+     {
+          if ((id = ci_get_data_type_id(magic_db, argv[0])) >= 0)
+          {
+               if(externalclassifytypes[id].data_type & type)
+               {
+                    ci_debug_printf(1, "%s: already configurative to handle %s\n", directive, argv[0]);
+                    return 0;
+               }
+               else externalclassifytypes[id].data_type |= type;
+          }
+          else
+               ci_debug_printf(1, "Unknown data type %s \n", argv[0]);
+     }
+     // FIXME: Handle Mime Types here
+
+     if(id >= 0)
+     {
+          // Handle Program name
+          externalclassifytypes[id].image_program = myStrDup(argv[1]);
+
+          // Process argument list
+          i = 0;
+          while(argv[2 + i] != NULL)
+               i++;
+          externalclassifytypes[id].image_args = malloc(sizeof(char *) * (i + 1));
+          for(k = 0; k < i; k++)
+          {
+              externalclassifytypes[id].image_args[k] = myStrDup(argv[2 + k]);
+          }
+          externalclassifytypes[id].image_args[k] = NULL;
+     }
+
+     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s)\n", directive, argv[1], argv[0]);
+     return 1;
+}
+#endif
 
 char *myStrDup(char *string)
 {
