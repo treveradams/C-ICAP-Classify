@@ -154,7 +154,7 @@ int offsetFixup;
 			offsetFixup = read(fbc_file, &header->version, FBC_HEADERv1_VERSION_SIZE);
 			if(offsetFixup < FBC_HEADERv1_VERSION_SIZE) lseek64(fbc_file, -offsetFixup, SEEK_CUR);
 		} while(offsetFixup > 0 && offsetFixup < FBC_HEADERv1_VERSION_SIZE);
-		if(header->version != FBC_FORMAT_VERSION)
+		if(header->version != FBC_FORMAT_VERSION && header->version != OLD_FBC_FORMAT_VERSION )
 		{
 			ci_debug_printf(10, "Wrong version of FastNaiveBayes file\n");
 			return -2;
@@ -168,6 +168,21 @@ int offsetFixup;
 			ci_debug_printf(10, "FastNaiveBayes file of incompatible endianness\n");
 			return -3;
 		}
+
+		if(header->version >= 2) // Make sure we have a proper WCS
+		{
+			do {
+				offsetFixup = read(fbc_file, &header->WCS, FBC_HEADERv2_WCS_SIZE);
+				if(offsetFixup < FBC_HEADERv2_WCS_SIZE) lseek64(fbc_file, -offsetFixup, SEEK_CUR);
+			} while(offsetFixup > 0 && offsetFixup < FBC_HEADERv2_WCS_SIZE);
+			if(header->WCS != sizeof(wchar_t))
+			{
+				ci_debug_printf(10, "FastNaiveBayes file of incompatible wchar_t format\n");
+				return -6;
+			}
+		}
+		else ci_debug_printf(5, "Loading old FastNaiveBayes file\n");
+
 		if(read(fbc_file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE) != FBC_HEADERv1_RECORDS_QTY_SIZE)
 		{
 			ci_debug_printf(10, "FastNaiveBayes file has invalid header: no records count\n");
@@ -184,6 +199,7 @@ int i;
 	memcpy(&header->ID, "FNB", 3);
 	header->version = FBC_FORMAT_VERSION;
 	header->UBM = UNICODE_BYTE_MARK;
+	header->WCS = sizeof(wchar_t);
 	header->records = 0;
 	i = ftruncate(file, 0);
 	lseek64(file, 0, SEEK_SET);
@@ -201,6 +217,11 @@ int i;
 		i = write(file, &header->UBM, FBC_HEADERv1_UBM_SIZE);
 		if(i < FBC_HEADERv1_UBM_SIZE) lseek64(file, -i, SEEK_CUR);
         } while (i >= 0 && i < FBC_HEADERv1_UBM_SIZE);
+
+	do {
+		i = write(file, &header->WCS, FBC_HEADERv2_WCS_SIZE);
+		if(i < FBC_HEADERv2_WCS_SIZE) lseek64(file, -i, SEEK_CUR);
+        } while (i >= 0 && i < FBC_HEADERv2_WCS_SIZE);
 
         do {
 		i = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
@@ -246,8 +267,11 @@ uint16_t j;
 int writecheck;
 
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-//	ftruncate64(file, 11);
-//	lseek64(file, 11, SEEK_SET);
+	if(header->WCS != sizeof(wchar_t) || header->version != FBC_FORMAT_VERSION)
+	{
+		ci_debug_printf(1, "writeFBCHashes cannot write to a different version file or to a file with a different WCS!\n");
+		return -2;
+	}
 	if(hashes_list->used) // check before we write
 	{
 		for(i = 0; i < hashes_list->used; i++)
@@ -272,7 +296,7 @@ int writecheck;
 		/* Ok, have written hashes, now save new count */
 //		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		header->records = qty;
-		lseek64(file, 7, SEEK_SET);
+		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
@@ -288,8 +312,8 @@ uint32_t i;
 const uint_least32_t ZERO_COUNT = 0;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	i = ftruncate64(file, 12);
-	lseek64(file, 11, SEEK_SET);
+	i = ftruncate64(file, 14);
+	lseek64(file, 13, SEEK_SET);
 	if(hashes_list->used) // check before we write
 	{
 		for(i = 0; i < hashes_list->used; i++)
@@ -305,7 +329,7 @@ int writecheck;
 		}
 		/* Ok, have written hashes, now save new count */
 		header->records = hashes_list->used;
-		lseek64(file, 7, SEEK_SET);
+		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
@@ -850,7 +874,11 @@ double scale = 0;
 			}
 			processed++;
 			// Do bit conservation by occassionally maximizing values
-			if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
+			if(processed == KEYS_PROCESS_BEFORE_RESCALE)
+			// This used to be if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
+			// It has been changed to do a simple compare instead of a division and compare.
+			// The only downside is it cannot now be used accurately to make sure we processed
+			// more than x hashes for a trusted result.
 			{
 				// Find class with highest naiveBayesResult
 				for (cls = 0; cls < NBCategories.used; cls++)
@@ -869,6 +897,7 @@ double scale = 0;
 				{
 					categories[cls].naiveBayesResult *= scale;
 				}
+				processed = 0;
 			}
 		}
 	}

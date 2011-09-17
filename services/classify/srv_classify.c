@@ -163,8 +163,8 @@ void set_istag(ci_service_xdata_t *srv_xdata);
 int categorize_text(ci_request_t *req);
 int categorize_external_text(ci_request_t * req, int classification_type);
 char *findCharset(const char *input, int64_t);
-int make_utf32(ci_request_t *req);
-int make_utf32_from_buf(ci_request_t * req, ci_membuf_t *input);
+int make_wchar(ci_request_t *req);
+int make_wchar_from_buf(ci_request_t * req, ci_membuf_t *input);
 int classify_uncompress(ci_request_t *req);
 static void addTextErrorHeaders(ci_request_t *req, int error, char *extra_info);
 /*External functions*/
@@ -578,7 +578,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE)
                classify_uncompress(req);
           #endif
-          if(make_utf32(req) == CI_OK) // We should only categorize text if this returns >= 0
+          if(make_wchar(req) == CI_OK) // We should only categorize text if this returns >= 0
           {
                make_pics_header(req);
                categorize_text(req);
@@ -841,7 +841,7 @@ int wait_status;
 	}
 
 	// do classification
-	make_utf32_from_buf(req, tempbody);
+	make_wchar_from_buf(req, tempbody);
 	return categorize_text(req);
 }
 
@@ -873,9 +873,7 @@ classify_req_data_t *data = ci_service_data(req);
 	return 1;
 }
 
-/* This function makes the assumption, as does much of the rest
-   of the program, that wchar_t is UTF-32 for the correct byte-order. */
-int make_utf32(ci_request_t * req)
+int make_wchar(ci_request_t * req)
 {
 char *charSet;
 char *buffer, *tempbuffer;
@@ -898,7 +896,7 @@ ci_off_t content_size = 0;
           data->uncompressedbody = ci_membuf_new_sized(content_size + 1);
           if (!data->uncompressedbody)
           {
-               ci_debug_printf(1, "make_utf32: Unable to allocate memory for conversion to UTF-32 for Text Classification (%s)!\n", strerror(errno));
+               ci_debug_printf(1, "make_wchar: Unable to allocate memory for conversion to WCHAR_T for Text Classification (%s)!\n", strerror(errno));
                addTextErrorHeaders(req, NO_MEMORY, NULL);
                return CI_ERROR;
            }
@@ -954,17 +952,17 @@ ci_off_t content_size = 0;
      convert = iconv_open("WCHAR_T", charSet); // UTF-32//TRANSLIT
      if(convert == (iconv_t)-1)
      {
-          ci_debug_printf(2, "No conversion from |%s| to UTF-32.\n", charSet);
+          ci_debug_printf(2, "No conversion from |%s| to WCHAR_T.\n", charSet);
           addTextErrorHeaders(req, NO_CHARSET, charSet);
           free(charSet);
           return CI_ERROR; // no charset conversion available, so bail with error
      }
      buffer = data->uncompressedbody->buf;
-     tempbody = ci_membuf_new_sized((content_size + 33) * sizeof(wchar_t)); // 33 = 1 for termination, 32 for silly fudgefactor
+     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudgefactor
      outputBuffer = (char *) tempbody->buf;
-     outBytes = (content_size + 32) * sizeof(wchar_t); // 32 is the 32 above
+     outBytes = (content_size + 32) * UTF32_CHAR_SIZE; // 32 is the 32 above
      inBytes = content_size;
-     ci_debug_printf(10, "Begin conversion from |%s| to UTF-32\n", charSet);
+     ci_debug_printf(10, "Begin conversion from |%s| to WCHAR_T\n", charSet);
      while(inBytes)
      {
           status=iconv(convert, &buffer, &inBytes, &outputBuffer, &outBytes);
@@ -974,7 +972,7 @@ ci_off_t content_size = 0;
                    case EILSEQ: // Invalid character, keep going
                          buffer++;
                          inBytes--;
-                         ci_debug_printf(5, "Bad sequence in conversion from %s to UTF-32.\n", charSet);
+                         ci_debug_printf(5, "Bad sequence in conversion from %s to WCHAR_T.\n", charSet);
                          break;
                    case EINVAL:
                          // Treat it the same as E2BIG since this is a windowed buffer.
@@ -983,7 +981,7 @@ ci_off_t content_size = 0;
                          inBytes = 0;
                          break;
                    default:
-                         ci_debug_printf(2, "Oh, crap, iconv gave us an error, which isn't documented, which we couldn't handle in srv_classify.c: make_utf8.\n");
+                         ci_debug_printf(2, "Oh, crap, iconv gave us an error, which isn't documented, which we couldn't handle in srv_classify.c: make_wchar.\n");
                          status = -10;
                          break;
                }
@@ -996,22 +994,20 @@ ci_off_t content_size = 0;
 
      // save our data
      tempbody->endpos = ((content_size + 32) * sizeof(wchar_t)) - outBytes; // This formula MUST be the same as setting outBytes above the conversion loop - outBytes
+									    // Except that it uses wchar_t now because it is safe to do so!
      // Append a Wide Character NULL (WCNULL) here as the classifier needs the NULL
-     ci_membuf_write(tempbody, (char *) WCNULL, 4, 1);
+     ci_membuf_write(tempbody, (char *) WCNULL, sizeof(wchar_t), 1);
      ci_membuf_free(data->uncompressedbody);
      data->uncompressedbody = tempbody;
      tempbody = NULL;
 
      //cleanup
-     ci_debug_printf(7, "Conversion from |%s| to UTF-32 complete.\n", charSet);
+     ci_debug_printf(7, "Conversion from |%s| to WCHAR_T complete.\n", charSet);
      free(charSet);
      return CI_OK;
 }
 
-/* This function makes the assumption, as does much of the rest
-   of the program, that wchar_t is UTF-32 for the correct byte-order.
-   Also, all input to this function must be UTF-8. */
-int make_utf32_from_buf(ci_request_t * req, ci_membuf_t *input)
+int make_wchar_from_buf(ci_request_t * req, ci_membuf_t *input)
 {
 char *charSet = "UTF-8";
 char *buffer;
@@ -1028,17 +1024,17 @@ ci_off_t content_size = 0;
      convert = iconv_open("WCHAR_T", charSet); // UTF-32//TRANSLIT
      if(convert == (iconv_t)-1)
      {
-          ci_debug_printf(2, "No conversion from |%s| to UTF-32.\n", charSet);
+          ci_debug_printf(2, "No conversion from |%s| to WCHAR_T.\n", charSet);
           addTextErrorHeaders(req, NO_CHARSET, charSet);
           return CI_ERROR; // no charset conversion available, so bail with error
      }
      content_size = input->endpos;
      buffer = input->buf;
-     tempbody = ci_membuf_new_sized((content_size + 33) * sizeof(wchar_t)); // 33 = 1 for termination, 32 for silly fudgefactor
+     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudgefactor
      outputBuffer = (char *) tempbody->buf;
      outBytes = (content_size + 32) * sizeof(wchar_t); // 32 is the 32 above
      inBytes = content_size;
-     ci_debug_printf(10, "Begin conversion from |%s| to UTF-32\n", charSet);
+     ci_debug_printf(10, "Begin conversion from |%s| to WCHAR_T\n", charSet);
      while(inBytes)
      {
           status=iconv(convert, &buffer, &inBytes, &outputBuffer, &outBytes);
@@ -1048,7 +1044,7 @@ ci_off_t content_size = 0;
                    case EILSEQ: // Invalid character, keep going
                          buffer++;
                          inBytes--;
-                         ci_debug_printf(5, "Bad sequence in conversion from %s to UTF-32.\n", charSet);
+                         ci_debug_printf(5, "Bad sequence in conversion from %s to WCHAR_T.\n", charSet);
                          break;
                    case EINVAL:
                          // Treat it the same as E2BIG since this is a windowed buffer.
@@ -1057,7 +1053,7 @@ ci_off_t content_size = 0;
                          inBytes = 0;
                          break;
                    default:
-                         ci_debug_printf(2, "Oh, crap, iconv gave us an error, which isn't documented, which we couldn't handle in srv_classify.c: make_utf8.\n");
+                         ci_debug_printf(2, "Oh, crap, iconv gave us an error, which isn't documented, which we couldn't handle in srv_classify.c: make_wchar_from_buf.\n");
                          status = -10;
                          break;
                }
@@ -1070,14 +1066,15 @@ ci_off_t content_size = 0;
 
      // save our data
      tempbody->endpos = ((content_size + 32) * sizeof(wchar_t)) - outBytes; // This formula MUST be the same as setting outBytes above the conversion loop - outBytes
+									    // Except that it uses wchar_t now because it is safe to do so!
      // Append a Wide Character NULL (WCNULL) here as the classifier needs the NULL
-     ci_membuf_write(tempbody, (char *) WCNULL, 4, 1);
+     ci_membuf_write(tempbody, (char *) WCNULL, sizeof(wchar_t), 1);
      ci_membuf_free(input);
      data->uncompressedbody = tempbody;
      tempbody = NULL;
 
      //cleanup
-     ci_debug_printf(7, "Conversion from |%s| to UTF-32 complete.\n", charSet);
+     ci_debug_printf(7, "Conversion from |%s| to WCHAR_T complete.\n", charSet);
      return CI_OK;
 }
 
@@ -1192,7 +1189,7 @@ int classify_uncompress(ci_request_t * req)
      strm.next_out = (Bytef *) outputBuffer;
      ret=inflate(&strm, Z_FINISH);
      ci_membuf_write(data->uncompressedbody, outputBuffer, MAX_WINDOW - strm.avail_out, 0);
-    // DO NOT APPEND NULL HERE AS make_utf32 (iconv) SEEMS TO CAUSE CORRUPTION / CRASHES WITH A NULL
+    // DO NOT APPEND NULL HERE AS make_wchar (iconv) SEEMS TO CAUSE CORRUPTION / CRASHES WITH A NULL
 
      // cleanup everything
      inflateEnd(&strm);
@@ -1278,7 +1275,7 @@ char header[myMAX_HEADER + 1];
 			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: ZLIB FAILURE");
 			break;
 		case NO_CHARSET:
-			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: CANNOT CONVERT %s TO UTF-32", (extra_info ? extra_info : "UNKNOWN"));
+			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: CANNOT CONVERT %s TO WCHAR_T", (extra_info ? extra_info : "UNKNOWN"));
 			break;
 		default:
 			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: UNKNOWN ERROR");

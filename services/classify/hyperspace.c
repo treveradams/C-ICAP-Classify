@@ -116,7 +116,7 @@ int offsetFixup;
 			offsetFixup = read(fhs_file, &header->version, FHS_HEADERv1_VERSION_SIZE);
 			if(offsetFixup < FHS_HEADERv1_VERSION_SIZE) lseek64(fhs_file, -offsetFixup, SEEK_CUR);
 		} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv1_VERSION_SIZE);
-		if(header->version != HYPERSPACE_FORMAT_VERSION)
+		if(header->version != HYPERSPACE_FORMAT_VERSION && header->version != OLD_HYPERSPACE_FORMAT_VERSION)
 		{
 			ci_debug_printf(10, "Wrong version of FastHyperSpace file\n");
 			return -2;
@@ -130,6 +130,19 @@ int offsetFixup;
 			ci_debug_printf(10, "FastHyperSpace file of incompatible endianness\n");
 			return -3;
 		}
+		if(header->version >= 2) // Make sure we have a proper WCS
+		{
+			do {
+				offsetFixup = read(fhs_file, &header->WCS, FHS_HEADERv2_WCS_SIZE);
+				if(offsetFixup < FHS_HEADERv2_WCS_SIZE) lseek64(fhs_file, -offsetFixup, SEEK_CUR);
+			} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv2_WCS_SIZE);
+			if(header->WCS != sizeof(wchar_t))
+			{
+				ci_debug_printf(10, "FastHyperSpace file of incompatible wchar_t format\n");
+				return -6;
+			}
+		}
+		else ci_debug_printf(5, "Loading old FastHyperSpace file\n");
 		if(read(fhs_file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE) != FHS_HEADERv1_RECORDS_QTY_SIZE)
 		{
 			ci_debug_printf(10, "FastHyperSpace file has invalid header: no records count\n");
@@ -146,6 +159,7 @@ int i;
 	memcpy(&header->ID, "FHS", 3);
 	header->version = HYPERSPACE_FORMAT_VERSION;
 	header->UBM = UNICODE_BYTE_MARK;
+	header->WCS = sizeof(wchar_t);
 	header->records=0;
 	i = ftruncate(file, 0);
 	lseek64(file, 0, SEEK_SET);
@@ -163,6 +177,11 @@ int i;
 		i = write(file, &header->UBM, FHS_HEADERv1_UBM_SIZE);
 		if(i < FHS_HEADERv1_UBM_SIZE) lseek64(file, -i, SEEK_CUR);
         } while (i >= 0 && i < FHS_HEADERv1_UBM_SIZE);
+
+        do {
+		i = write(file, &header->WCS, FHS_HEADERv2_WCS_SIZE);
+		if(i < FHS_HEADERv2_WCS_SIZE) lseek64(file, -i, SEEK_CUR);
+        } while (i >= 0 && i < FHS_HEADERv2_WCS_SIZE);
 
         do {
 		i = write(file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE);
@@ -204,6 +223,11 @@ int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
 {
 uint16_t i;
 int writecheck;
+	if(header->WCS != sizeof(wchar_t) || header->version != HYPERSPACE_FORMAT_VERSION)
+	{
+		ci_debug_printf(1, "writeFHSHashes cannot write to a different version file or to a file with a different WCS!\n");
+		return -2;
+	}
 	lseek64(file, 0, SEEK_END);
 	if(hashes_list->used) // check before we write
 	{
@@ -220,7 +244,7 @@ int writecheck;
 		}
 		/* Ok, have written hashes, now save new count */
 		header->records = header->records+1;
-		lseek64(file, 7, SEEK_SET);
+		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
@@ -250,7 +274,7 @@ int writecheck;
 		}
 		/* Ok, have written hashes, now save new count */
 		header->records = header->records+1;
-		lseek64(file, 7, SEEK_SET);
+		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);

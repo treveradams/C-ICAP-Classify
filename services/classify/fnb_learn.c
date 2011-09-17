@@ -120,7 +120,7 @@ int32_t realLen;
 	read(data, tempData, stat_buf.st_size);
 	close(data);
 	tempData[stat_buf.st_size] = '\0';
-	myData=malloc((stat_buf.st_size+1) * sizeof(wchar_t));
+	myData=malloc((stat_buf.st_size+1) * UTF32_CHAR_SIZE);
 	realLen=mbstowcs(myData, tempData, stat_buf.st_size);
 	if(realLen!=-1) myData[realLen] = L'\0';
 	else printf("Bad character data in %s\n", input_file);

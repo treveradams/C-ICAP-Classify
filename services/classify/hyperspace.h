@@ -19,16 +19,18 @@
 
 #define MAX_HYPSERSPACE_CATEGORY_NAME 100
 
-#define HYPERSPACE_FORMAT_VERSION 1
+#define OLD_HYPERSPACE_FORMAT_VERSION 1
+#define HYPERSPACE_FORMAT_VERSION 2
 #define UNICODE_BYTE_MARK 0xFEFF
 
 // Fast Hyper Space File Format Version 1 is as follows
 // Header
-// BYTE 1 2 3 4 5 6 7 8 9
-//      ID    Ver UBM Qty
+// BYTE 1 2 3 4 5 6 7 8 9 10 11
+//      ID    Ver UBM WCS Qty
 //      F H S
 // ID = 3 characters, Ver UINT16_T, UBM is Unicode byte mark se we know if we
 // have the correct byte ordering (hash function is not endian neutral)
+// WCS is UINT16_T sizeof(wchar_t) -- Version 1 does not have this!
 // Qty is UINT16_T, this is the number of records in the file
 // Records
 // BYTE 1 2 3 4 5 6 7 8 9 10 .... END
@@ -40,6 +42,7 @@
 #define FHS_HEADERv1_ID_SIZE 3
 #define FHS_HEADERv1_VERSION_SIZE sizeof(uint_least16_t)
 #define FHS_HEADERv1_UBM_SIZE sizeof(uint_least16_t)
+#define FHS_HEADERv2_WCS_SIZE sizeof(uint_least16_t)
 #define FHS_HEADERv1_RECORDS_QTY_SIZE sizeof(uint_least16_t)
 #define FHS_HEADERv1_TOTAL_SIZE (FHS_HEADERv1_ID_SIZE + FHS_HEADERv1_VERSION_SIZE + FHS_HEADERv1_UBM_SIZE + FHS_HEADERv1_RECORDS_QTY_SIZE)
 #define FHS_v1_QTY_SIZE sizeof(uint_least16_t)
@@ -52,6 +55,7 @@ typedef struct {
 	char ID[3];
 	uint_least16_t version;
 	uint_least16_t UBM;
+	uint_least16_t WCS;
 	uint_least16_t records;
 } FHS_HEADERv1;
 

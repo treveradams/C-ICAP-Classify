@@ -125,3 +125,17 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
  extern void (*__log_error)(void *req, const char *format,... );
 #define ci_debug_printf(i, args...) printf(args);
 #endif
+
+#if ! defined(MARKUP_SIZEOFWCHAR)
+#if __SIZEOF_WCHAR_T__ == 4 || __WCHAR_MAX__ > 0x10000
+#define SIZEOFWCHAR 4
+#else
+#define SIZEOFWCHAR 2
+#endif
+#endif
+
+// The following is ONLY to be used for allocating buffers for character
+// conversion to wchar_t whether or not wchar_t is UTF-16 or UTF-32 we need to
+// allocate 4 bytes per input character just in case.
+// DO NOT USE THIS FOR ANYTHING ELSE
+#define UTF32_CHAR_SIZE 4

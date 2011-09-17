@@ -49,6 +49,10 @@
 #include "htmlentities.h"
 #include "hash.h"
 
+#if SIZEOFWCHAR == 2
+const uint32_t LEAD_OFFSET = 0xD800 - (0x10000 >> 10); // For decimal and hexadecimal entity conversion to wchar_t
+#endif
+
 regex_t htmlFinder, superFinder, commentFinder, imageFinder, title1, title2, alt1, alt2;
 regex_t metaFinder, metaDescription, metaKeyword, metaContent, currencyFinder;
 regex_t headFinder, charsetFinder;
@@ -535,6 +539,9 @@ int32_t entity;
 wchar_t *unicode_end;
 int metacount;
 int xi = 0;
+#if SIZEOFWCHAR < 4
+uint32_t tempUTF32CHAR;
+#endif
 
 	current = myHead->head;
 	while(current != NULL) // scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
@@ -737,14 +744,71 @@ int xi = 0;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				unicode_end = myData + doubleMatch[1].rm_eo;
 				if(myData[doubleMatch[0].rm_so + 2] == L'X' || myData[doubleMatch[0].rm_so + 2] == L'x') { // Check for hex
+#if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
+#else
+					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 16);
+#ifdef LITTLE_ENDIAN
+					// This algorithm, repeated many times is from http://unicode.org/faq/utf_bom.html#utf16-4 adjusted for endianness
+					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
+					{
+						unicode_entity[0] = tempUTF32CHAR;
+						unicode_entity[1] = L'\0'
+					}
+					else {
+						unicode_entity[1] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
+						unicode_entity[0] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
+						unicode_entity[2] = L'\0'
+					}
+#else ifdef BIG_ENDIAN
+					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
+					{
+						unicode_entity[0] = tempUTF32CHAR;
+						unicode_entity[1] = L'\0'
+					}
+					else {
+						unicode_entity[0] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
+						unicode_entity[1] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
+						unicode_entity[2] = L'\0'
+					}
+#endif
+#endif
 //					ci_debug_printf(10,"Converting Hexadecimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
 				else {
+#if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
+#else
+					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
+#ifdef LITTLE_ENDIAN
+					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
+					{
+						unicode_entity[0] = tempUTF32CHAR;
+						unicode_entity[1] = L'\0'
+					}
+					else {
+						unicode_entity[1] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
+						unicode_entity[0] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
+						unicode_entity[2] = L'\0'
+					}
+#else ifdef BIG_ENDIAN
+					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
+					{
+						unicode_entity[0] = tempUTF32CHAR;
+						unicode_entity[1] = L'\0'
+					}
+					else {
+						unicode_entity[0] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
+						unicode_entity[1] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
+						unicode_entity[2] = L'\0'
+					}
+#endif
+#endif
 //					ci_debug_printf(10, "Converting Decimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
+#if SIZEOFWCHAR == 4
                                 unicode_entity[1] = L'\0';
+#endif
 				regexReplace(myHead, current, &singleMatch[0], unicode_entity, wcslen(unicode_entity), 0); // We are replacing characters, do not add padding!
 			}
 
@@ -808,7 +872,7 @@ wchar_t *myData = NULL;
 regoff_t currentOffset = 0, morematches = 0;
 myRegmatch_t *current = myHead->head;
 regmatch_t matches[5];
-uint32_t i, j, pos;
+uint32_t i, j, pos, modPos;
 wchar_t *placeHolder = L"***";
 uint32_t prime1, prime2;
 uint32_t finalA, finalB;
@@ -823,7 +887,7 @@ int foundCJK = 0;
 		while (currentOffset < current->rm_eo && !iswgraph(myData[currentOffset]))
 			currentOffset++;
 		matches[i].rm_so = currentOffset;
-		foundCJK=0;
+		foundCJK = 0;
 		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK == 0)
 		{
 			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) ||
@@ -850,21 +914,22 @@ int foundCJK = 0;
 	if(i < 5) return;
 	prime1 = HASHSEED1;
 	prime2 = HASHSEED2;
-	hashword2((uint32_t *) myData+matches[0].rm_so, matches[0].rm_eo - matches[0].rm_so, &prime1, &prime2);
+	lookup3_hashfunction((uint32_t *) myData+matches[0].rm_so, matches[0].rm_eo - matches[0].rm_so, &prime1, &prime2);
 	pos = 0;
 	do {
 		for(i = 1; i < 5; i++)
 		{
-			finalA=prime1;
-			finalB=prime2;
-			if(i > 1) hashword2((uint32_t *) placeHolder, i-1, &finalA, &finalB);
-			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
+			finalA = prime1;
+			finalB = prime2;
+			if(i > 1) lookup3_hashfunction((uint32_t *) placeHolder, i - 1, &finalA, &finalB);
+			modPos = (pos + i) % 5;
+			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
 /*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so);*/
+				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/
 			hashes_list->used++;
 		}
 		// skip non-graphical characters ([[:graph:]]+)
@@ -909,14 +974,14 @@ int foundCJK = 0;
 					return;
 				}
 			}
-			hashword2((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
+			lookup3_hashfunction((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
 		}
 	} while(morematches > 0);
 	// compute remaining hashes
-	for(j=4; j>0; j--)
+	for(j = 4; j > 0; j--)
 	{
 		pos++;
-		if(pos > 4) pos=0;
+		if(pos > 4) pos = 0;
 		if(hashes_list->used == hashes_list->slots)
 		{
 			makeSortedUniqueHashes(hashes_list);
@@ -926,14 +991,15 @@ int foundCJK = 0;
 		{
 			finalA = prime1;
 			finalB = prime2;
-			if(i > 1) hashword2((uint32_t *) placeHolder, i-1, &finalA, &finalB);
-			hashword2((uint32_t *) myData+matches[(pos+i)%5].rm_so, matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, &finalA, &finalB);
+			if(i > 1) lookup3_hashfunction((uint32_t *) placeHolder, i - 1, &finalA, &finalB);
+			modPos = (pos + i) % 5;
+			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
 /*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[(pos+i)%5].rm_eo - matches[(pos+i)%5].rm_so, myData+matches[(pos+i)%5].rm_so);*/
+				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/
 			hashes_list->used++;
 		}
 	}
