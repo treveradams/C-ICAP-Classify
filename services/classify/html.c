@@ -140,7 +140,7 @@ wchar_t myRegex[PATH_MAX+1];
 //	tre_regwcomp(&htmlFinder, L"(<[^>]*>([[:space:]]*))+", REG_EXTENDED);
 	tre_regwcomp(&htmlFinder, L"((/?<P[^>]*>[[:space:]]*)|(</?BR[^>]*>[[:space:]]*))|((<[^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)((</?P[^>]*>)|(</?BR[^>]*>)|[[:space:]]*))", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&insaneFinder, L"[^[:graph:][:space:]]+", REG_EXTENDED);
-	tre_regwcomp(&entityFinder, L"&([^[:space:];&]+);", REG_EXTENDED | REG_ICASE);
+	tre_regwcomp(&entityFinder, L"&(#?[[:alnum:]]+);", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&numericentityFinder, L"^#x?([[:xdigit:]]+$)", REG_EXTENDED | REG_ICASE);
 	// The following two commented were replaced by superFinder
 	//    <[[:space:]]*script[^>]*>.*?<[[:space:]]*/script[^>]*>
@@ -743,9 +743,10 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				unicode_end = myData + doubleMatch[1].rm_eo;
-				if(myData[doubleMatch[0].rm_so + 2] == L'X' || myData[doubleMatch[0].rm_so + 2] == L'x') { // Check for hex
+				if(myData[doubleMatch[0].rm_so + 1] == L'X' || myData[doubleMatch[0].rm_so + 1] == L'x') { // Check for hex
 #if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
+	                                unicode_entity[1] = L'\0';
 #else
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 16);
 #ifdef LITTLE_ENDIAN
@@ -773,11 +774,12 @@ uint32_t tempUTF32CHAR;
 					}
 #endif
 #endif
-//					ci_debug_printf(10,"Converting Hexadecimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
+//					ci_debug_printf(10,"Converting Hexadecimal HTML Entity: %.*ls to %ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
 				else {
 #if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
+	                                unicode_entity[1] = L'\0';
 #else
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
 #ifdef LITTLE_ENDIAN
@@ -804,11 +806,8 @@ uint32_t tempUTF32CHAR;
 					}
 #endif
 #endif
-//					ci_debug_printf(10, "Converting Decimal HTML Entity: %.*ls to %lc\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
+//					ci_debug_printf(10, "Converting Decimal HTML Entity: %.*ls to %ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
-#if SIZEOFWCHAR == 4
-                                unicode_entity[1] = L'\0';
-#endif
 				regexReplace(myHead, current, &singleMatch[0], unicode_entity, wcslen(unicode_entity), 0); // We are replacing characters, do not add padding!
 			}
 
