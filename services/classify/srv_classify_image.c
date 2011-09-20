@@ -866,6 +866,8 @@ ImageDetected *current_detected;
 ImageDetectedCount *nDetectedCount = NULL, *cDetectedCount = NULL, *detectedCount = NULL;
 ImageCategory *current_category = imageCategories;
 
+	mySession.origImage = NULL;
+
 	data = ci_service_data(req);
 
 	snprintf(CALL_OUT, CI_MAX_PATH, "%s/EXT_IMAGE-XXXXXX", CLASSIFY_TMP_DIR);

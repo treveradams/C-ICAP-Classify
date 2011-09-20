@@ -748,20 +748,8 @@ uint32_t tempUTF32CHAR;
 					unicode_entity[0] = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
 	                                unicode_entity[1] = L'\0';
 #else
+					// This algorithm is from http://unicode.org/faq/utf_bom.html#utf16-4 adjusted for endianness
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 16);
-#ifdef LITTLE_ENDIAN
-					// This algorithm, repeated many times is from http://unicode.org/faq/utf_bom.html#utf16-4 adjusted for endianness
-					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
-					{
-						unicode_entity[0] = tempUTF32CHAR;
-						unicode_entity[1] = L'\0'
-					}
-					else {
-						unicode_entity[1] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
-						unicode_entity[0] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
-						unicode_entity[2] = L'\0'
-					}
-#else ifdef BIG_ENDIAN
 					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
 					{
 						unicode_entity[0] = tempUTF32CHAR;
@@ -772,7 +760,6 @@ uint32_t tempUTF32CHAR;
 						unicode_entity[1] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
 						unicode_entity[2] = L'\0'
 					}
-#endif
 #endif
 //					ci_debug_printf(10,"Converting Hexadecimal HTML Entity: %.*ls to %ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
@@ -782,18 +769,6 @@ uint32_t tempUTF32CHAR;
 	                                unicode_entity[1] = L'\0';
 #else
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
-#ifdef LITTLE_ENDIAN
-					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
-					{
-						unicode_entity[0] = tempUTF32CHAR;
-						unicode_entity[1] = L'\0'
-					}
-					else {
-						unicode_entity[1] = LEAD_OFFSET + (tempUTF32CHAR >> 10);
-						unicode_entity[0] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
-						unicode_entity[2] = L'\0'
-					}
-#else ifdef BIG_ENDIAN
 					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
 					{
 						unicode_entity[0] = tempUTF32CHAR;
@@ -804,7 +779,6 @@ uint32_t tempUTF32CHAR;
 						unicode_entity[1] = 0xDC00 + (tempUTF32CHAR & 0x3FF);
 						unicode_entity[2] = L'\0'
 					}
-#endif
 #endif
 //					ci_debug_printf(10, "Converting Decimal HTML Entity: %.*ls to %ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so, unicode_entity);
 				}
