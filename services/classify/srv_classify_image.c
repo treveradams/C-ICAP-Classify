@@ -314,7 +314,7 @@ const char *rating = "#########+";
 		if(current->count)
 		{
 			char *oldHeader = myStrDup(header);
-			snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (count->count > 10 ? 10 : count->count), rating);
+			snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (current->count > 10 ? 10 : current->count), rating);
 			free(oldHeader);
 		}
 		mySession->featuresDetected += current->count;

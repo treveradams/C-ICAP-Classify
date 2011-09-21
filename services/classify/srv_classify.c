@@ -1736,6 +1736,12 @@ uint32_t primary = 0, secondary = 0;
 HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 int i;
 char *realURI, *pos;
+	if(uri == NULL)
+	{
+		*fhs_classification = emptyClassification;
+		*fnb_classification = emptyClassification;
+		return;
+	}
 	// Process the URI to hash and remove cgi parts before lock
 	realURI = myStrDup(uri);
 	pos = strstr(realURI, "?");
