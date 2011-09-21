@@ -945,6 +945,9 @@ ImageCategory *current_category = imageCategories;
 			current_category = current_category->next;
 		}
 
+		// Obtain Read Lock - Write lock not grabbed in normal operations,
+		// so it is best to hold read lock for a long time, rather than grab/release/grab/release
+		ci_thread_rwlock_rdlock(&imageclassify_rwlock);
 		do {
 			errno = 0;
 			if ((dp = readdir(dirp)) != NULL)
@@ -967,9 +970,6 @@ ImageCategory *current_category = imageCategories;
 						else {
 							getRightSize(&mySession);
 
-							// Obtain Read Lock
-							ci_thread_rwlock_rdlock(&imageclassify_rwlock);
-
 							// Detect
 							detect(&mySession);
 							doCoalesce(&mySession);
@@ -988,8 +988,9 @@ ImageCategory *current_category = imageCategories;
 							// We won't use the detected again, clear it
 							clearImageDetected(mySession.detected);
 
-							// Release Read Lock
-							ci_thread_rwlock_unlock(&imageclassify_rwlock);
+							// We are finished with this image
+							cvReleaseImage(&mySession.origImage);
+							mySession.origImage = NULL;
 						}
 					}
 					else {
@@ -1010,9 +1011,6 @@ ImageCategory *current_category = imageCategories;
 		// Clean up
 		// Free Detected Count Structure
 		freeImageDetectedCount(detectedCount->next);
-
-		// Obtain Read Lock
-		ci_thread_rwlock_rdlock(&imageclassify_rwlock);
 
 		// Deinit Session
 		deinitImageSession(&mySession);

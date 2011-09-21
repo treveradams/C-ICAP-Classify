@@ -98,7 +98,7 @@ srv_classify.TextPrimarySecondary "adult.affairs" "social.dating" 1
 srv_classify.ExternalTextFileType STDOUT PDF /usr/bin/pdftotext %CLIN -
 srv_classify.ExternalTextFileType FILE PDF /usr/bin/pdftotext %CLIN %CLOUT
 # To process SWF files for text, you can use http://www.swftools.org/
-srv_classify.ExternalImageFileType SWF swfstrings %CLIN
+srv_classify.ExternalImageFileType SWF /full/path/to/swfstrings %CLIN
 
 # Some image formats must be converted externally before C-ICAP Classify
 # can classify them. This is done using one of the following:
@@ -114,7 +114,7 @@ srv_classify.ExternalImageFileType SWF swfstrings %CLIN
 # NOTE: The FileTypes listed here should not appear in srv_classify.ImageFileTypes
 # With all image extraction techniques, it may be wise to write wrapper scripts which will run
 #    fdupes %CLDIROUT -N -d to clean up duplicates.
-srv_classify.ExternalImageFileType PDF pdfimages -j %CLIN %CLDIROUT
+srv_classify.ExternalImageFileType PDF /usr/bin/pdfimages -j %CLIN %CLDIROUT
 # To process SWF files for images, you will need to use swftools or the ilk,
 #    but you will need to write a wrapper around SWFExtract
 #    (to get IDs to then use -j and -p to extract)

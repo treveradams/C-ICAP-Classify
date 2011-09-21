@@ -21,7 +21,7 @@ dnl AC_CANONICAL_HOST
 
 CFLAGS="$CFLAGS -Wall"
 
-#check for c-icap
+dnl check for c-icap
 AC_ARG_WITH(c-icap,
 [  --with-c-icap	Where to find c-icap ],
 [
@@ -70,8 +70,9 @@ AC_SUBST(CONFDIR)
 AC_SUBST(MODSDIR)
 AC_SUBST(DATADIR)
 
-# Checks for libraries
+dnl Checks for libraries
 
+dnl Check for zlib
 AC_ARG_WITH(zlib,
 [	--with-zlib	Path to zlib library],
 [
@@ -110,6 +111,22 @@ if test a"$zlib" = "ano"; then
     AC_MSG_WARN("zlib is most likely required for srv_classify to work with most browsers!!")
 fi
 
+dnl Determine whether or not we are big or little endian
+AC_MSG_CHECKING([for endianness])
+AC_TRY_RUN(
+[
+int main()
+{
+short one = 1;
+char *cp = (char*)&one;
+if ( *cp == 0 )
+return(0);
+else
+return(1);
+}
+], [echo big-endian; CFLAGS="$CFLAGS -DBIG_ENDIAN"; AC_DEFINE(BIG_ENDIAN, 1, [Define BIG_ENDIAN])],[echo little-endian; CFLAGS="$CFLAGS -DLITTLE_ENDIAN"; AC_DEFINE(LITTLE_ENDIAN, 1, [Define LITTLE_ENDIAN])],[echo cross-compiling])
+
+dnl Check for OpenCV
 AC_ARG_WITH(opencv,
 [  --with-opencv       Where to find opencv ],
 [ case "$withval" in
@@ -129,21 +146,6 @@ AC_ARG_WITH(opencv,
 ],
 )
 
-# Determine whether or not we are big or little endian
-AC_MSG_CHECKING([for endianness])
-AC_TRY_RUN(
-[
-int main()
-{
-short one = 1;
-char *cp = (char*)&one;
-if ( *cp == 0 )
-return(0);
-else
-return(1);
-}
-], [echo big-endian; CFLAGS="$CFLAGS -DBIG_ENDIAN"; AC_DEFINE(BIG_ENDIAN, 1, [Define BIG_ENDIAN])],[echo little-endian; CFLAGS="$CFLAGS -DLITTLE_ENDIAN"; AC_DEFINE(LITTLE_ENDIAN, 1, [Define LITTLE_ENDIAN])],[echo cross-compiling])
-
 AC_SUBST(opencvinc)
 AC_SUBST(opencvlib)
 OLD_CFLAGS=$CFLAGS
@@ -160,6 +162,13 @@ AC_SUBST(OPENCV_ADD_LDFLAG)
 CFLAGS=$OLD_CFLAGS
 LIBS=$OLD_LIBS
 
+dnl Check for TRE Regex Library
+dnl -------------------------------------------------------------
+AC_MSG_CHECKING([for TRE regex header (tre/tre.h)])
+AC_CHECK_HEADER(tre/tre.h, [AC_DEFINE(HAVE_TRE_HEADER, 1, [Define HAVE_TRE_HEADER if TRE header found])], [AC_MSG_ERROR([Sorry, tre/tre.h not found, this is required])])
+AC_MSG_CHECKING([for TRE regex library])
+AC_CHECK_LIB(tre, tre_regwncomp, [AC_DEFINE(HAVE_TRE_LIB, 1, [Define HAVE_TRE_LIB if TRE library found])], [AC_MSG_ERROR([Sorry, TRE regex library not found, this is required])])
+
 dnl Check for programs
 AC_PROG_LN_S
 AC_PATH_PROG(LN, ln, cp)
@@ -167,7 +176,7 @@ AC_PATH_PROG(RM, rm, $FALSE)
 dnl Libtool 2.2.6 requires: rm -f
 RM="$RM -f"
 
-# Now determine which modules will going to build .....
+dnl Now determine which modules will going to build .....
 
 AM_CONDITIONAL(USEOPENCV,[test a"$opencv" != ano])
 
