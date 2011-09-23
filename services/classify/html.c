@@ -210,11 +210,13 @@ myRegmatch_t *myRet;
 	return myRet;
 }
 
+// And empty head passed here must have main_memory, arrays and head set to NULL!
+// Old heads will have appropriate elements freed before setting up new data.
 void mkRegexHead(regexHead *head, wchar_t *myData)
 {
 myRegmatchArray *arrays = calloc(1, sizeof(myRegmatchArray));
 myRegmatch_t *data;
-	// FIXME FREE FIRST
+	if(head->arrays || head->main_memory || head->head) freeRegexHead(head);
 	head->dirty = 0;
 	head->main_memory = myData;
 	head->arrays = arrays;
@@ -470,8 +472,8 @@ myRegmatch_t *current = myHead->head;
 		if(current->data && current->owns_memory) free(current->data);
 		current = current->next;
 	}
-	freeRegmatchArrays(myHead->arrays);
-	free(myHead->main_memory);
+	if(myHead->arrays) freeRegmatchArrays(myHead->arrays);
+	if(myHead->main_memory) free(myHead->main_memory);
 }
 
 void normalizeCurrency(regexHead *myHead)

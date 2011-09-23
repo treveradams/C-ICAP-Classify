@@ -130,7 +130,7 @@ int32_t realLen;
 
 void doLearn(char *data_file)
 {
-regexHead myRegexHead;
+regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
 wchar_t *myData;
 HashList myHashes;
 	myData=makeData(data_file);

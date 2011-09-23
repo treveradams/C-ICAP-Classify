@@ -112,7 +112,7 @@ uint64_t count;
 			hashes->hashes[i].users[j].data.probability /= ((double) (total - count) / (double) (total)); // compute and divide by P(w|not C)
 			if(hashes->hashes[i].users[j].data.probability < MAGIC_MINIMUM) hashes->hashes[i].users[j].data.probability = MAGIC_MINIMUM;
 			else if(hashes->hashes[i].users[j].data.probability > 1) hashes->hashes[i].users[j].data.probability = 1;
-			hashes->hashes[i].users[j].data.probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathmatically accurate, but it conserves bits
+			hashes->hashes[i].users[j].data.probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathematically accurate, but it conserves bits
 //			printf("Probability %G\n", hashes->hashes[i].users[j].data.probability);
 		}
 	}
@@ -692,7 +692,7 @@ uint32_t cls;
 uint32_t bestseen = 0, secondbest = 1;
 HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 
-	// Renormalize Result to probability
+	// Re-normalize Result to probability
 	do {
 		if(total_probability > DBL_MAX) // reset total_probability so that we are not overflowing
 		{
@@ -708,7 +708,7 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 			// Avoid divide by zero and keep value small, for log10(remainder) below
 			if (categories[cls].naiveBayesResult > DBL_MAX)
 				categories[cls].naiveBayesResult = DBL_MAX;
-			if (categories[cls].naiveBayesResult < DBL_MIN)
+			else if (categories[cls].naiveBayesResult < DBL_MIN)
 				categories[cls].naiveBayesResult = DBL_MIN;
 			total_probability += categories[cls].naiveBayesResult;
 		}
@@ -780,13 +780,14 @@ double local_probability;
 // Variables for scaling
 uint32_t cls, bestseen = 0;
 double scale = 0;
+const double scale_numerator = DBL_MAX / NBCategories.used;
 
 	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 
 	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)
 	{
-		categories[i].naiveBayesResult = DBL_MAX / 20000; // Conserve bits toward a maximum
+		categories[i].naiveBayesResult = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
 	}
 
 	// do bayes multiplication
@@ -848,16 +849,15 @@ double scale = 0;
 						}
 					}
 
-//					printf("Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
+//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
 
 					local_probability =  ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
 					local_probability /= ((double) (total - NBJudgeHashList.hashes[BSRet].users[j].data.count) / (double) (total)); // compute and divide by P(w|not C)
 					if(local_probability < MAGIC_MINIMUM) local_probability = MAGIC_MINIMUM;
 					else if(local_probability > 1) local_probability = 1;
-					local_probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathmatically accurate, but it conserves bits
+					local_probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathematically accurate, but it conserves bits
 
 					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= local_probability;
-
 
 					// Catch missing at the end or in between
 					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
@@ -873,7 +873,7 @@ double scale = 0;
 				}
 			}
 			processed++;
-			// Do bit conservation by occassionally maximizing values
+			// Do bit conservation by occasionally maximizing values
 			if(processed == KEYS_PROCESS_BEFORE_RESCALE)
 			// This used to be if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
 			// It has been changed to do a simple compare instead of a division and compare.
@@ -883,14 +883,27 @@ double scale = 0;
 				// Find class with highest naiveBayesResult
 				for (cls = 0; cls < NBCategories.used; cls++)
 				{
-					if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
+					// If we are over DBL_MAX reset to DBL_MAX.
+					// Doing this only every so many processed keys
+					// makes this not be perfectly accurate, but it is worth
+					// the saved cycles.
+					// If this turns out not to be enough, we only need to check
+					// this above when we actually find a key in the category in question.
+					// Missing values will always shrink the value, not grow it.
+					if (categories[cls].naiveBayesResult > DBL_MAX)
+					{
+						categories[cls].naiveBayesResult = DBL_MAX;
+						bestseen = cls;
+					}
+					// If we are the bestseen, record it.
+					else if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
 					{
 						bestseen = cls; // are we the best
 					}
 				}
 				// Compute scale
-				scale = (DBL_MAX / NBCategories.used) / categories[bestseen].naiveBayesResult;
-				if(scale > DBL_MAX) scale = DBL_MAX / NBCategories.used;
+				scale = scale_numerator / categories[bestseen].naiveBayesResult;
+				if(scale > DBL_MAX) scale = scale_numerator;
 
 				// Maximize values for bit conservation
 				for (cls = 0; cls < NBCategories.used; cls++)

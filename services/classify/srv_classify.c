@@ -627,7 +627,7 @@ int categorize_text(ci_request_t * req)
 classify_req_data_t *data = ci_service_data(req);
 char reply[2 * CI_MAX_PATH + 1];
 char type[20];
-regexHead myRegexHead;
+regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
 HashList myHashes;
 HTMLClassification HSclassification, NBclassification;
 
