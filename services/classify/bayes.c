@@ -259,7 +259,7 @@ int file;
 return 0;
 }
 
-int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, int zero_point)
+int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, uint32_t zero_point)
 {
 uint32_t i;
 uint_least32_t qty = 0;
@@ -293,6 +293,7 @@ int writecheck;
 				}
 			}
 		}
+		ftruncate(file, lseek64(file, 0, SEEK_CUR));
 		/* Ok, have written hashes, now save new count */
 //		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		header->records = qty;

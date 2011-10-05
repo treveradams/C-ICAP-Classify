@@ -46,14 +46,15 @@
    awk '{print $4, $5, $6, $7, $2, $3}' /tmp/hashtest2.txt | uniq -D -s 3 | wc -l
 divide the number by 2 */
 
-char *fhs_out_file;
-char *learn_in_file;
+char *fhs_out_file = NULL;
+char *learn_in_file = NULL;
 
 int readArguments(int argc, char *argv[])
 {
 int i;
 	if(argc < 9)
 	{
+		HELP:
 		printf("Format of arguments is:\n");
 		printf("\t-p PRIMARY_HASH_SEED\n");
 		printf("\t-s SECONDARY_HASH_SEED\n");
@@ -77,6 +78,8 @@ int i;
 			sscanf(argv[i+1], "%s", fhs_out_file);
 		}
 	}
+	if(learn_in_file == NULL) goto HELP;
+	if(fhs_out_file == NULL) goto HELP;
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", learn_in_file);

@@ -109,12 +109,13 @@ srv_classify.ExternalImageFileType SWF /full/path/to/swfstrings %CLIN
 #      converted) appropriately as one of the arguments. %CLDIROUT needs
 #      to be placed appropriately as the directory where the images will be written.
 # NOTE NOTE NOTE: Images must be exported with the appropriate types AND extensions.
-#      Supported types/extensions: .png .jpg .ppm
+#      Supported types/extensions: .png .jpg .ppm. It is wise that images should use
+#      loss-less compression or not compressed on output from conversion, if possible.
 # NOTE: Only one conversion should be provided for any given format for image conversion.
 # NOTE: The FileTypes listed here should not appear in srv_classify.ImageFileTypes
 # With all image extraction techniques, it may be wise to write wrapper scripts which will run
 #    fdupes %CLDIROUT -N -d to clean up duplicates.
-srv_classify.ExternalImageFileType PDF /usr/bin/pdfimages -j %CLIN %CLDIROUT
+srv_classify.ExternalImageFileType PDF /usr/bin/pdfimages %CLIN %CLDIROUT
 # To process SWF files for images, you will need to use swftools or the ilk,
 #    but you will need to write a wrapper around SWFExtract
 #    (to get IDs to then use -j and -p to extract)

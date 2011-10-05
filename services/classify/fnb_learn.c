@@ -43,15 +43,16 @@
 #include "hash.c"
 #include "bayes.c"
 
-char *learn_in_file;
-char *fbc_out_file;
+char *learn_in_file = NULL;
+char *fbc_out_file = NULL;
 int do_directory_learn = -1;
+int learning = 0;
 uint32_t zero_point = 0;
 
 int readArguments(int argc, char *argv[])
 {
 int i;
-	if(argc < 9 || (argc -1) % 2)
+	if(argc < 9 && argc != 5)
 	{
 		HELP:
 		printf("Format of arguments is:\n");
@@ -59,6 +60,9 @@ int i;
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_FILE_TO_LEARN -- cannot be used with -d\n");
 		printf("\t-d INPUT_DIRECTORY_TO_LEARN -- cannot be used with -i\n");
+		printf("\t-o OUTPUT_FNB_FILE\n");
+		printf("\t-z ZERO (REMOVE) HASH IF COUNT IS LESS THAN THIS NUMBER (OPTIONAL)\n");
+		printf("\tOR\n");
 		printf("\t-o OUTPUT_FNB_FILE\n");
 		printf("\t-z ZERO (REMOVE) HASH IF COUNT IS LESS THAN THIS NUMBER\n");
 		printf("Spaces and case matter.\n");
@@ -74,6 +78,7 @@ int i;
 			learn_in_file = malloc(strlen(argv[i+1]) + 1);
 			sscanf(argv[i+1], "%s", learn_in_file);
 			do_directory_learn = 0;
+			learning = 1;
 		}
 		else if(strcmp(argv[i], "-d") == 0)
 		{
@@ -81,6 +86,7 @@ int i;
 			learn_in_file = malloc(strlen(argv[i+1]) + 1);
 			sscanf(argv[i+1], "%s", learn_in_file);
 			do_directory_learn = 1;
+			learning = 1;
 		}
 		else if(strcmp(argv[i], "-o") == 0)
 		{
@@ -92,10 +98,16 @@ int i;
 			zero_point = strtol(argv[i+1], NULL, 10);
 		}
 	}
+	if(fbc_out_file == NULL) goto HELP;
+	if(argc == 5 && (zero_point < 1 || fbc_out_file == NULL))
+	{
+		goto HELP;
+	}
+	else if(argc !=5 && do_directory_learn < 0) goto HELP;
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", learn_in_file);
-	printf("FNV Output File: %s\n", fbc_out_file);*/
+	printf("FNB Output File: %s\n", fbc_out_file);*/
 	return 0;
 }
 
@@ -197,16 +209,19 @@ int fbc_file;
         if(loadBayesCategory(fbc_out_file, "LEARNING") == -1)
 		printf("Unable to open %s\n", fbc_out_file);
 
-	if(do_directory_learn == 0) doLearn(learn_in_file);
-	else learnDirectory(learn_in_file);
+	if(learning)
+	{
+		if(do_directory_learn == 0) doLearn(learn_in_file);
+		else learnDirectory(learn_in_file);
+	}
 
 	fbc_file = openFBC(fbc_out_file, &header, 1);
 	if(writeFBCHashes(fbc_file, &header, &NBJudgeHashList, 0, zero_point) == -1)
 		printf("MAJOR PROBLEM: Input file: %s had no hashed data!\n", learn_in_file);
 	close(fbc_file);
 
-	free(learn_in_file);
-	free(fbc_out_file);
+	if(learn_in_file) free(learn_in_file);
+	if(fbc_out_file) free(fbc_out_file);
 	deinitBayesClassifier();
 	deinitHTML();
 	return 0;

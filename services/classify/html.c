@@ -862,10 +862,10 @@ int foundCJK = 0;
 		while (currentOffset < current->rm_eo && !iswgraph(myData[currentOffset]))
 			currentOffset++;
 		matches[i].rm_so = currentOffset;
-		foundCJK = 0;
-		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK == 0)
+		foundCJK = CJK_NONE;
+		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK != CJK_BREAK)
 		{
-			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) ||
+			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) || // Handle ideograph CJK
 			(myData[currentOffset] >= 0x00002FF0 && myData[currentOffset] <= 0x00002FFF) ||
 			(myData[currentOffset] >= 0x00003001 && myData[currentOffset] <= 0x0000303F) || // 0x00003000 is a space character, don't mask it out.
 			(myData[currentOffset] >= 0x000031C0 && myData[currentOffset] <= 0x000031EF) ||
@@ -878,7 +878,34 @@ int foundCJK = 0;
 //				printf("Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
 				if(matches[i].rm_so == currentOffset)
 					currentOffset++;
-				foundCJK++;
+				foundCJK = CJK_BREAK;
+			}
+			else if((myData[currentOffset] >= 0x000030A0 && myData[currentOffset] <= 0x000030FF) || // Handle "phonetic" CJK -- Katakana
+				(myData[currentOffset] >= 0x000031F0 && myData[currentOffset] <= 0x000031FF) ||
+				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
+				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
+			{
+				if(foundCJK == HIRAGANA)
+				{
+					foundCJK = CJK_BREAK;
+				}
+				else
+				{
+					currentOffset++;
+					foundCJK = KATAKANA;
+				}
+			}
+			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
+			{
+				if(foundCJK == KATAKANA)
+				{
+					foundCJK = CJK_BREAK;
+				}
+				else
+				{
+					currentOffset++;
+					foundCJK = HIRAGANA;
+				}
 			}
 			else currentOffset++;
 		}
@@ -911,8 +938,8 @@ int foundCJK = 0;
 		while (currentOffset < current->rm_eo && !iswgraph(myData[currentOffset]))
 			currentOffset++;
 		matches[pos].rm_so = currentOffset;
-		foundCJK = 0;
-		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK == 0)
+		foundCJK = CJK_NONE;
+		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK != CJK_BREAK)
 		{
 			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) ||
 			(myData[currentOffset] >= 0x00002FF0 && myData[currentOffset] <= 0x00002FFF) ||
@@ -925,9 +952,36 @@ int foundCJK = 0;
 			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
 			{
 //				printf("Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
-				if(matches[pos].rm_so == currentOffset)
+				if(matches[i].rm_so == currentOffset)
 					currentOffset++;
-				foundCJK++;
+				foundCJK = CJK_BREAK;
+			}
+			else if((myData[currentOffset] >= 0x000030A0 && myData[currentOffset] <= 0x000030FF) || // Handle "phonetic" CJK -- Katakana
+				(myData[currentOffset] >= 0x000031F0 && myData[currentOffset] <= 0x000031FF) ||
+				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
+				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
+			{
+				if(foundCJK == HIRAGANA)
+				{
+					foundCJK = CJK_BREAK;
+				}
+				else
+				{
+					currentOffset++;
+					foundCJK = KATAKANA;
+				}
+			}
+			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
+			{
+				if(foundCJK == KATAKANA)
+				{
+					foundCJK = CJK_BREAK;
+				}
+				else
+				{
+					currentOffset++;
+					foundCJK = HIRAGANA;
+				}
 			}
 			else currentOffset++;
 		}

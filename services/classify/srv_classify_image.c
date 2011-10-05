@@ -293,9 +293,10 @@ int i;
 	{
 		ci_http_response_add_header(mySession->req, header);
 		ci_debug_printf(10, "Added header: %s\n", header);
+
+		// Add other headers
+		addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 	}
-	// Add other headers
-	addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 }
 
 static void createImageGroupClassificationHeaders(ImageSession *mySession, ImageDetectedCount *count)
@@ -326,9 +327,10 @@ const char *rating = "#########+";
 	{
 		ci_http_response_add_header(mySession->req, header);
 		ci_debug_printf(10, "Added header: %s\n", header);
+
+		// Add other headers
+		addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 	}
-	// Add other headers
-	addReferrerHeaders(mySession->req, mySession->referrer_fhs_classification, mySession->referrer_fnb_classification);
 }
 
 static void saveDetectedParts(ImageSession *mySession)
@@ -728,29 +730,30 @@ ImageDetected *nDetected = NULL, *cDetected = NULL;
 
 static void clearImageDetected(ImageDetected *detected)
 {
-	if(detected==NULL) return;
-	if(detected->next!=NULL)
+	if(detected == NULL) return;
+	if(detected->next != NULL)
         {
-		cvClearSeq( detected->detected );
+		clearImageDetected(detected->next);
 	}
+	if(detected->detected) cvClearSeq( detected->detected );
 }
 
 static void freeImageDetected(ImageDetected *detected)
 {
-	if(detected==NULL) return;
-	if(detected->next!=NULL)
+	if(detected == NULL) return;
+	if(detected->next != NULL)
         {
-		cvClearSeq( detected->detected );
 		freeImageDetected(detected->next);
 		detected->next = NULL;
 	}
+	if(detected->detected) cvClearSeq( detected->detected );
 	free(detected);
 }
 
 static void freeImageDetectedCount(ImageDetectedCount *detected)
 {
-	if(detected==NULL) return;
-	if(detected->next!=NULL)
+	if(detected == NULL) return;
+	if(detected->next != NULL)
         {
 		freeImageDetectedCount(detected->next);
 		detected->next = NULL;
@@ -989,8 +992,10 @@ ImageCategory *current_category = imageCategories;
 							clearImageDetected(mySession.detected);
 
 							// We are finished with this image
-							cvReleaseImage(&mySession.origImage);
+							if(mySession.origImage) cvReleaseImage(&mySession.origImage);
+							if(mySession.rightImage) cvReleaseImage(&mySession.rightImage);
 							mySession.origImage = NULL;
+							mySession.rightImage = NULL;
 						}
 					}
 					else {

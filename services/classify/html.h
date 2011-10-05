@@ -32,6 +32,8 @@ extern uint32_t HASHSEED2;
 
 enum {UNKNOWN_ERROR=-9999, NO_CATEGORIES=-1, NO_MEMORY=-2, DOCUMENT_TOO_SMALL=-3, NO_CHARSET=-4, ZLIB_FAIL=-5};
 
+enum {CJK_NONE = 0, KATAKANA, HIRAGANA, CJK_BREAK=999};
+
 typedef struct _myRegmatch_t {
 	regoff_t rm_so;
 	regoff_t rm_eo;
