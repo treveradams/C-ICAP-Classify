@@ -952,7 +952,7 @@ int foundCJK = 0;
 			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
 			{
 //				printf("Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
-				if(matches[i].rm_so == currentOffset)
+				if(matches[pos].rm_so == currentOffset)
 					currentOffset++;
 				foundCJK = CJK_BREAK;
 			}

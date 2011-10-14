@@ -59,6 +59,8 @@
 // How many keys can we process before we must rescale to conserve bits
 // If this turns into a configuration parameter, it must be bounded at 100 and 500
 #define KEYS_PROCESS_BEFORE_RESCALE 200
+// How many matches must there be in a file for it to be trusted?
+#define MINIMUM_MATCHES 5
 
 FBCTextCategoryExt NBCategories;
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
@@ -683,7 +685,7 @@ char *cat_name;
 	return 1;
 }
 
-static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown)
+static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown, double correction_factor)
 {
 double total_probability = DBL_MIN;
 double remainder = DBL_MIN;
@@ -691,11 +693,14 @@ double remainder = DBL_MIN;
 uint32_t cls;
 
 uint32_t bestseen = 0, secondbest = 1;
+
+const double DBL_MAX_SPEC = DBL_MAX / (MINIMUM_MATCHES + 1);
+
 HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 
 	// Re-normalize Result to probability
 	do {
-		if(total_probability > DBL_MAX) // reset total_probability so that we are not overflowing
+		if(total_probability > DBL_MAX_SPEC) // reset total_probability so that we are not overflowing
 		{
 			total_probability = DBL_MIN;
 			for (cls = 0; cls < NBCategories.used; cls++)
@@ -713,7 +718,10 @@ HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0,
 				categories[cls].naiveBayesResult = DBL_MIN;
 			total_probability += categories[cls].naiveBayesResult;
 		}
-	} while (total_probability > DBL_MAX); // Do until we are a valid double number
+	} while (total_probability > DBL_MAX_SPEC); // Do until we are a valid double number
+
+	if(correction_factor > 1.0f)
+		total_probability *= correction_factor;
 
 	// Find the best and second best categories
 	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
@@ -771,7 +779,7 @@ return myReply;
 
 HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 {
-uint32_t i, j, processed = 0;
+uint32_t i, j, processed = 0, total_processed = 0;
 uint16_t missing, nextReal;
 FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
 int64_t BSRet = -1;
@@ -781,6 +789,7 @@ double local_probability;
 // Variables for scaling
 uint32_t cls, bestseen = 0;
 double scale = 0;
+double correction_factor = 1;
 const double scale_numerator = DBL_MAX / NBCategories.used;
 
 	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
@@ -878,8 +887,6 @@ const double scale_numerator = DBL_MAX / NBCategories.used;
 			if(processed == KEYS_PROCESS_BEFORE_RESCALE)
 			// This used to be if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
 			// It has been changed to do a simple compare instead of a division and compare.
-			// The only downside is it cannot now be used accurately to make sure we processed
-			// more than x hashes for a trusted result.
 			{
 				// Find class with highest naiveBayesResult
 				for (cls = 0; cls < NBCategories.used; cls++)
@@ -911,10 +918,12 @@ const double scale_numerator = DBL_MAX / NBCategories.used;
 				{
 					categories[cls].naiveBayesResult *= scale;
 				}
+				total_processed += processed;
 				processed = 0;
 			}
 		}
 	}
+	total_processed += processed;
 //	ci_debug_printf(10, "Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
 
 /*	for(i = 0; i < NBCategories.used; i++)
@@ -922,7 +931,10 @@ const double scale_numerator = DBL_MAX / NBCategories.used;
 		ci_debug_printf(10, "Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
 	} */
 
-	data = doBayesClassify(categories, toClassify);
+	if(total_processed < MINIMUM_MATCHES && toClassify->used > 20)
+		correction_factor = MINIMUM_MATCHES / total_processed;
+
+	data = doBayesClassify(categories, toClassify, correction_factor);
 
 	// cleanup
 	free(categories);
