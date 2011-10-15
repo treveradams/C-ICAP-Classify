@@ -931,7 +931,7 @@ const double scale_numerator = DBL_MAX / NBCategories.used;
 		ci_debug_printf(10, "Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
 	} */
 
-	if(total_processed < MINIMUM_MATCHES && toClassify->used > 20)
+	if(total_processed && total_processed < MINIMUM_MATCHES && toClassify->used > 20)
 		correction_factor = MINIMUM_MATCHES / total_processed;
 
 	data = doBayesClassify(categories, toClassify, correction_factor);

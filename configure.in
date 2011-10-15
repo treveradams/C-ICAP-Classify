@@ -171,6 +171,11 @@ AC_CHECK_HEADER(tre/tre.h, [AC_DEFINE(HAVE_TRE_HEADER, 1, [Define HAVE_TRE_HEADE
 AC_MSG_CHECKING([for TRE regex library])
 AC_CHECK_LIB(tre, tre_regwncomp, [AC_DEFINE(HAVE_TRE_LIB, 1, [Define HAVE_TRE_LIB if TRE library found])], [AC_MSG_ERROR([Sorry, TRE regex library not found, this is required])])
 
+dnl Check for scandir
+dnl -------------------------------------------------------------
+AC_CHECK_FUNCS(scandir, [AC_DEFINE(_SVID_SOURCE, 1, [Define _SVID_SOURCE if scandir function is found])])
+
+
 dnl Check for programs
 AC_PROG_LN_S
 AC_PATH_PROG(LN, ln, cp)

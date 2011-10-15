@@ -21,6 +21,10 @@
 #define _GNU_SOURCE
 #define _LARGEFILE64_SOURCE
 
+#ifndef NOT_AUTOCONF
+#include "autoconf.h"
+#endif
+
 #define NOT_CICAP
 
 #include <stdio.h>
@@ -168,9 +172,11 @@ HashList myHashes;
 
 void learnDirectory(char *directory)
 {
+char full_path[PATH_MAX];
+
+#ifndef _SVID_SOURCE
 DIR *dirp;
 struct dirent *dp;
-char full_path[PATH_MAX];
 
 	if ((dirp = opendir(directory)) == NULL)
 	{
@@ -195,6 +201,32 @@ char full_path[PATH_MAX];
 		perror("error reading directory");
 	else
 		(void) closedir(dirp);
+#else
+struct dirent **namelist;
+uint32_t n;
+
+	n = scandir(directory, &namelist, 0, alphasort);
+	if (n < 0)
+	{
+		printf("couldn't open '%s', or it is empty", directory);
+		return;
+	}
+	else {
+		n--;
+		for(uint32_t i = 0; i <= n; i++)
+		{
+			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0)
+			{
+				snprintf(full_path, PATH_MAX, "%s/%s", directory, namelist[i]->d_name);
+				printf("Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
+				fprintf(stderr, "Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
+				doLearn(full_path);
+			}
+			free(namelist[i]);
+		}
+		free(namelist);
+	}
+#endif
 }
 
 int main (int argc, char *argv[])
