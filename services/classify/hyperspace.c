@@ -256,32 +256,71 @@ int writecheck;
 
 int writeFHSHashesPreload(int file, FHS_HEADERv1 *header, HashListExt *hashes_list)
 {
-uint16_t i;
+uint32_t realHashesUsed = 0, i = 0;
+hyperspaceFeatureExt *realHashes;
 int writecheck;
+uint16_t hash;
+	// Set records to zero and truncate the file
+	ftruncate64(file, 11);
 	lseek64(file, 0, SEEK_END);
-	if(hashes_list->used) // check before we write
-	{
-		do {
-			writecheck = write(file, &hashes_list->used, FHS_v1_QTY_SIZE);
-			if(writecheck < FHS_v1_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-		} while (writecheck >=0 && writecheck < FHS_v1_QTY_SIZE);
-		for(i=0; i < hashes_list->used; i++)
+	header->records = 0;
+
+	realHashesUsed = hashes_list->used;
+	realHashes = hashes_list->hashes;
+
+	if(hashes_list->used == 0) return -1;
+	do {
+		// Make sure we only write out FHS_v1_QTY_MAX records per document
+		// Do this by screwing with hashes_list->used, save old, modify
+		if(hashes_list->used > FHS_v1_QTY_MAX)
+		{
+			hashes_list->used = FHS_v1_QTY_MAX - 1;
+		}
+		// Also, change HSJudgeHashList.hashes to offset for previously used ones
+		hashes_list->hashes = &hashes_list->hashes[i];
+
+		// Actually do writing
+		if(hashes_list->used) // check before we write
 		{
 			do {
-				writecheck = write(file, &hashes_list->hashes[i], FHS_v1_HASH_SIZE);
-                                if(writecheck < FHS_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FHS_v1_HASH_SIZE);
+				writecheck = write(file, &hashes_list->used, FHS_v1_QTY_SIZE);
+				if(writecheck < FHS_v1_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+			} while (writecheck >=0 && writecheck < FHS_v1_QTY_SIZE);
+			for(hash = 0; hash < hashes_list->used; hash++)
+			{
+				do {
+					writecheck = write(file, &hashes_list->hashes[hash], FHS_v1_HASH_SIZE);
+		                        if(writecheck < FHS_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+				} while (writecheck >=0 && writecheck < FHS_v1_HASH_SIZE);
+			}
 		}
-		/* Ok, have written hashes, now save new count */
-		header->records = header->records+1;
-		lseek64(file, 9, SEEK_SET);
-		do {
-			writecheck = write(file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE);
-			if(writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-		} while (writecheck >=0 && writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE);
-		return 0;
-	}
-	return -1;
+
+		header->records = header->records + 1;
+
+		// Restore hashes_list->hashes
+		hashes_list->hashes = realHashes;
+
+		// Make sure that we never write out more than FHS_HEADERv1_RECORDS_QTY_MAX times as this is our maximum document count
+		if(header->records > FHS_HEADERv1_RECORDS_QTY_MAX)
+		{
+			printf("PROBLEM: We have more hashes than allowed!!\n");
+		}
+
+		// Change hashes_list->used
+		i += hashes_list->used;
+		hashes_list->used = realHashesUsed - i;
+	} while (i < realHashesUsed);
+
+	// Restore hashes_list->used
+	HSJudgeHashList.used = realHashesUsed;
+
+	/* Ok, have written hashes, now save new count */
+	lseek64(file, 9, SEEK_SET);
+	do {
+		writecheck = write(file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE);
+		if(writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+	} while (writecheck >=0 && writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE);
+	return header->records;
 }
 
 static int64_t HSBinarySearch(HashListExt *hashes_list, int64_t start, int64_t end, uint64_t key)
@@ -326,7 +365,7 @@ int to_read = FHS_v1_HASH_SIZE * numHashes;
 		}
 
 	} while(status > 0);
-        if(bytes < FHS_v1_HASH_SIZE * numHashes) printf("Corrupted fhs file: %s for cat_name: %s\n", fhs_name, cat_name);
+        if(bytes < FHS_v1_HASH_SIZE * numHashes) ci_debug_printf(3, "Corrupted fhs file: %s for cat_name: %s\n", fhs_name, cat_name);
 return hashes;
 }
 
@@ -377,7 +416,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 		HSCategories.categories[HSCategories.used].totalFeatures += numHashes;
 		if(HSJudgeHashList.used + numHashes > HSJudgeHashList.slots)
 		{
-			if(HSJudgeHashList.slots != 0) printf("Ooops, we shouldn't be allocating more memory here. (%s)\n", fhs_name);
+			if(HSJudgeHashList.slots != 0) ci_debug_printf(10, "Ooops, we shouldn't be allocating more memory here. (%s)\n", fhs_name);
 			HSJudgeHashList.slots += numHashes;
 			HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
 		}

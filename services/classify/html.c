@@ -885,7 +885,7 @@ int foundCJK = 0;
 				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
 				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
 			{
-				if(foundCJK == HIRAGANA)
+				if(foundCJK == HIRAGANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
 				{
 					foundCJK = CJK_BREAK;
 				}
@@ -897,7 +897,7 @@ int foundCJK = 0;
 			}
 			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
 			{
-				if(foundCJK == KATAKANA)
+				if(foundCJK == KATAKANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
 				{
 					foundCJK = CJK_BREAK;
 				}
@@ -961,7 +961,7 @@ int foundCJK = 0;
 				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
 				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
 			{
-				if(foundCJK == HIRAGANA)
+				if(foundCJK == HIRAGANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
 				{
 					foundCJK = CJK_BREAK;
 				}
@@ -973,7 +973,7 @@ int foundCJK = 0;
 			}
 			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
 			{
-				if(foundCJK == KATAKANA)
+				if(foundCJK == KATAKANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
 				{
 					foundCJK = CJK_BREAK;
 				}

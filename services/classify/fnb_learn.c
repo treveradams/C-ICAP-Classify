@@ -173,6 +173,7 @@ HashList myHashes;
 void learnDirectory(char *directory)
 {
 char full_path[PATH_MAX];
+struct stat info;
 
 #ifndef _SVID_SOURCE
 DIR *dirp;
@@ -188,9 +189,10 @@ struct dirent *dp;
 		errno = 0;
 		if ((dp = readdir(dirp)) != NULL)
 		{
-			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0)
+			snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
+			stat(full_path, &info);
+			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && S_ISREG(info.st_mode))
 			{
-				snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
 				printf("Learning %s\n", dp->d_name);
 				fprintf(stderr, "Learning %s\n", dp->d_name);
 				doLearn(full_path);
@@ -215,9 +217,10 @@ uint32_t n;
 		n--;
 		for(uint32_t i = 0; i <= n; i++)
 		{
-			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0)
+			snprintf(full_path, PATH_MAX, "%s/%s", directory, namelist[i]->d_name);
+			stat(full_path, &info);
+			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0 && S_ISREG(info.st_mode))
 			{
-				snprintf(full_path, PATH_MAX, "%s/%s", directory, namelist[i]->d_name);
 				printf("Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
 				fprintf(stderr, "Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
 				doLearn(full_path);

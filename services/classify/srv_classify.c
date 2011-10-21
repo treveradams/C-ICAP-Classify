@@ -1517,7 +1517,8 @@ int cfg_TextSecondary(char *directive, char **argv, void *setdata)
      if(tre_regcomp(&secondary_compares[number_secondaries].primary_regex, argv[0], REG_EXTENDED | REG_ICASE) != 0 ||
           tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, argv[1], REG_EXTENDED | REG_ICASE) != 0)
      {
-          number_secondaries++;
+          number_secondaries--;
+          secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
           ci_debug_printf(1, "Invalid REGEX In Setting parameter :%s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
           return 0;
      }

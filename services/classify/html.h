@@ -125,7 +125,7 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 
 #if !defined(_MSC_VER) && defined(NOT_CICAP)
  extern void (*__log_error)(void *req, const char *format,... );
-#define ci_debug_printf(i, args...) printf(args);
+#define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif
 
 #if ! defined(MARKUP_SIZEOFWCHAR)

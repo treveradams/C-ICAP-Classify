@@ -32,9 +32,9 @@ typedef struct {
 
 // Fast Naive Bayes File Format Version 1 is as follows
 // Header
-// BYTE 1 2 3 4 5 6 7 8 9 10 11
+// BYTE 1 2 3 4 5 6 7 8 9 10 11 12 13
 //      ID    Ver UBM WCS  Qty
-//      F H S
+//      F N B
 // ID = 3 characters, Ver UINT16_T, UBM is Unicode byte mark se we know if we
 // have the correct byte ordering (hash function is not endian neutral)
 // WCS is UINT16_T sizeof(wchar_t) -- Version 1 does not have this!
@@ -155,6 +155,6 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 
 #else
  extern void (*__log_error)(void *req, const char *format,... );
-#define ci_debug_printf(i, args...) printf(args);
+#define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif
 #endif

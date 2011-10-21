@@ -109,9 +109,7 @@ int main(int argc, char *argv[])
 int fhs_file;
 FHS_HEADERv1 header;
 clock_t start, end;
-uint32_t realHashesUsed = 0, i = 0;
 uint_least16_t docsWritten = 0;
-hyperspaceFeatureExt *realHashes;
 	initHTML();
 	initHyperSpaceClassifier();
 	if(readArguments(argc, argv) == -1) exit(-1);
@@ -123,38 +121,12 @@ hyperspaceFeatureExt *realHashes;
 
 	fhs_file = openFHS(fhs_out_file, &header, 1);
 
-	realHashesUsed = HSJudgeHashList.used;
-	realHashes = HSJudgeHashList.hashes;
-	do {
-		// Make sure we only write out FHS_v1_QTY_MAX records per document
-		// Do this by screwing with HSJudgeHashList.used, save old, modify
-		if(HSJudgeHashList.used > FHS_v1_QTY_MAX)
-		{
-			HSJudgeHashList.used = FHS_v1_QTY_MAX - 1;
-		}
-		// Also, change HSJudgeHashList.hashes to offset for previously used ones
-		HSJudgeHashList.hashes = &HSJudgeHashList.hashes[i];
-		writeFHSHashesPreload(fhs_file, &header, &HSJudgeHashList);
-		docsWritten++;
+	docsWritten = writeFHSHashesPreload(fhs_file, &header, &HSJudgeHashList);
 
-		// Restore HSJudgeHashList.hashes
-		HSJudgeHashList.hashes = realHashes;
-
-		// Make sure that we never write out more than FHS_HEADERv1_RECORDS_QTY_MAX times as this is our maximum document count
-		if(docsWritten > FHS_HEADERv1_RECORDS_QTY_MAX)
-		{
-			printf("PROBLEM: We have more hashes than allowed!!\n");
-		}
-
-		// Restore HSJudgeHashList.used
-		i += HSJudgeHashList.used;
-		HSJudgeHashList.used = realHashesUsed - i;
-	} while (i < realHashesUsed);
 	close(fhs_file);
 
-
 	end=clock();
-	printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", realHashesUsed, docsWritten);
+	printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", HSJudgeHashList.used, docsWritten);
 	printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
 
 	deinitHyperSpaceClassifier();

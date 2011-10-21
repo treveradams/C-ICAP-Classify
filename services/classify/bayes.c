@@ -315,8 +315,8 @@ uint32_t i;
 const uint_least32_t ZERO_COUNT = 0;
 int writecheck;
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	i = ftruncate64(file, 14);
-	lseek64(file, 13, SEEK_SET);
+	i = ftruncate64(file, 13);
+	lseek64(file, 0, SEEK_END);
 	if(hashes_list->used) // check before we write
 	{
 		for(i = 0; i < hashes_list->used; i++)
@@ -602,7 +602,7 @@ int status;
                         if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 
-		if(NBJudgeHashList.used + header.records > NBJudgeHashList.slots)
+		if(NBJudgeHashList.used > NBJudgeHashList.slots)
 		{
 			if(NBJudgeHashList.slots != 0) ci_debug_printf(10, "Ooops, we shouldn't be allocating more memory here. (%s)\n", fbc_name);
 			NBJudgeHashList.slots += header.records;
