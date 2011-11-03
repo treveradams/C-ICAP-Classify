@@ -257,6 +257,7 @@ int ret;
 	setupPrimarySecondary("adult.affairs", "social.dating", 1);
 	setupPrimarySecondary("adult.*", "adult.*", 0);
 	setupPrimarySecondary("clothing.*","clothing.*", 0);
+	setupPrimarySecondary("information.culinary","commerce.food", 1);
 
 	ret = judgeDirectory(judge_dir);
 

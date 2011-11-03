@@ -790,14 +790,14 @@ double local_probability;
 uint32_t cls, bestseen = 0;
 double scale = 0;
 double correction_factor = 1;
-const double scale_numerator = DBL_MAX / NBCategories.used;
+const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
 
 	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 
 	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)
 	{
-		categories[i].naiveBayesResult = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
+		categories[i].naiveBayesResult = BAYES_MAXIMUM;
 	}
 
 	// do bayes multiplication
@@ -910,8 +910,8 @@ const double scale_numerator = DBL_MAX / NBCategories.used;
 					}
 				}
 				// Compute scale
-				scale = scale_numerator / categories[bestseen].naiveBayesResult;
-				if(scale > DBL_MAX) scale = scale_numerator;
+				scale = BAYES_MAXIMUM / categories[bestseen].naiveBayesResult;
+				if(scale > DBL_MAX) scale = BAYES_MAXIMUM;
 
 				// Maximize values for bit conservation
 				for (cls = 0; cls < NBCategories.used; cls++)
