@@ -127,7 +127,7 @@ int fhs_file;
 	checkMakeUTF8();
 	initHTML();
 	myData=makeData(learn_in_file);
-	mkRegexHead(&myRegexHead, myData);
+	mkRegexHead(&myRegexHead, myData, 0);
 	removeHTML(&myRegexHead);
 	regexMakeSingleBlock(&myRegexHead);
 	normalizeCurrency(&myRegexHead);

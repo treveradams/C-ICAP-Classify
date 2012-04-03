@@ -129,7 +129,7 @@ HTMLClassification classification;
 
 	printf("Classifying\n");
 	start=clock();
-	mkRegexHead(&myRegexHead, myData);
+	mkRegexHead(&myRegexHead, myData, 0);
 	removeHTML(&myRegexHead);
 	regexMakeSingleBlock(&myRegexHead);
 	normalizeCurrency(&myRegexHead);

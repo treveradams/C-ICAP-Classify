@@ -150,7 +150,7 @@ regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory =
 wchar_t *myData;
 HashList myHashes;
 	myData=makeData(data_file);
-	mkRegexHead(&myRegexHead, myData);
+	mkRegexHead(&myRegexHead, myData, 0);
 	removeHTML(&myRegexHead);
 	regexMakeSingleBlock(&myRegexHead);
 	normalizeCurrency(&myRegexHead);

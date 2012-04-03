@@ -55,6 +55,7 @@ typedef struct {
 	wchar_t *main_memory;
 	myRegmatchArray *arrays;
 	myRegmatchArray *lastarray;
+	int head_cicap_membuf;
 } regexHead;
 
 typedef uint_least64_t HTMLFeature;
@@ -83,7 +84,7 @@ typedef struct {
 #ifdef IN_HTML
 void normalizeCurrency(regexHead *myHead);
 void removeHTML(regexHead *myHead);
-void mkRegexHead(regexHead *head, wchar_t *myData);
+void mkRegexHead(regexHead *head, wchar_t *myData, int is_cicap_membuf);
 void regexMakeSingleBlock(regexHead *myHead);
 void freeRegexHead(regexHead *myHead);
 static void compileRegexes(void);
@@ -91,7 +92,7 @@ static void freeRegexes(void);
 #else
 extern void normalizeCurrency(regexHead *myHead);
 extern void removeHTML(regexHead *myHead);
-extern void mkRegexHead(regexHead *head, wchar_t *myData);
+extern void mkRegexHead(regexHead *head, wchar_t *myData, int is_cicap_membuf);
 extern void regexMakeSingleBlock(regexHead *myHead);
 extern void freeRegexHead(regexHead *myHead);
 extern regex_t headFinder, charsetFinder;

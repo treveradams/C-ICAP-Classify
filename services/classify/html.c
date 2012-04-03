@@ -44,6 +44,7 @@
 #include <math.h>
 
 #define IN_HTML 1
+#include "mem.h"
 #include "currency.h"
 #include "html.h"
 #include "htmlentities.h"
@@ -212,7 +213,7 @@ myRegmatch_t *myRet;
 
 // And empty head passed here must have main_memory, arrays and head set to NULL!
 // Old heads will have appropriate elements freed before setting up new data.
-void mkRegexHead(regexHead *head, wchar_t *myData)
+void mkRegexHead(regexHead *head, wchar_t *myData, int is_cicap_membuf)
 {
 myRegmatchArray *arrays = calloc(1, sizeof(myRegmatchArray));
 myRegmatch_t *data;
@@ -226,6 +227,7 @@ myRegmatch_t *data;
 	data->rm_eo = wcslen(myData);
 	head->head = data; // assign data in
 	head->tail = data;
+	head->head_cicap_membuf = is_cicap_membuf;
 }
 
 static void regexRemove(regexHead *myHead, myRegmatch_t *startblock, regmatch_t *to_remove)
@@ -443,8 +445,19 @@ unsigned long total = 0;
 		offset += current->rm_eo - current->rm_so;
 		current = current->next;
 	}
-	free(old_main);
-
+	// We can no longer directly free membufs on newer icap
+#ifndef NOT_CICAP
+	if(myHead->head_cicap_membuf)
+	{
+		ci_buffer_free(old_main);
+		myHead->head_cicap_membuf = 0;
+	}
+	else {
+#endif
+		free(old_main);
+#ifndef NOT_CICAP
+	}
+#endif
 	current = myHead->head;
 	while(current != NULL) // Free memory - Must be done separately as we now have multiple users of each private area
 	{
@@ -473,7 +486,21 @@ myRegmatch_t *current = myHead->head;
 		current = current->next;
 	}
 	if(myHead->arrays) freeRegmatchArrays(myHead->arrays);
-	if(myHead->main_memory) free(myHead->main_memory);
+	// We can no longer directly free membufs on newer icap
+	if(myHead->main_memory)
+	{
+#ifndef NOT_CICAP
+		if(myHead->head_cicap_membuf)
+		{
+			ci_buffer_free(myHead->main_memory);
+		}
+		else {
+#endif
+			free(myHead->main_memory);
+#ifndef NOT_CICAP
+		}
+#endif
+	}
 }
 
 void normalizeCurrency(regexHead *myHead)

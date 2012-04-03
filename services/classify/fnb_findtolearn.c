@@ -37,10 +37,12 @@
 #include <langinfo.h>
 #include <wchar.h>
 #include <wctype.h>
+#include <libgen.h>
 #include <string.h>
 
 #include "hash.c"
 #include "bayes.c"
+#include "findtolearn_util.c"
 
 char *judge_dir;
 char *fnb_dir;
@@ -130,24 +132,62 @@ regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory =
 wchar_t *myData;
 HashList myHashes;
 HTMLClassification classification;
+char *temp, *prehash_file, *dirpath, *filename;
+int prehash_data_file = 0;
 
-	myData = makeData(judge_file);
+#ifdef _GNU_SOURCE
+	temp = strdup(judge_file);
+	dirpath = strdup(dirname(temp));
+	free(temp);
+	filename = basename(judge_file);
+	prehash_file = malloc(strlen(filename) + 12 + strlen(dirpath));
+	strcpy(prehash_file, dirpath);
+	strcat(prehash_file, "/");
+	strcat(prehash_file, ".pre-hash-");
+	strcat(prehash_file, filename);
+	free(dirpath);
+	// If we found the file, load it
+	if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0);
+	{
+		readPREHASHES(prehash_data_file, &myHashes);
+		close(prehash_data_file);
+	}
+	if(myHashes.used < 5)
+	{
+		prehash_data_file = 0;
+		free(myHashes.hashes);
+	}
+#endif
+	if(prehash_data_file <= 0)
+	{
+		myData = makeData(judge_file);
 
-	mkRegexHead(&myRegexHead, myData);
-	removeHTML(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
-	normalizeCurrency(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
+		mkRegexHead(&myRegexHead, myData, 0);
+		removeHTML(&myRegexHead);
+		regexMakeSingleBlock(&myRegexHead);
+		normalizeCurrency(&myRegexHead);
+		regexMakeSingleBlock(&myRegexHead);
 
-//	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
+	//	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
-	myHashes.slots = HTML_MAX_FEATURE_COUNT;
-	myHashes.used = 0;
-	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+		myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+		myHashes.slots = HTML_MAX_FEATURE_COUNT;
+		myHashes.used = 0;
+		computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+	}
 
 	classification = doBayesPrepandClassify(&myHashes);
 
+#ifdef _GNU_SOURCE
+	if(prehash_data_file <= 0 && myHashes.used > 0)
+	{
+		// write out preload file
+		prehash_data_file = open(prehash_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
+		writePREHASHES(prehash_data_file, &myHashes);
+		close(prehash_data_file);
+	}
+	free(prehash_file);
+#endif
 	free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 	return classification;
@@ -175,7 +215,7 @@ struct stat info;
 		{
 			snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
 			stat(full_path, &info);
-			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && S_ISREG(info.st_mode))
+			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") !=0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && S_ISREG(info.st_mode))
 			{
 				this = judgeFile(full_path);
 				if(lowest.primary_name == NULL)
@@ -211,7 +251,7 @@ struct stat info;
 	else
 		(void) closedir(dirp);
 
-	if(strcmp(lowest.primary_name, train_as_category) != 0 || (strcmp(lowest.primary_name, train_as_category) == 0 && lowest.primary_probability < threshhold))
+	if(strcmp(lowest.primary_name, train_as_category) != 0 || (strcmp(lowest.primary_name, train_as_category) == 0 && lowest.primary_probScaled < threshhold))
 	{
 		printf("%s", lowest_file);
 		return 0;

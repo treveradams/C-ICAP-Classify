@@ -642,7 +642,7 @@ HTMLClassification HSclassification, NBclassification;
      // Obtain Read Lock
      ci_thread_rwlock_rdlock(&textclassify_rwlock);
 
-     mkRegexHead(&myRegexHead, (wchar_t *) data->uncompressedbody->buf);
+     mkRegexHead(&myRegexHead, data->uncompressedbody->buf, 1);
      removeHTML(&myRegexHead);
      regexMakeSingleBlock(&myRegexHead);
      normalizeCurrency(&myRegexHead);
