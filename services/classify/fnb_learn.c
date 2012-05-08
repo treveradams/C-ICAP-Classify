@@ -19,7 +19,14 @@
 
 
 #define _GNU_SOURCE
-#define _LARGEFILE64_SOURCE
+
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+#if (_FILE_OFFSET_BITS != 64)
+#undef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
 
 #ifndef NOT_AUTOCONF
 #include "autoconf.h"

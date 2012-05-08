@@ -283,7 +283,6 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      ci_thread_rwlock_wrlock(&imageclassify_rwlock);
 
      ci_thread_rwlock_init(&referrers_rwlock);
-     ci_thread_rwlock_wrlock(&referrers_rwlock);
      createReferrerTable();
 #endif
 
@@ -293,9 +292,9 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      externalclassifytypes = calloc(ci_magic_types_num(magic_db), sizeof(external_conversion_t));
 
      for (i = 0; i < ci_magic_types_num(magic_db); i++)
-          classifytypes[i] = 0;
+          classifytypes[i] = NO_CLASSIFY;
      for (i = 0; i < ci_magic_groups_num(magic_db); i++)
-          classifygroups[i] = 0;
+          classifygroups[i] = NO_CLASSIFY;
 
      ci_debug_printf(10, "Going to initialize srv_classify\n");
      srv_classify_xdata = srv_xdata;      /* Needed by db_reload command */
@@ -314,7 +313,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 //#endif
      initHTML();
      ci_thread_rwlock_unlock(&textclassify_rwlock);
-#if defined HAVE_OPENCV
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      ci_thread_rwlock_unlock(&imageclassify_rwlock);
 #endif
 
@@ -454,8 +453,8 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      data->type_name = ci_data_type_name(magic_db, data->file_type);
 #endif
-     if ((data->must_classify = must_classify(data->file_type, data)) == 0) {
-          ci_debug_printf(8, "Not in \"must classify list\". Allow it...... \n");
+     if ((data->must_classify = must_classify(data->file_type, data)) == NO_CLASSIFY) {
+          ci_debug_printf(8, "srv_classify: Not in \"must classify list\". Allow it...... \n");
           return CI_MOD_ALLOW204;
      }
 
@@ -467,7 +466,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
              strstr(content_type, "text/javascript") || strstr(content_type, "text/jscript") ||
              strstr(content_type, "text/css"))
           {
-               ci_debug_printf(8, "Non-content MIME type (%s). Allow it......\n", content_type);
+               ci_debug_printf(8, "srv_classify: Non-content MIME type (%s). Allow it......\n", content_type);
                data->must_classify = NO_CLASSIFY; // these are not likely to contain data and confuse our classifier
                return CI_MOD_ALLOW204;
           }
@@ -483,8 +482,8 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
      if (data->args.sizelimit && MAX_OBJECT_SIZE
          && content_size > MAX_OBJECT_SIZE) {
           ci_debug_printf(1,
-                          "Object size is %" PRINTF_OFF_T "."
-                          " Bigger than max scannable file size (%"
+                          "srv_classify: Object size is %" PRINTF_OFF_T "."
+                          " Bigger than max classifiable file size (%"
                           PRINTF_OFF_T "). Allow it.... \n", content_size,
                           MAX_OBJECT_SIZE);
           return CI_MOD_ALLOW204;
@@ -514,7 +513,7 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
 
      /* FIXME the following if should just process what is had at the moment... possible? */
      if (ci_simple_file_size(data->body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-          ci_debug_printf(1, "Object size is bigger than max scannable file size\n");
+          ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
           data->must_classify = 0;
           ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
           ci_simple_file_unlock_all(data->body);        /*Unlock all body data to continue send them..... */
@@ -612,7 +611,7 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
      }
 #endif
      else if (data->allow204 && !ci_req_sent_data(req)) {
-          ci_debug_printf(7, "srvClassify module: Respond with allow 204\n");
+          ci_debug_printf(7, "srv_classify module: Respond with allow 204\n");
           return CI_MOD_ALLOW204;
      }
 
@@ -1247,7 +1246,7 @@ int must_classify(int file_type, classify_req_data_t * data)
 
      if (type == NO_CLASSIFY)
           type = externalclassifytypes[file_type].data_type;
-     else if (type == NO_CLASSIFY)
+     if (type == NO_CLASSIFY)
           type = classifytypes[file_type];
 
      ci_thread_rwlock_unlock(&textclassify_rwlock);
@@ -1551,9 +1550,9 @@ int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
      if (strcmp(directive, "ExternalTextFileType") == 0)
      {
           if(strcmp(argv[0], "STDOUT") == 0)
-               type = EXTERNAL_TEXT_PIPE;
+               type |= EXTERNAL_TEXT_PIPE;
           else if(strcmp(argv[0], "FILE") == 0)
-               type = EXTERNAL_TEXT;
+               type |= EXTERNAL_TEXT;
           else {
                ci_debug_printf(1, "Incorrect second argument in directive:%s\n", directive);
                ci_debug_printf(1, "Format: %s (STDOUT|FILE) FILE_TYPE PROGRAM ARG1 ARG2 ARG3 ...\n", directive);
@@ -1569,7 +1568,7 @@ int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
           {
                if(externalclassifytypes[id].data_type & type)
                {
-                    ci_debug_printf(1, "%s: already configurative to handle %s\n", directive, argv[1]);
+                    ci_debug_printf(1, "%s: already configured to handle %s\n", directive, argv[1]);
                     return 0;
                }
                else externalclassifytypes[id].data_type |= type;
@@ -1620,7 +1619,7 @@ int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata)
           {
                if(externalclassifytypes[id].data_type & type)
                {
-                    ci_debug_printf(1, "%s: already configurative to handle %s\n", directive, argv[0]);
+                    ci_debug_printf(1, "%s: already configured to handle %s\n", directive, argv[0]);
                     return 0;
                }
                else externalclassifytypes[id].data_type |= type;

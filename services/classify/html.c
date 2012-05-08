@@ -22,8 +22,12 @@
 #define _GNU_SOURCE
 #endif
 
-#ifndef _LARGEFILE64_SOURCE
-#define _LARGEFILE64_SOURCE
+#ifndef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
+#endif
+#if (_FILE_OFFSET_BITS != 64)
+#undef _FILE_OFFSET_BITS
+#define _FILE_OFFSET_BITS 64
 #endif
 
 #include <stdio.h>
