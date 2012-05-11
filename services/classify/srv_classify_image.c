@@ -486,7 +486,11 @@ int attempts = 0;
 	if(category->free_cascade)
 	{
 		ci_thread_mutex_lock(&category->mutex);
-		if(!category->free_cascade) goto getfreecascade_retry_setup;
+		if(!category->free_cascade)
+		{
+			ci_thread_mutex_unlock(&category->mutex);
+			goto getfreecascade_retry_setup;
+		}
 		else
 		{
 			// Remove free cascade item from free list
@@ -500,7 +504,6 @@ int attempts = 0;
 	}
 	else {
 		getfreecascade_retry_setup:
-		ci_thread_mutex_unlock(&category->mutex);
 		attempts++;
 		nanosleep(&sleep_time, NULL);
 		goto getfreecascade_retry;
@@ -700,9 +703,15 @@ ImageDetected *nDetected = NULL, *cDetected = NULL;
 
 	// Allocate the memory storage
 	if((mySession->dstorage = cvCreateMemStorage(0)) == NULL)
+	{
+            ci_thread_rwlock_unlock(&imageclassify_rwlock);
             return NO_MEMORY;
+	}
 	if((mySession->lstorage = cvCreateMemStorage(0)) == NULL)
+	{
+            ci_thread_rwlock_unlock(&imageclassify_rwlock);
             return NO_MEMORY;
+	}
 	cvClearMemStorage( mySession->dstorage );
 	cvClearMemStorage( mySession->lstorage );
 	while(current != NULL)
