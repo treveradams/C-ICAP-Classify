@@ -1701,7 +1701,7 @@ int oldest = 0, i;
 	classify_requests++;
 
 	// Avoid wrap around problems
-	if(classify_requests == 0)
+	if(classify_requests == 0 && referrers[oldest].age > 0)
 	{
 		int largest = 0;
 		int32_t adjust;
@@ -1709,7 +1709,8 @@ int oldest = 0, i;
 		// We already found the oldest in the previous for loop
 
 		// Adjust downward
-		adjust = referrers[oldest].age - 1;
+		adjust = referrers[oldest].age;
+
 		for(i = 0; i < REFERRERS_SIZE; i++)
 		{
 			referrers[i].age = referrers[i].age - adjust;
