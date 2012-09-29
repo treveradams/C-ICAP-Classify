@@ -48,7 +48,9 @@
 #include <math.h>
 
 #define IN_HTML 1
+#ifndef NOT_CICAP
 #include "mem.h"
+#endif
 #include "currency.h"
 #include "html.h"
 #include "htmlentities.h"
@@ -135,7 +137,7 @@ void deinitHTML(void)
 
 static void compileRegexes(void)
 {
-wchar_t myRegex[PATH_MAX+1];
+wchar_t myRegex[PATH_MAX+1] = L"\0";
 
 //	swprintf(myRegex, PATH_MAX, L"([%ls])([[:space:]]|&nbsp;)*([[:digit:]]+)(\\.[[:digit:]]*)?", CURRENCY);
 	swprintf(myRegex, PATH_MAX, L"([%ls])([[:space:]]*)([[:digit:]]+)(\\.[[:digit:]]*)?", CURRENCY); // As is, we don't need to get rid of nbsp as we have done so
@@ -203,7 +205,7 @@ myRegmatch_t *myRet;
 	if(myHead->lastarray->used < regexEDITS)
 		myRet = &myHead->lastarray->matches[myHead->lastarray->used];
 	else {
-//		printf("\n\nMaking new EmptyREgexBlock\n");
+//		printf("\n\nMaking new EmptyRegexBlock\n");
 		myHead->lastarray->next = calloc(1, sizeof(myRegmatchArray));
 		myHead->lastarray = myHead->lastarray->next;
 		myRet = &myHead->lastarray->matches[myHead->lastarray->used];

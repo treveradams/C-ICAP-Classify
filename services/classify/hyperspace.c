@@ -193,7 +193,7 @@ int i;
         } while (i >= 0 && i < FHS_HEADERv1_RECORDS_QTY_SIZE);
 }
 
-int openFHS(char *filename, FHS_HEADERv1 *header, int forWriting)
+int openFHS(const char *filename, FHS_HEADERv1 *header, int forWriting)
 {
 int file=0;
 	file = open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
@@ -209,7 +209,7 @@ int file=0;
 	return file;
 }
 
-int isHyperSpace(char *filename)
+int isHyperSpace(const char *filename)
 {
 FHS_HEADERv1 header;
 int file;
@@ -352,7 +352,7 @@ struct stat stat_buf;
         return stat_buf.st_size / FHS_v1_HASH_SIZE;
 }
 
-HTMLFeature *loadDocument(char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
+HTMLFeature *loadDocument(const char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
 {
 HTMLFeature *hashes=NULL;
 int status = 0;
@@ -381,7 +381,7 @@ void closeDocument(uint64_t *hashes)
 // The following number is based on a lot of experimentation. It should be between 35-70. The larger the data set, the higher the number should be.
 // 95 is ideal for my training set.
 #define HS_OFFSET_MAX 95
-int loadHyperSpaceCategory(char *fhs_name, char *cat_name)
+int loadHyperSpaceCategory(const char *fhs_name, char *cat_name)
 {
 int fhs_file;
 uint16_t i, j, z, shortcut=0, offsetPos=2;
@@ -497,7 +497,7 @@ return 0;
 // It was allowed to be called even after some categories were loaded. This is
 // no longer the case. It must be called first. This was done to make it run faster,
 // and be simpler / more obviously correct.
-int preLoadHyperSpace(char *fhs_name)
+int preLoadHyperSpace(const char *fhs_name)
 {
 int fhs_file;
 uint16_t i, j;
@@ -567,7 +567,7 @@ uint16_t numHashes=0;
 	return 0;
 }
 
-int loadMassHSCategories(char *fhs_dir)
+int loadMassHSCategories(const char *fhs_dir)
 {
 DIR *dirp;
 struct dirent *dp;
@@ -756,7 +756,7 @@ HTMLClassification doHSPrepandClassify(HashList *toClassify)
 uint32_t i, j;
 uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
 int64_t BSRet = -1;
-HTMLClassification data;
+HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
 
 	if(HSCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
 

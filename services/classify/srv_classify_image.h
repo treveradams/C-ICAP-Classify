@@ -45,13 +45,13 @@ typedef struct _Detected {
 	ImageCategory *category; // Don't free this. This is a copy.
 	CvSeq *detected;
 	struct _Detected *next;
-} ImageDetected;
+} image_detected_t;
 
 typedef struct _DetectedCount {
 	ImageCategory *category; // Don't free this. This is a copy.
 	uint16_t count;
 	struct _DetectedCount *next;
-} ImageDetectedCount;
+} image_detected_count_t;
 
 typedef struct {
 	char fname[CI_MAX_PATH+1];
@@ -60,17 +60,17 @@ typedef struct {
 	IplImage *rightImage;
 	CvMemStorage *dstorage; // For use in detect routines and in using detected objects -- don't forget to free me after each image with cvClearMemStorage
 	CvMemStorage *lstorage; // For all other uses -- don't forget to free me after each image with cvClearMemStorage
-	ImageDetected *detected;
+	image_detected_t *detected;
 	int featuresDetected;
-	ci_request_t * req;
+	ci_request_t *req;
 	HTMLClassification referrer_fhs_classification;
 	HTMLClassification referrer_fnb_classification;
-} ImageSession;
+} image_session_t;
 
-enum {NO_IMAGE_CATEGORIES=-1, NO_IMAGE_MEMORY=-2};
+enum {IMAGE_NO_CATEGORIES=-1, IMAGE_NO_MEMORY=-2, IMAGE_FAILED_LOAD=-3};
 
 int categorize_image(ci_request_t * req);
-int cfg_AddImageCategory(char *directive, char **argv, void *setdata);
-int cfg_ImageInterpolation(char *directive, char **argv, void *setdata);
-int cfg_coalesceOverlap(char *directive, char **argv, void *setdata);
+int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata);
+int cfg_ImageInterpolation(const char *directive, const char **argv, void *setdata);
+int cfg_coalesceOverlap(const char *directive, const char **argv, void *setdata);
 #endif

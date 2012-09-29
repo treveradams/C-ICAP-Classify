@@ -76,12 +76,14 @@ const wchar_t *WCNULL = L"\0";
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
 extern int categorize_image(ci_request_t * req);
 extern int categorize_external_image(ci_request_t * req);
-extern int cfg_AddImageCategory(char *directive, char **argv, void *setdata);
-extern int cfg_ImageInterpolation(char *directive, char **argv, void *setdata);
-extern int cfg_coalesceOverlap(char *directive, char **argv, void *setdata);
-extern int cfg_imageCategoryCopies(char *directive, char **argv, void *setdata);
+extern int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata);
+extern int cfg_ImageInterpolation(const char *directive, const char **argv, void *setdata);
+extern int cfg_coalesceOverlap(const char *directive, const char **argv, void *setdata);
+extern int cfg_imageCategoryCopies(const char *directive, const char **argv, void *setdata);
 extern void classifyImagePrepReload(void);
-int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata); // In this file
+extern int initImageClassificationService(void);
+extern int closeImageClassification(void);
+int cfg_ExternalImageConversion(const char *directive, const char **argv, void *setdata); // In this file
 #endif
 
 int must_classify(int type, classify_req_data_t * data);
@@ -93,6 +95,9 @@ char *srvclassify_compute_name(ci_request_t * req);
 
 static int ALLOW204 = 0;
 static ci_off_t MAX_OBJECT_SIZE = 0;
+static ci_off_t MAX_MEM_CLASS_SIZE = 32768;
+static ci_off_t MAX_MEM_CLASS_TOTAL_SIZE = 0;
+uint32_t total_mem_class_used = 0;
 
 static struct ci_magics_db *magic_db = NULL;
 static int *classifytypes = NULL;
@@ -111,6 +116,7 @@ static int MAX_WINDOW = 4096; // This is for sliding window buffers
 
 /* Locking */
 ci_thread_rwlock_t textclassify_rwlock;
+ci_thread_mutex_t memmanage_mtx;
 
 /* Image processing information */
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
@@ -131,8 +137,12 @@ extern ci_thread_rwlock_t imageclassify_rwlock;
 /*srv_classify service extra data ... */
 ci_service_xdata_t *srv_classify_xdata = NULL;
 
+static int CLASSIFYREQDATA_POOL = -1;
+static int HASHDATA_POOL = -1;
 
 int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
+                           struct ci_server_conf *server_conf);
+int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
                            struct ci_server_conf *server_conf);
 void srvclassify_close_service();
 int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
@@ -146,17 +156,17 @@ int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
 /*Arguments parse*/
 void srvclassify_parse_args(classify_req_data_t * data, char *args);
 /*Configuration Functions*/
-int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata);
-int cfg_DoTextPreload(char *directive, char **argv, void *setdata);
-int cfg_AddTextCategory(char *directive, char **argv, void *setdata);
-int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata);
-int cfg_AddTextCategoryDirectoryNB(char *directive, char **argv, void *setdata);
-int cfg_TextHashSeeds(char *directive, char **argv, void *setdata);
-int cfg_OptimizeFNB(char *directive, char **argv, void *setdata);
-int cfg_ClassifyTmpDir(char *directive, char **argv, void *setdata);
-int cfg_TmpDir(char *directive, char **argv, void *setdata);
-int cfg_TextSecondary(char *directive, char **argv, void *setdata);
-int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata);
+int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdata);
+int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata);
+int cfg_AddTextCategory(const char *directive, const char **argv, void *setdata);
+int cfg_AddTextCategoryDirectoryHS(const char *directive, const char **argv, void *setdata);
+int cfg_AddTextCategoryDirectoryNB(const char *directive, const char **argv, void *setdata);
+int cfg_TextHashSeeds(const char *directive, const char **argv, void *setdata);
+int cfg_OptimizeFNB(const char *directive, const char **argv, void *setdata);
+int cfg_ClassifyTmpDir(const char *directive, const char **argv, void *setdata);
+int cfg_TmpDir(const char *directive, const char **argv, void *setdata);
+int cfg_TextSecondary(const char *directive, const char **argv, void *setdata);
+int cfg_ExternalTextConversion(const char *directive, const char **argv, void *setdata);
 /*General functions*/
 int get_filetype(ci_request_t *req, char *buf, int len);
 void set_istag(ci_service_xdata_t *srv_xdata);
@@ -189,11 +199,11 @@ typedef struct {
 ci_thread_rwlock_t referrers_rwlock;
 REFERRERS_T *referrers;
 
-static uint32_t classify_requests = 0;
+static uint32_t classify_requests = 1;
 #endif
 
 void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
-void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
+void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
 void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
 void createReferrerTable(void);
 void freeReferrerTable(void);
@@ -224,6 +234,8 @@ static struct ci_conf_entry conf_variables[] = {
      {"MaxWindowSize", &MAX_WINDOW, ci_cfg_size_off, NULL},
      {"Allow204Responces", &ALLOW204, ci_cfg_onoff, NULL},
      {"TextPrimarySecondary", NULL, cfg_TextSecondary, NULL},
+     {"MaxMemClassification", &MAX_MEM_CLASS_SIZE, ci_cfg_size_off, NULL},
+     {"MaxTotalMemClassification", &MAX_MEM_CLASS_TOTAL_SIZE, ci_cfg_size_off, NULL},
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      {"ImageFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ImageScaleDimension", &ImageScaleDimension, ci_cfg_set_int, NULL},
@@ -245,8 +257,8 @@ static struct ci_conf_entry conf_variables[] = {
 };
 
 /* Template Functions and Table */
-int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, char *param);
-int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, char *param);
+int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, const char *param);
+int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, const char *param);
 
 struct ci_fmt_entry srv_classify_format_table [] = {
     {"%CLIN", "File To Convert", fmt_srv_classify_source},
@@ -259,7 +271,7 @@ CI_DECLARE_MOD_DATA ci_service_module_t service = {
      "Web Classification service",        /*Module short description */
      ICAP_RESPMOD,        /*Service type responce or request modification */
      srvclassify_init_service,    /*init_service. */
-     NULL,                      /*post_init_service. */
+     srvclassify_post_init_service, /*post_init_service. */
      srvclassify_close_service,   /*close_service */
      srvclassify_init_request_data,       /*init_request_data. */
      srvclassify_release_request_data,    /*release request data */
@@ -270,6 +282,91 @@ CI_DECLARE_MOD_DATA ci_service_module_t service = {
      NULL
 };
 
+ci_membuf_t *createMemBody(classify_req_data_t *data, uint32_t size)
+{
+ci_membuf_t *temp = NULL;
+	if(size > MAX_MEM_CLASS_SIZE) return NULL;
+	if(MAX_MEM_CLASS_TOTAL_SIZE)
+	{
+		ci_thread_mutex_lock(&memmanage_mtx);
+		if(size + total_mem_class_used > MAX_MEM_CLASS_TOTAL_SIZE)
+		{
+			ci_thread_mutex_unlock(&memmanage_mtx);
+			return NULL;
+		}
+	}
+	temp = ci_membuf_new_sized(size);
+	if(temp != NULL) total_mem_class_used += size;
+	if(MAX_MEM_CLASS_TOTAL_SIZE)
+		ci_thread_mutex_unlock(&memmanage_mtx);
+	return temp;
+}
+
+int freeMemBody(classify_req_data_t *data)
+{
+	if(!data) return CI_ERROR;
+	if(!data->mem_body) return CI_ERROR;
+	else {
+		if(MAX_MEM_CLASS_TOTAL_SIZE)
+		{
+			ci_thread_mutex_lock(&memmanage_mtx);
+			total_mem_class_used -= data->mem_body->endpos;
+			ci_thread_mutex_unlock(&memmanage_mtx);
+		}
+		ci_membuf_free(data->mem_body);
+		data->mem_body = NULL;
+	}
+	return 0;
+}
+
+void diskBodyToMemBody(ci_request_t *req)
+{
+classify_req_data_t *data = ci_service_data(req);
+ci_membuf_t *tempbody;
+
+	if(!data->disk_body) return;
+
+	data->mem_body = ci_membuf_new_sized(ci_simple_file_size(data->disk_body));
+	tempbody = data->mem_body;
+
+	lseek(data->disk_body->fd, 0, SEEK_SET);
+	tempbody->endpos = 0;
+	while(tempbody->endpos < ci_simple_file_size(data->disk_body))
+		tempbody->endpos += read(data->disk_body->fd, tempbody->buf + tempbody->endpos, data->disk_body->endpos - tempbody->endpos);
+
+	if(MAX_MEM_CLASS_TOTAL_SIZE)
+	{
+		ci_thread_mutex_lock(&memmanage_mtx);
+		total_mem_class_used += ci_simple_file_size(data->disk_body);
+		ci_thread_mutex_unlock(&memmanage_mtx);
+	}
+
+        ci_simple_file_destroy(data->disk_body);
+	data->disk_body = NULL;
+}
+
+void memBodyToDiskBody(ci_request_t *req)
+{
+classify_req_data_t *data = ci_service_data(req);
+ci_simple_file_t *tempbody;
+
+	if(!data->mem_body) return;
+
+	data->disk_body = ci_simple_file_new(ci_membuf_size(data->mem_body));
+	tempbody = data->disk_body;
+
+	ci_simple_file_write(tempbody, data->mem_body->buf, ci_membuf_size(data->mem_body), 0);
+
+	if(MAX_MEM_CLASS_TOTAL_SIZE)
+	{
+		ci_thread_mutex_lock(&memmanage_mtx);
+		total_mem_class_used -= ci_membuf_size(data->mem_body);
+		ci_thread_mutex_unlock(&memmanage_mtx);
+	}
+
+        ci_membuf_free(data->mem_body);
+	data->mem_body = NULL;
+}
 
 int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
                            struct ci_server_conf *server_conf)
@@ -278,13 +375,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 
      ci_thread_rwlock_init(&textclassify_rwlock);
      ci_thread_rwlock_wrlock(&textclassify_rwlock);
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-     ci_thread_rwlock_init(&imageclassify_rwlock);
-     ci_thread_rwlock_wrlock(&imageclassify_rwlock);
-
-     ci_thread_rwlock_init(&referrers_rwlock);
-     createReferrerTable();
-#endif
+     ci_thread_mutex_init(&memmanage_mtx);
 
      magic_db = server_conf->MAGIC_DB;
      classifytypes = (int *) malloc(ci_magic_types_num(magic_db) * sizeof(int));
@@ -298,10 +389,26 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 
      ci_debug_printf(10, "Going to initialize srv_classify\n");
      srv_classify_xdata = srv_xdata;      /* Needed by db_reload command */
-     set_istag(srv_classify_xdata);
+
      ci_service_set_preview(srv_xdata, 1024);
      ci_service_enable_204(srv_xdata);
      ci_service_set_transfer_preview(srv_xdata, "*");
+
+     /*Initialize object pools*/
+     CLASSIFYREQDATA_POOL = ci_object_pool_register("classify_req_data_t", sizeof(classify_req_data_t));
+
+     if(CLASSIFYREQDATA_POOL < 0) {
+	 ci_debug_printf(1, " srvclassify_init_service: error registering object_pool classify_req_data_t\n");
+	 return CI_ERROR;
+     }
+
+     HASHDATA_POOL = ci_object_pool_register("HTMLFeature", (sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT));
+
+     if(HASHDATA_POOL < 0) {
+         ci_object_pool_unregister(CLASSIFYREQDATA_POOL);
+	 ci_debug_printf(1, " srvclassify_init_service: error registering object_pool HTMLFeature\n");
+	 return CI_ERROR;
+     }
 
      setlocale(LC_ALL, "");
      int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
@@ -313,20 +420,33 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 //#endif
      initHTML();
      ci_thread_rwlock_unlock(&textclassify_rwlock);
+
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-     ci_thread_rwlock_unlock(&imageclassify_rwlock);
+     initImageClassificationService();
+
+     ci_thread_rwlock_init(&referrers_rwlock);
+     createReferrerTable();
 #endif
 
      return 1;
 }
 
+int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
+                           struct ci_server_conf *server_conf)
+{
+    set_istag(srv_classify_xdata);
+    return CI_OK;
+}
 
 void srvclassify_close_service()
 {
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+     closeImageClassification();
      freeReferrerTable();
-     classifyImagePrepReload();
 #endif
+
+     ci_object_pool_unregister(HASHDATA_POOL);
+     ci_object_pool_unregister(CLASSIFYREQDATA_POOL);
 
      ci_thread_rwlock_wrlock(&textclassify_rwlock);
      if(CLASSIFY_TMP_DIR) free(CLASSIFY_TMP_DIR);
@@ -388,13 +508,15 @@ void *srvclassify_init_request_data(ci_request_t * req)
      if (ci_req_hasbody(req)) {
           ci_debug_printf(8, "Request type: %d. Preview size:%d\n", req->type,
                           preview_size);
-          if (!(data = malloc(sizeof(classify_req_data_t)))) {
+          if (!(data = ci_object_pool_alloc(CLASSIFYREQDATA_POOL))) {
                ci_debug_printf(1,
-                               "Error allocation memory for service data!!!!!!!");
+                               "Error allocation memory for service data!!!!!!!\n");
                return NULL;
           }
-          data->body = NULL;
+          data->disk_body = NULL;
+          data->mem_body = NULL;
           data->uncompressedbody = NULL;
+          data->external_body = NULL;
           data->must_classify = NO_CLASSIFY;
           if (ALLOW204)
                data->args.enable204 = 1;
@@ -423,13 +545,18 @@ void srvclassify_release_request_data(void *data)
 {
      if (data) {
           ci_debug_printf(8, "Releasing srv_classify data.....\n");
-          if (((classify_req_data_t *) data)->body)
-               ci_simple_file_destroy(((classify_req_data_t *) data)->body);
+          if (((classify_req_data_t *) data)->disk_body)
+               ci_simple_file_destroy(((classify_req_data_t *) data)->disk_body);
+
+          if (((classify_req_data_t *) data)->mem_body) freeMemBody(data);
+
+          if (((classify_req_data_t *) data)->external_body)
+               ci_simple_file_destroy(((classify_req_data_t *) data)->external_body);
 
           if (((classify_req_data_t *) data)->uncompressedbody)
                ci_membuf_free(((classify_req_data_t *) data)->uncompressedbody);
 
-          free(data);
+          ci_object_pool_free(data);
      }
 }
 
@@ -489,15 +616,32 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
           return CI_MOD_ALLOW204;
      }
 
-     data->body = ci_simple_file_new(content_size);
-     ci_simple_file_lock_all(data->body);
+     if((data->must_classify == TEXT || data->must_classify == IMAGE) && content_size > 0)
+     {
+          data->mem_body = createMemBody(data, content_size);
+          if(data->mem_body) ci_membuf_lock_all(data->mem_body);
+     }
+     if(!data->mem_body)
+     {
+          data->disk_body = ci_simple_file_new(content_size);
+          ci_simple_file_lock_all(data->disk_body);
+     }
 
-     if (!data->body)           /*Memory allocation or something else ..... */
+     if (!data->disk_body && !data->mem_body)           /*Memory allocation or something else ..... */
           return CI_ERROR;
 
      if (preview_data_len) {
-          ci_simple_file_write(data->body, preview_data, preview_data_len,
-                               ci_req_hasalldata(req));
+          if(data->mem_body)
+          {
+               if (ci_membuf_write(data->mem_body, preview_data, preview_data_len,
+				  ci_req_hasalldata(req)) == CI_ERROR)
+	          return CI_ERROR;
+          }
+          else {
+               if (ci_simple_file_write(data->disk_body, preview_data, preview_data_len,
+				  ci_req_hasalldata(req)) == CI_ERROR)
+	          return CI_ERROR;
+          }
      }
      return CI_MOD_CONTINUE;
 }
@@ -511,15 +655,37 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
      if (!data)
           return CI_ERROR;
 
-     /* FIXME the following if should just process what is had at the moment... possible? */
-     if (ci_simple_file_size(data->body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-          ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
-          data->must_classify = 0;
-          ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
-          ci_simple_file_unlock_all(data->body);        /*Unlock all body data to continue send them..... */
+     if (!data->disk_body && !data->mem_body) /*No body data? consume all content*/
+	 return len;
+
+     if(data->mem_body)
+     {
+          /* FIXME the following if should just process what is had at the moment... possible? */
+          if (ci_membuf_size(data->mem_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
+               ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+               data->must_classify = 0;
+               ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+               ci_membuf_unlock_all(data->mem_body);        /*Unlock all body data to continue send them..... */
+           }
+          /* anything where we are not in over max object size, simply write and exit */
+          if(ci_membuf_size(data->mem_body) + len > data->mem_body->bufsize)
+          {
+               memBodyToDiskBody(req);
+               return ci_simple_file_write(data->disk_body, buf, len, iseof);
+          }
+          else return ci_membuf_write(data->mem_body, buf, len, iseof);
+      }
+      else {
+          /* FIXME the following if should just process what is had at the moment... possible? */
+          if(ci_simple_file_size(data->disk_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
+               ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+               data->must_classify = 0;
+               ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+               ci_simple_file_unlock_all(data->disk_body);        /*Unlock all body data to continue send them..... */
+          }
+          /* anything where we are not in over max object size, simply write and exit */
+          return ci_simple_file_write(data->disk_body, buf, len, iseof);
      }
-     /* anything where we are not in over max object size, simly write and exit */
-     return ci_simple_file_write(data->body, buf, len, iseof);
 }
 
 
@@ -531,7 +697,12 @@ int srvclassify_write_to_net(char *buf, int len, ci_request_t * req)
      if (!data)
           return CI_ERROR;
 
-     bytes = ci_simple_file_read(data->body, buf, len);
+     if(data->mem_body)
+	 bytes = ci_membuf_read(data->mem_body, buf, len);
+     else if(data->disk_body)
+	 bytes = ci_simple_file_read(data->disk_body, buf, len);
+     else
+	 bytes = 0;
      return bytes;
 }
 
@@ -541,38 +712,48 @@ int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
      int ret = CI_OK;
      if (rbuf && rlen) {
           *rlen = srvclassify_read_from_net(rbuf, *rlen, iseof, req);
-          if (*rlen < 0)
-               ret = CI_OK;
+	  if (*rlen == CI_ERROR)
+	       return CI_ERROR;
+          else if (*rlen < 0)
+	       ret = CI_OK;
      }
-     else if (iseof)
-          srvclassify_read_from_net(NULL, 0, iseof, req);
+     else if (iseof) {
+	 if (srvclassify_read_from_net(NULL, 0, iseof, req) == CI_ERROR)
+	     return CI_ERROR;
+     }
      if (wbuf && wlen) {
           *wlen = srvclassify_write_to_net(wbuf, *wlen, req);
      }
      return CI_OK;
 }
 
-int srvclassify_end_of_data_handler(ci_request_t * req)
+int srvclassify_end_of_data_handler(ci_request_t *req)
 {
      classify_req_data_t *data = ci_service_data(req);
-     ci_simple_file_t *body;
+     ci_simple_file_t *disk_body;
+     ci_membuf_t *mem_body;
 
-     if (!data || !data->body)
+     if (!data || (!data->disk_body && !data->mem_body))
           return CI_MOD_DONE;
 
-     body = data->body;
+     disk_body = data->disk_body;
+     mem_body = data->mem_body;
 
      if (data->must_classify == NO_CLASSIFY) {       /*If exceeds the MAX_OBJECT_SIZE for example ......  */
           ci_debug_printf(8, "Not Classifying\n");
-          ci_simple_file_unlock_all(body);          /*Unlock all data to continue send them . Not really needed here.... */
+          if(mem_body)
+               ci_membuf_unlock_all(mem_body);
+          else {
+               ci_simple_file_unlock_all(disk_body);          /*Unlock all data to continue send them . Not really needed here.... */
+               lseek(disk_body->fd, 0, SEEK_SET);
+          }
           return CI_MOD_DONE;
      }
 
-     lseek(body->fd, 0, SEEK_SET);
-
      if (data->must_classify == TEXT)
      {
-          ci_debug_printf(8, "Classifying TEXT from file\n");
+          if(data->disk_body) diskBodyToMemBody(req);
+          ci_debug_printf(8, "Classifying TEXT from memory\n");
           #ifdef HAVE_ZLIB
           if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE)
                classify_uncompress(req);
@@ -586,7 +767,6 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      else if (data->must_classify == IMAGE)
      {
-          ci_debug_printf(8, "Classifying IMAGE from file\n");
           categorize_image(req);
      }
      // The following may look screwy, but it is necessary so that both EXTERNAL IMAGE and EXTERNAL TEXT can be used
@@ -615,13 +795,17 @@ int srvclassify_end_of_data_handler(ci_request_t * req)
           return CI_MOD_ALLOW204;
      }
 
-     ci_simple_file_unlock_all(body);   /*Unlock all data to continue send them, after all we only modify headers in this module..... */
-     ci_debug_printf(7, "file unlocked, flags :%d (unlocked:%" PRINTF_OFF_T ")\n",
-                     body->flags, body->unlocked);
+     if(mem_body)
+          ci_membuf_unlock_all(mem_body);
+     else {
+          ci_simple_file_unlock_all(disk_body);   /*Unlock all data to continue send them, after all we only modify headers in this module..... */
+          ci_debug_printf(7, "file unlocked, flags :%d (unlocked:%" PRINTF_OFF_T ")\n",
+                          disk_body->flags, disk_body->unlocked);
+     }
      return CI_MOD_DONE;
 }
 
-int categorize_text(ci_request_t * req)
+int categorize_text(ci_request_t *req)
 {
 classify_req_data_t *data = ci_service_data(req);
 char reply[2 * CI_MAX_PATH + 1];
@@ -641,13 +825,13 @@ HTMLClassification HSclassification, NBclassification;
      // Obtain Read Lock
      ci_thread_rwlock_rdlock(&textclassify_rwlock);
 
-     mkRegexHead(&myRegexHead, data->uncompressedbody->buf, 1);
+     mkRegexHead(&myRegexHead, (wchar_t *)data->uncompressedbody->buf, 1);
      removeHTML(&myRegexHead);
      regexMakeSingleBlock(&myRegexHead);
      normalizeCurrency(&myRegexHead);
      regexMakeSingleBlock(&myRegexHead);
 
-     myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+     myHashes.hashes = ci_object_pool_alloc(HASHDATA_POOL);
      myHashes.slots = HTML_MAX_FEATURE_COUNT;
      myHashes.used = 0;
      computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
@@ -655,7 +839,7 @@ HTMLClassification HSclassification, NBclassification;
      HSclassification = doHSPrepandClassify(&myHashes);
      NBclassification = doBayesPrepandClassify(&myHashes);
 
-     free(myHashes.hashes);
+     ci_object_pool_free(myHashes.hashes);
      freeRegexHead(&myRegexHead);
      data->uncompressedbody->buf = NULL; // This was freed who knows how many times in the classification, avoid double free
 
@@ -746,7 +930,7 @@ HTMLClassification HSclassification, NBclassification;
      return CI_OK;
 }
 
-int categorize_external_text(ci_request_t * req, int classification_type)
+int categorize_external_text(ci_request_t *req, int classification_type)
 {
 FILE *conversion_in;
 char buff[512];
@@ -872,49 +1056,25 @@ classify_req_data_t *data = ci_service_data(req);
 	return 1;
 }
 
-int make_wchar(ci_request_t * req)
+int make_wchar(ci_request_t *req)
 {
 char *charSet;
-char *buffer, *tempbuffer;
-ci_membuf_t *tempbody;
+char *buffer, *tempbuffer = NULL;
+ci_membuf_t *tempbody, *input;
 char *outputBuffer;
-int i = 0;
 size_t inBytes = 0, outBytes = MAX_WINDOW, status = 0;
 classify_req_data_t *data;
 iconv_t convert;
 ci_off_t content_size = 0;
+int i;
 
      data = ci_service_data(req);
 
-     if(data->uncompressedbody) // Was the document compressed and did we get the result?
-     {
-          content_size = data->uncompressedbody->endpos;
-     }
-     else { // Document wasn't compressed, copy original document!
-          content_size = data->body->endpos;
-          data->uncompressedbody = ci_membuf_new_sized(content_size + 1);
-          if (!data->uncompressedbody)
-          {
-               ci_debug_printf(1, "make_wchar: Unable to allocate memory for conversion to WCHAR_T for Text Classification (%s)!\n", strerror(errno));
-               addTextErrorHeaders(req, NO_MEMORY, NULL);
-               return CI_ERROR;
-           }
-          lseek(data->body->fd, 0, SEEK_SET);
-          data->uncompressedbody->endpos = 0;
-          do {
-               inBytes = read(data->body->fd, data->uncompressedbody->buf + data->uncompressedbody->endpos, content_size);
-               if(inBytes)
-               {
-                    data->uncompressedbody->endpos += inBytes;
-                    content_size -= data->uncompressedbody->endpos;
-               }
-          } while (inBytes > 0 && content_size > data->uncompressedbody->endpos);
-          // DO NOT APPEND NULL HERE AS iconv SEEMS TO CAUSE CORRUPTION / CRASHES WITH A NULL
-          content_size = data->uncompressedbody->endpos;
-     }
+     if(data->uncompressedbody) input = data->uncompressedbody;
+     else input = data->mem_body;
 
      // Fetch document character set
-     charSet = findCharset(data->uncompressedbody->buf, data->uncompressedbody->endpos);
+     charSet = findCharset(input->buf, input->endpos);
      if(charSet == NULL)
      {
           if((charSet = ci_http_response_get_header(req, "Content-Type")) != NULL)
@@ -946,7 +1106,6 @@ ci_off_t content_size = 0;
           charSet = tempbuffer;
      }
 
-
      // Setup and do iconv charset conversion to WCHAR_T
      convert = iconv_open("WCHAR_T", charSet); // UTF-32//TRANSLIT
      if(convert == (iconv_t)-1)
@@ -956,8 +1115,9 @@ ci_off_t content_size = 0;
           free(charSet);
           return CI_ERROR; // no charset conversion available, so bail with error
      }
-     buffer = data->uncompressedbody->buf;
-     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudgefactor
+     content_size = input->endpos;
+     buffer = input->buf;
+     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudge-factor
      outputBuffer = (char *) tempbody->buf;
      outBytes = (content_size + 32) * UTF32_CHAR_SIZE; // 32 is the 32 above
      inBytes = content_size;
@@ -996,7 +1156,8 @@ ci_off_t content_size = 0;
 									    // Except that it uses wchar_t now because it is safe to do so!
      // Append a Wide Character NULL (WCNULL) here as the classifier needs the NULL
      ci_membuf_write(tempbody, (char *) WCNULL, sizeof(wchar_t), 1);
-     ci_membuf_free(data->uncompressedbody);
+
+     if(data->uncompressedbody) ci_membuf_free(data->uncompressedbody);
      data->uncompressedbody = tempbody;
      tempbody = NULL;
 
@@ -1006,7 +1167,7 @@ ci_off_t content_size = 0;
      return CI_OK;
 }
 
-int make_wchar_from_buf(ci_request_t * req, ci_membuf_t *input)
+int make_wchar_from_buf(ci_request_t *req, ci_membuf_t *input)
 {
 char *charSet = "UTF-8";
 char *buffer;
@@ -1029,7 +1190,7 @@ ci_off_t content_size = 0;
      }
      content_size = input->endpos;
      buffer = input->buf;
-     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudgefactor
+     tempbody = ci_membuf_new_sized((content_size + 33) * UTF32_CHAR_SIZE); // 33 = 1 for termination, 32 for silly fudge-factor
      outputBuffer = (char *) tempbody->buf;
      outBytes = (content_size + 32) * sizeof(wchar_t); // 32 is the 32 above
      inBytes = content_size;
@@ -1068,7 +1229,7 @@ ci_off_t content_size = 0;
 									    // Except that it uses wchar_t now because it is safe to do so!
      // Append a Wide Character NULL (WCNULL) here as the classifier needs the NULL
      ci_membuf_write(tempbody, (char *) WCNULL, sizeof(wchar_t), 1);
-     ci_membuf_free(input);
+//     ci_membuf_free(input); -- not needed anymore... here for a short time more only
      data->uncompressedbody = tempbody;
      tempbody = NULL;
 
@@ -1118,17 +1279,11 @@ int classify_uncompress(ci_request_t * req)
      strm.zfree = Z_NULL;
      strm.opaque = Z_NULL;
      classify_req_data_t *data;
-     ci_membuf_t *tempbody;
 
      data = ci_service_data(req);
 
-     tempbody = ci_membuf_new_sized(data->body->endpos);
-     lseek(data->body->fd, 0, SEEK_SET);
-     tempbody->endpos = 0;
-     while(tempbody->endpos < data->body->endpos)
-         tempbody->endpos += read(data->body->fd, tempbody->buf + tempbody->endpos, data->body->endpos - tempbody->endpos);
-     strm.avail_in = tempbody->endpos;
-     strm.next_in = (Bytef *) tempbody->buf;
+     strm.avail_in = data->mem_body->endpos;
+     strm.next_in = (Bytef *) data->mem_body->buf;
 
      outputBuffer = malloc(MAX_WINDOW);
      strm.avail_out = MAX_WINDOW;
@@ -1141,8 +1296,6 @@ int classify_uncompress(ci_request_t * req)
      if (ret != Z_OK)
      {
           ci_debug_printf(1, "Error initializing zlib (inflateInit return: %d)\n", ret);
-          ci_membuf_free(tempbody);
-          tempbody = NULL;
           addTextErrorHeaders(req, ZLIB_FAIL, NULL);
           return CI_ERROR;
      }
@@ -1192,8 +1345,6 @@ int classify_uncompress(ci_request_t * req)
 
      // cleanup everything
      inflateEnd(&strm);
-     ci_membuf_free(tempbody);
-     tempbody=NULL; // used later so we can't wait for garbage collection
      free(outputBuffer);
      ci_debug_printf(7, "Finished decompressing data.\n");
      return CI_OK;
@@ -1311,16 +1462,16 @@ void srvclassify_parse_args(classify_req_data_t * data, char *args)
 
 /***********************************************************************************/
 /*Template Functions                                                               */
-int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, char *param)
+int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
-    if (! data->body->filename)
+    if (! data->disk_body->filename)
         return 0;
 
-    return snprintf(buf, len, "%s", data->body->filename);
+    return snprintf(buf, len, "%s", data->disk_body->filename);
 }
 
-int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, char *param)
+int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
     if (! data->external_body->filename)
@@ -1332,7 +1483,7 @@ int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, char *pa
 /****************************************************************************************/
 /*Configuration Functions                                                               */
 
-int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata)
+int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdata)
 {
      int i, id;
      int type = NO_CLASSIFY;
@@ -1367,7 +1518,7 @@ int cfg_ClassifyFileTypes(char *directive, char **argv, void *setdata)
      return 1;
 }
 
-int cfg_TmpDir(char *directive, char **argv, void *setdata)
+int cfg_TmpDir(const char *directive, const char **argv, void *setdata)
 {
      int val = 1;
      char fname[CI_MAX_PATH + 1];
@@ -1407,7 +1558,7 @@ int cfg_TmpDir(char *directive, char **argv, void *setdata)
      return val;
 }
 
-int cfg_DoTextPreload(char *directive, char **argv, void *setdata)
+int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata)
 {
      if (argv == NULL || argv[0] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
@@ -1424,7 +1575,7 @@ int cfg_DoTextPreload(char *directive, char **argv, void *setdata)
      return 1;
 }
 
-int cfg_AddTextCategory(char *directive, char **argv, void *setdata)
+int cfg_AddTextCategory(const char *directive, const char **argv, void *setdata)
 {
 int val = 0;
      if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
@@ -1442,7 +1593,7 @@ int val = 0;
      return val;
 }
 
-int cfg_AddTextCategoryDirectoryHS(char *directive, char **argv, void *setdata)
+int cfg_AddTextCategoryDirectoryHS(const char *directive, const char **argv, void *setdata)
 {
 int val = 0;
      if (argv == NULL || argv[0] == NULL) {
@@ -1457,7 +1608,7 @@ int val = 0;
      return val;
 }
 
-int cfg_AddTextCategoryDirectoryNB(char *directive, char **argv, void *setdata)
+int cfg_AddTextCategoryDirectoryNB(const char *directive, const char **argv, void *setdata)
 {
 int val = 0;
      if (argv == NULL || argv[0] == NULL) {
@@ -1472,8 +1623,7 @@ int val = 0;
      return val;
 }
 
-
-int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
+int cfg_TextHashSeeds(const char *directive, const char **argv, void *setdata)
 {
      if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
@@ -1487,7 +1637,7 @@ int cfg_TextHashSeeds(char *directive, char **argv, void *setdata)
      return 1;
 }
 
-int cfg_TextSecondary(char *directive, char **argv, void *setdata)
+int cfg_TextSecondary(const char *directive, const char **argv, void *setdata)
 {
      unsigned int bidirectional = 0;
 
@@ -1528,7 +1678,7 @@ int cfg_TextSecondary(char *directive, char **argv, void *setdata)
      return 1;
 }
 
-int cfg_OptimizeFNB(char *directive, char **argv, void *setdata)
+int cfg_OptimizeFNB(const char *directive, const char **argv, void *setdata)
 {
      optimizeFBC(&NBJudgeHashList);
 
@@ -1536,7 +1686,7 @@ int cfg_OptimizeFNB(char *directive, char **argv, void *setdata)
      return 1;
 }
 
-int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
+int cfg_ExternalTextConversion(const char *directive, const char **argv, void *setdata)
 {
      int i, id = -1, k;
      int type = NO_CLASSIFY;
@@ -1600,7 +1750,7 @@ int cfg_ExternalTextConversion(char *directive, char **argv, void *setdata)
 }
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata)
+int cfg_ExternalImageConversion(const char *directive, const char **argv, void *setdata)
 {
      int i, id = -1, k;
      int type = NO_CLASSIFY;
@@ -1651,7 +1801,7 @@ int cfg_ExternalImageConversion(char *directive, char **argv, void *setdata)
 }
 #endif
 
-char *myStrDup(char *string)
+char *myStrDup(const char *string)
 {
 char *temp;
 	if(string == NULL) return NULL;
@@ -1698,8 +1848,6 @@ int oldest = 0, i;
 		}
 	}
 
-	classify_requests++;
-
 	// Avoid wrap around problems
 	if(classify_requests == 0 && referrers[oldest].age > 0)
 	{
@@ -1727,11 +1875,12 @@ int oldest = 0, i;
 	referrers[oldest].fhs_classification = fhs_classification;
 	referrers[oldest].fnb_classification = fnb_classification;
 	referrers[oldest].age = classify_requests;
+	classify_requests++;
 
 	ci_thread_rwlock_unlock(&referrers_rwlock);
 }
 
-void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
+void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
 {
 uint32_t primary = 0, secondary = 0;
 HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };

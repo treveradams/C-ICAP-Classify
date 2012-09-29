@@ -5,6 +5,14 @@ TEXT HEADERS FOR ACL USE
 ===================
 X-TEXT-ERROR:
 This will appear if there was some error in processing the text.
+The following are values you may see:
+"OUT OF MEMORY" - memory couldn't be allocated
+"NO CATEGORIES PROVIDED, CAN'T PROCESS" - no image categories were
+	loaded.
+"ZLIB FAILURE" - object claims compression, we couldn't uncompress.
+"CANNOT CONVERT $CHARSET TO WCHAR_T" - could not convert charset from
+	some $CHARSET (i.e. ISO-8859-1) to WCHAR_T
+"UNKNOWN ERROR" - some other error
 
 X-TEXT-CATEGORY-(HS|NB):
 This is the configured category name for which there is the best match
@@ -30,7 +38,13 @@ IMAGE HEADERS FOR ACL USE
 =========================
 X-IMAGE-ERROR:
 If there was some kind of error in processing the image, you will see
-this header.
+this header. The following are values you may see:
+"OUT OF MEMORY" - memory couldn't be allocated
+"NO CATEGORIES PROVIDED, CAN'T PROCESS" - no image categories were
+	loaded.
+"FAILED TO LOAD IMAGE (Corrupted or Unknown Format)" - image couldn't
+	be loaded.
+"UNKNOWN ERROR" - some other error
 
 X-IMAGE-CATEGORIES:
 This will only show up if objects are detected in the image. The values

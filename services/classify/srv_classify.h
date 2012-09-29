@@ -28,7 +28,8 @@
 #define IMAGE_CATEGORY_COPIES_MIN 10
 
 typedef struct classify_req_data {
-     ci_simple_file_t *body;
+     ci_simple_file_t *disk_body;
+     ci_membuf_t *mem_body;
      ci_request_t *req;
      ci_simple_file_t *external_body;
      ci_membuf_t *uncompressedbody;
@@ -59,11 +60,13 @@ typedef struct {
 	char **image_args;
 } external_conversion_t;
 
-char *myStrDup(char *string);
+char *myStrDup(const char *string);
 
 #endif
 
 #ifndef IN_SRV_CLASSIFY
-extern void getReferrerClassification(char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
+extern void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification);
 extern void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
+extern void memBodyToDiskBody(ci_request_t *req);
+extern char *CLASSIFY_TMP_DIR;
 #endif

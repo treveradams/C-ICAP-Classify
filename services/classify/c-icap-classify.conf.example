@@ -19,7 +19,8 @@ srv_classify.Allow204Responces on
 # The Maximum object to be classified.
 srv_classify.MaxObjectSize 40M
 # Number of cascades to load per image cateogry
-srv_classify.ImageCategoryCopies 85
+# Default: 10
+srv_classify.ImageCategoryCopies 50
 # Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or
 #     debugDemonstrateMarked is activated
 srv_classify.ImageCategory CATEGORY_NAME FILE RED_CIRCLE_COLOR BLUE_CIRCLE_COLOR GREEN_CIRCLE_COLOR
@@ -38,7 +39,8 @@ srv_classify.debugDemonstrate 1
 # Type of interpolation to use for images. NN (fastest), LINEAR (default), AREA,
 #     BICUBIC (slowest).
 srv_classify.ImageInterpolation LINEAR
-# Coalesce image if overlap is in X category with 80% overlap (1 is 100%)
+# Coalesce detected objects if objects overlap by a givern percentage
+# (.5 is 50%, 1 is 100%)
 srv_classify.ImageCoalesceOverlap CATEGORY_NAME PERCENT_OVERLAP
 
 # Add text categories.
@@ -119,3 +121,23 @@ srv_classify.ExternalImageFileType PDF /usr/bin/pdfimages %CLIN %CLDIROUT
 # To process SWF files for images, you will need to use swftools or the ilk,
 #    but you will need to write a wrapper around SWFExtract
 #    (to get IDs to then use -j and -p to extract)
+
+# It is often useful to not write the text or images to be classified out to
+# disk if they are under a certain size. This parameter sets that size.
+# This can be absolute values or in K for Kilobytes, and M for Megabytes.
+# Default: 32K
+srv_classify.MaxMemClassification 32K
+
+# srv_classify.MaxMemClassification can cause DoS possibilites. This paramter
+# will help avoid them. This parameter is how much memory can be used for ALL
+# objects done in memory because of MaxMemClassificaion. This parameter is NOT
+# exact. Real memory usage can be 4x, or more, what you set here. This is due
+# to certain optimizations in C-ICAP that are used.
+# NOTE: I am not certain if this is per process or global.
+# NOTE: This will cause a performance hit due to locking issues. Leave this at
+# default, unless you see DoS problems.
+# Default: 0
+srv_classify.MaxTotalMemClassification 0
+
+# Currently implemented but undocumented:
+# MaxWindowSize, ImageScaleDimension, ImageMaxScale, ImageMinProcess

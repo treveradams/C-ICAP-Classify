@@ -66,7 +66,7 @@
 // How many matches must there be in a file for it to be trusted?
 #define MINIMUM_MATCHES 5
 
-FBCTextCategoryExt NBCategories;
+FBCTextCategoryExt NBCategories = { .categories = NULL };
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
 
 void initBayesClassifier(void)
@@ -86,7 +86,7 @@ uint32_t i=0;
 	{
 		free(NBCategories.categories[i].name);
 	}
-	if(NBCategories.used) free(NBCategories.categories);
+	if(NBCategories.categories) free(NBCategories.categories);
 
 	for(i=0; i < NBJudgeHashList.used; i++)
 	{
@@ -235,7 +235,7 @@ int i;
         } while (i >= 0 && i < FBC_HEADERv1_RECORDS_QTY_SIZE);
 }
 
-int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting)
+int openFBC(const char *filename, FBC_HEADERv1 *header, int forWriting)
 {
 int file=0;
 	file=open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
@@ -251,7 +251,7 @@ int file=0;
 	return file;
 }
 
-int isBayes(char *filename)
+int isBayes(const char *filename)
 {
 FBC_HEADERv1 header;
 int file;
@@ -368,7 +368,7 @@ static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 	return header->records;
 }
 
-int loadBayesCategory(char *fbc_name, char *cat_name)
+int loadBayesCategory(const char *fbc_name, char *cat_name)
 {
 int fbc_file;
 uint32_t i, z, shortcut=0, offsetPos=3;
@@ -572,7 +572,7 @@ return 0;
 // It was allowed to be called even after some categories were loaded. This is
 // no longer the case. It must be called first. This was done to make it run faster,
 // and be simpler / more obviously correct.
-int preLoadBayes(char *fbc_name)
+int preLoadBayes(const char *fbc_name)
 {
 int fbc_file;
 uint32_t i;
@@ -645,7 +645,7 @@ int status;
 	return 0;
 }
 
-int loadMassBayesCategories(char *fbc_dir)
+int loadMassBayesCategories(const char *fbc_dir)
 {
 DIR *dirp;
 struct dirent *dp;
@@ -785,9 +785,9 @@ HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j, processed = 0, total_processed = 0;
 uint16_t missing, nextReal;
-FBCJudge *categories = malloc(NBCategories.used * sizeof(FBCJudge));
+FBCJudge *categories = NULL;
 int64_t BSRet = -1;
-HTMLClassification data;
+HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
 uint64_t total;
 double local_probability;
 // Variables for scaling
@@ -797,6 +797,7 @@ double correction_factor = 1;
 const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
 
 	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
+	else categories = malloc(NBCategories.used * sizeof(FBCJudge));
 
 	// Set result to 1 so we don't have 0's as all answers
 	for(i = 0; i < NBCategories.used; i++)

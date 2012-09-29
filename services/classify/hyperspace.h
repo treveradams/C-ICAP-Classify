@@ -94,28 +94,28 @@ typedef struct  {
 
 #ifdef IN_HYPSERSPACE
 void writeFHSHeader(int file, FHS_HEADERv1 *header);
-int openFHS(char *filename, FHS_HEADERv1 *header, int forWriting);
+int openFHS(const char *filename, FHS_HEADERv1 *header, int forWriting);
 void writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list);
 int writeFHSHashesPreload(int file, FHS_HEADERv1 *header, HashListExt *hashes_list);
-int preLoadHyperSpace(char *fhs_name);
-int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
+int preLoadHyperSpace(const char *fhs_name);
+int loadHyperSpaceCategory(const char *fhs_name, char *cat_name);
 HTMLClassification doHSPrepandClassify(HashList *toClassify);
 void initHyperSpaceClassifier(void);
 void deinitHyperSpaceClassifier(void);
-int isHyperSpace(char *filename);
-int loadMassHSCategories(char *fhs_dir);
+int isHyperSpace(const char *filename);
+int loadMassHSCategories(const char *fhs_dir);
 #else
 extern void writeFHSHeader(int file, FHS_HEADERv1 *header);
-extern int openFHS(char *filename, FHS_HEADERv1 *header, int forWriting);
+extern int openFHS(const char *filename, FHS_HEADERv1 *header, int forWriting);
 extern int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list);
 extern int writeFHSHashesPreload(int file, FHS_HEADERv1 *header, HashListExt *hashes_list);
-extern int preLoadHyperSpace(char *fhs_name);
-extern int loadHyperSpaceCategory(char *fhs_name, char *cat_name);
+extern int preLoadHyperSpace(const char *fhs_name);
+extern int loadHyperSpaceCategory(const char *fhs_name, char *cat_name);
 extern HTMLClassification doHSPrepandClassify(HashList *toClassify);
 extern void initHyperSpaceClassifier(void);
 extern void deinitHyperSpaceClassifier(void);
-extern int isHyperSpace(char *filename);
-extern int loadMassHSCategories(char *fhs_dir);
+extern int isHyperSpace(const char *filename);
+extern int loadMassHSCategories(const char *fhs_dir);
 #endif
 
 #define HYPERSPACE_CATEGORY_INC 10

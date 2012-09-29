@@ -100,32 +100,32 @@ typedef struct  {
 
 #ifdef IN_BAYES
 void writeFBCHeader(int file, FBC_HEADERv1 *header);
-int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
+int openFBC(const char *filename, FBC_HEADERv1 *header, int forWriting);
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, uint32_t zero_point);
 int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list);
 void computeHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list);
-int preLoadBayes(char *fbc_name);
-int loadBayesCategory(char *fbc_name, char *cat_name);
+int preLoadBayes(const char *fbc_name);
+int loadBayesCategory(const char *fbc_name, char *cat_name);
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
 HTMLClassification doBayesPrepandClassify(HashList *toClassify);
 void initBayesClassifier(void);
 void deinitBayesClassifier(void);
-int isBayes(char *filename);
-int loadMassBayesCategories(char *fbc_dir);
+int isBayes(const char *filename);
+int loadMassBayesCategories(const char *fbc_dir);
 int optimizeFBC(FBCHashList *hashes);
 #else
 extern void writeFBCHeader(int file, FBC_HEADERv1 *header);
-extern int openFBC(char *filename, FBC_HEADERv1 *header, int forWriting);
+extern int openFBC(const char *filename, FBC_HEADERv1 *header, int forWriting);
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, uint32_t zero_point);
 extern int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, HashList *hashes_list);
-extern int preLoadBayes(char *fbc_name);
-extern int loadBayesCategory(char *fbc_name, char *cat_name);
+extern int preLoadBayes(const char *fbc_name);
+extern int loadBayesCategory(const char *fbc_name, char *cat_name);
 extern int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes);
 extern HTMLClassification doBayesPrepandClassify(HashList *toClassify);
 extern void initBayesClassifier(void);
 extern void deinitBayesClassifier(void);
-extern int isBayes(char *filename);
-extern int loadMassBayesCategories(char *fbc_dir);
+extern int isBayes(const char *filename);
+extern int loadMassBayesCategories(const char *fbc_dir);
 extern int optimizeFBC(FBCHashList *hashes);
 #endif
 

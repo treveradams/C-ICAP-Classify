@@ -32,7 +32,6 @@ int writecheck;
 
 int readPREHASHES(int file, HashList *hashes_list)
 {
-uint32_t i;
 uint_least32_t qty = 0;
 int readcheck;
 
@@ -45,12 +44,10 @@ int readcheck;
 	hashes_list->hashes = malloc(sizeof(HTMLFeature) * qty);
 	hashes_list->slots = qty;
 
-//	for(i = 0; i < hashes_list->used; i++)
-//	{
-		do { // read hash
-			readcheck = read(file, hashes_list->hashes, PREHASH_SIZE * qty);
-	                if(readcheck < PREHASH_SIZE * qty) lseek64(file, -readcheck, SEEK_CUR);
-		} while (readcheck > 0 && readcheck < PREHASH_SIZE * qty);
-//	}
+	do { // read hash
+		readcheck = read(file, hashes_list->hashes, PREHASH_SIZE * qty);
+                if(readcheck < PREHASH_SIZE * qty) lseek64(file, -readcheck, SEEK_CUR);
+	} while (readcheck > 0 && readcheck < PREHASH_SIZE * qty);
+
 	return 0;
 }
