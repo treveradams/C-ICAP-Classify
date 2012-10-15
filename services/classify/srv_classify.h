@@ -25,6 +25,8 @@
 
 #define myMAX_HEADER 512
 
+extern int START_SERVERS;
+
 #define IMAGE_CATEGORY_COPIES_MIN 10
 
 typedef struct classify_req_data {

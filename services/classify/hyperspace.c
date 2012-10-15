@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -352,7 +352,7 @@ struct stat stat_buf;
         return stat_buf.st_size / FHS_v1_HASH_SIZE;
 }
 
-HTMLFeature *loadDocument(const char *fhs_name, char *cat_name, int fhs_file, uint16_t numHashes)
+HTMLFeature *loadDocument(const char *fhs_name, const char *cat_name, int fhs_file, uint16_t numHashes)
 {
 HTMLFeature *hashes=NULL;
 int status = 0;
@@ -381,7 +381,7 @@ void closeDocument(uint64_t *hashes)
 // The following number is based on a lot of experimentation. It should be between 35-70. The larger the data set, the higher the number should be.
 // 95 is ideal for my training set.
 #define HS_OFFSET_MAX 95
-int loadHyperSpaceCategory(const char *fhs_name, char *cat_name)
+int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
 {
 int fhs_file;
 uint16_t i, j, z, shortcut=0, offsetPos=2;

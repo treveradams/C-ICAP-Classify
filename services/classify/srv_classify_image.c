@@ -86,6 +86,7 @@ extern int IMAGE_CATEGORY_COPIES;
 extern external_conversion_t *externalclassifytypes;
 
 ImageCategory *imageCategories = NULL;
+uint16_t num_image_categories = 0;
 
 static int IMAGEDETECTED_POOL = -1;
 static int IMAGEDETECTEDCOUNT_POOL = -1;
@@ -109,20 +110,21 @@ struct ci_fmt_entry srv_classify_image_format_table [] = {
 
 void classifyImagePrepReload(void);
 
-int initImageClassificationService(void)
+int postInitImageClassificationService(void)
 {
+uint16_t category;
 	ci_thread_rwlock_init(&imageclassify_rwlock);
 	ci_thread_rwlock_wrlock(&imageclassify_rwlock);
 
 	/*Initialize object pools*/
-	IMAGEDETECTED_POOL = ci_object_pool_register("image_detected_t", sizeof(image_detected_t));
+	IMAGEDETECTED_POOL = ci_object_pool_register("image_detected_t", sizeof(image_detected_t) * num_image_categories);
 
 	if(IMAGEDETECTED_POOL < 0) {
 		ci_debug_printf(1, " srvclassify_init_service: error registering object_pool image_detected_t\n");
 		return CI_ERROR;
 	}
 
-	IMAGEDETECTEDCOUNT_POOL = ci_object_pool_register("image_detected_count_t", sizeof(image_detected_count_t));
+	IMAGEDETECTEDCOUNT_POOL = ci_object_pool_register("image_detected_count_t", sizeof(image_detected_count_t) * num_image_categories);
 
 	if(IMAGEDETECTEDCOUNT_POOL < 0) {
 		ci_debug_printf(1, " srvclassify_init_service: error registering object_pool image_detected_count_t\n");
@@ -130,7 +132,23 @@ int initImageClassificationService(void)
 		return CI_ERROR;
 	}
 
+	if(num_image_categories)
+	{
+		for(category = 0; category < num_image_categories; category++)
+		{
+			if(ci_thread_mutex_init(&imageCategories[category].mutex) != 0)
+			{
+				ci_debug_printf(1, "srv_classify_image: Couldn't init category mutex\n");
+			}
+			if(ci_thread_cond_init(&imageCategories[category].cond) != 0)
+			{
+				ci_debug_printf(1, "srv_classify_image: Couldn't init category condition lock variable\n");
+			}
+		}
+	}
+
 	ci_thread_rwlock_unlock(&imageclassify_rwlock);
+	return CI_OK;
 }
 
 int closeImageClassification(void)
@@ -138,6 +156,7 @@ int closeImageClassification(void)
 	classifyImagePrepReload();
 	ci_object_pool_unregister(IMAGEDETECTEDCOUNT_POOL);
 	ci_object_pool_unregister(IMAGEDETECTED_POOL);
+	return CI_OK;
 }
 
 static int unlink_directory(char *directory)
@@ -178,7 +197,7 @@ char old_dir[PATH_MAX];
 static void doCoalesce(image_session_t *mySession)
 {
 CvSeq *newDetected = NULL;
-image_detected_t *current = mySession->detected;
+image_detected_t *current;
 CvRect tempRect;
 int over_left, over_top;
 int right1, right2, over_right;
@@ -188,9 +207,10 @@ int r1Area, r2Area;
 int *merged = NULL;
 int newI = 0;
 int i, j;
+uint16_t current_category;
 
-	while(current != NULL)
-	{
+	for(current_category = 0; current_category < num_image_categories; current_category++) {
+		current = &mySession->detected[current_category];
 		if(current->category->coalesceOverlap != 1.0f && current->detected)
 		{
 			// Loop the number of detected objects
@@ -259,17 +279,16 @@ int i, j;
 			current->detected = newDetected;
 			free(merged);
 		}
-		current = current->next;
 	}
 }
 
-static void addImageErrorHeaders(image_session_t *mySession, int error)
+static void addImageErrorHeaders(ci_request_t *req, int error)
 {
 char header[myMAX_HEADER + 1];
 
 	// modify headers
-	if (!ci_http_response_headers(mySession->req))
-		ci_http_response_create(mySession->req, 1, 1);
+	if (!ci_http_response_headers(req))
+		ci_http_response_create(req, 1, 1);
 
 	switch(error)
 	{
@@ -288,23 +307,25 @@ char header[myMAX_HEADER + 1];
 	}
 	// add IMAGE-CATEGORIES header
 	header[myMAX_HEADER] = '\0';
-	ci_http_response_add_header(mySession->req, header);
+	ci_http_response_add_header(req, header);
 	ci_debug_printf(3, "Added error header: %s\n", header);
 }
 
 static void createImageClassificationHeaders(image_session_t *mySession)
 {
-image_detected_t *current = mySession->detected;
+image_detected_t *current;
 char header[myMAX_HEADER + 1];
 const char *rating = "#########+";
 int i;
+uint16_t current_category;
 
 	// modify headers
 	if (!ci_http_response_headers(mySession->req))
 		ci_http_response_create(mySession->req, 1, 1);
 	snprintf(header, myMAX_HEADER, "X-IMAGE-CATEGORIES:");
 	// Loop through categories
-	while (current != NULL) {
+	for(current_category = 0; current_category < num_image_categories; current_category++) {
+		current = &mySession->detected[current_category];
 	        // Loop the number of detected objects
 	        for(i = 0; i < (current->detected ? current->detected->total : 0); i++ )
 		{
@@ -323,8 +344,6 @@ int i;
 			free(oldHeader);
 		}
 		mySession->featuresDetected += current->detected->total;
-
-		current = current->next;
 	}
 	// add IMAGE-CATEGORIES header
 	header[myMAX_HEADER] = '\0';
@@ -340,16 +359,18 @@ int i;
 
 static void createImageGroupClassificationHeaders(image_session_t *mySession, image_detected_count_t *count)
 {
-image_detected_count_t *current = count;
+image_detected_count_t *current;
 char header[myMAX_HEADER + 1];
 const char *rating = "#########+";
+uint16_t current_category;
 
 	// modify headers
 	if (!ci_http_response_headers(mySession->req))
 		ci_http_response_create(mySession->req, 1, 1);
 	snprintf(header, myMAX_HEADER, "X-IMAGE-GROUP-CATEGORIES:");
 	// Loop through categories
-	while (current != NULL) {
+	for(current_category = 0; current_category < num_image_categories; current_category++) {
+		current = &count[current_category];
 		// add each category to header
 		if(current->count)
 		{
@@ -358,7 +379,6 @@ const char *rating = "#########+";
 			free(oldHeader);
 		}
 		mySession->featuresDetected += current->count;
-		current = current->next;
 	}
 	// add IMAGE-CATEGORIES header
 	header[myMAX_HEADER] = '\0';
@@ -374,13 +394,16 @@ const char *rating = "#########+";
 
 static void saveDetectedParts(image_session_t *mySession)
 {
-image_detected_t *current = mySession->detected;
+image_detected_t *current;
 char fname[CI_MAX_PATH + 1];
 int i;
+uint16_t current_category;
 
 	// Loop through categories
-	while (current != NULL) {
-	        // Loop the number of detected objects
+	for(current_category = 0; current_category < num_image_categories; current_category++)
+	{
+		current = &mySession->detected[current_category];
+	        // Loop the number of detected objects	        // Loop the number of detected objects
 	        for(i = 0; i < (current->detected ? current->detected->total : 0); i++ )
 		{
 			// Create a new rectangle for saving the object
@@ -393,7 +416,6 @@ int i;
 			cvSaveImage(fname, mySession->origImage, png_p);
 			cvResetImageROI(mySession->origImage);
 		}
-		current = current->next;
 	}
 }
 
@@ -411,11 +433,13 @@ CvPoint pt1, pt2;
 // Function to draw on original image the detected objects
 static void drawDetected(image_session_t *mySession)
 {
-image_detected_t *current=mySession->detected;
+image_detected_t *current;
 int i;
+uint16_t current_category;
 
-	while(current != NULL)
+	for(current_category = 0; current_category < num_image_categories; current_category++)
 	{
+		current = &mySession->detected[current_category];
 	        // Loop the number of detected objects
 	        for(i = 0; i < (current->detected ? current->detected->total : 0); i++ )
 	        {
@@ -433,7 +457,6 @@ int i;
 
 			ci_debug_printf(10, "srv_classify_image: %s Detected at X: %d, Y: %d, Height: %d, Width: %d\n", current->category->name, r->x, r->y, r->height, r->width);
 		}
-		current = current->next;
 	}
 }
 
@@ -486,7 +509,7 @@ char imageFILENAME[CI_MAX_PATH + 1];
 	data->disk_body->filename[CI_FILENAME_LEN] = '\0';
 	data->disk_body->fd = open(data->disk_body->filename, O_RDWR | O_EXCL, F_PERM);
 	fstat(data->disk_body->fd, &stat_buf);
-	data->disk_body->endpos = stat_buf.st_size;
+	data->disk_body->bytes_in = data->disk_body->endpos = stat_buf.st_size;
 	// Make new content length header
 	ci_http_response_remove_header(mySession->req, "Content-Length");
 	snprintf(imageFILENAME, CI_MAX_PATH, "Content-Length: %ld", (long) data->disk_body->endpos);
@@ -527,62 +550,44 @@ int maxDim = mySession->origImage->width > mySession->origImage->height ? mySess
 
 LinkedCascade *getFreeCascade(ImageCategory *category)
 {
-struct timespec sleep_time = { 0, 1000000};
 LinkedCascade *item = NULL;
-int attempts = 0;
 	if(category->freeing_category) return NULL;
-	getfreecascade_retry:
-	if(category->free_cascade)
+
+	ci_thread_mutex_lock(&category->mutex);
+	while(!category->free_cascade)
 	{
-		ci_thread_mutex_lock(&category->mutex);
-		if(!category->free_cascade)
-		{
-			ci_thread_mutex_unlock(&category->mutex);
-			goto getfreecascade_retry_setup;
-		}
-		else
-		{
-			// Remove free cascade item from free list
-			item = category->free_cascade;
-			category->free_cascade = item->next;
-			// Add item to busy list
-			item->next = category->busy_cascade;
-			category->busy_cascade = item;
-			if(attempts >= 4) ci_debug_printf(3, "srv_classify_image: Had to wait on cascade %s, consider increasing ImageCategoryCopies in configuration. Currently set to %d. Retried %d times.\n", category->name, IMAGE_CATEGORY_COPIES, attempts);
-		}
+		ci_thread_cond_wait(&category->cond, &category->mutex);
 	}
-	else {
-		getfreecascade_retry_setup:
-		attempts++;
-		nanosleep(&sleep_time, NULL);
-		goto getfreecascade_retry;
-	}
+
+	// Ok, we should have a free cascade:
+	// Remove free cascade item from free list
+	item = category->free_cascade;
+	category->free_cascade = item->next;
+
 	ci_thread_mutex_unlock(&category->mutex);
-return item;
+return item; // Tell caller the cascade
 }
 
 void unBusyCascade(ImageCategory *category, LinkedCascade *item)
 {
-LinkedCascade *current = category->busy_cascade;
-	if(item == NULL || current == NULL) return;
-	ci_thread_mutex_lock(&category->mutex);
-	while(current != NULL)
+int need_signal = 0;
+
+	if(item == NULL || category->freeing_category) return;
+
+	if(ci_thread_mutex_lock(&category->mutex) != 0)
 	{
-		if(current->next == item || current == item)
-		{
-			// Remove item from busy list
-			if(category->busy_cascade == item) category->busy_cascade = item->next;
-			else if(current->next) current->next = current->next->next;
-			else current->next = NULL;
-			// Add item back to free list
-			item->next = category->free_cascade;
-			category->free_cascade = item;
-			// Clean up and return
-			ci_thread_mutex_unlock(&category->mutex);
-			return;
-		}
-		current = current->next;
+		ci_debug_printf(1, "unBusyCascade: failed to lock\n");
 	}
+
+        if(!category->free_cascade) need_signal = 1;
+
+	// Add item back to free list
+	item->next = category->free_cascade;
+	category->free_cascade = item;
+
+	// Clean up and return
+	if(need_signal) ci_thread_cond_signal(&category->cond);
+
 	ci_thread_mutex_unlock(&category->mutex);
 }
 
@@ -590,166 +595,149 @@ LinkedCascade *current = category->busy_cascade;
 static void detect(image_session_t *mySession)
 {
 double t = 0;
-image_detected_t *current = mySession->detected;
+uint16_t current_category;
 LinkedCascade *cascade;
 
-	while(current != NULL)
+	for(current_category = 0; current_category < num_image_categories; current_category++)
 	{
 		if(CI_DEBUG_LEVEL >= PERF_DEBUG_LEVEL) t = cvGetTickCount();
 		// Find whether the cascade is loaded, to find the objects. If yes, then:
-		if(current->category->free_cascade || current->category->busy_cascade)
+		if(mySession->detected[current_category].category->cascade_array)
 		{
-			cascade = getFreeCascade(current->category);
+			cascade = getFreeCascade(mySession->detected[current_category].category);
 			// There can be more than one object in an image. So create a growable sequence of detected objects.
 			// Detect the objects and store them in the sequence
 #ifdef HAVE_OPENCV
-			current->detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
+			mySession->detected[current_category].detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
 								1.1, 1, 0, cvSize(0, 0) );
 #endif
 #ifdef HAVE_OPENCV_22X
-			current->detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
+			mySession->detected[current_category].detected = cvHaarDetectObjects( mySession->rightImage, cascade->cascade, mySession->dstorage,
 								1.1, 1, 0, cvSize(0, 0), cvSize(mySession->rightImage->width, mySession->rightImage->height));
 #endif
-			unBusyCascade(current->category, cascade);
+			unBusyCascade(mySession->detected[current_category].category, cascade);
 		}
 		if(CI_DEBUG_LEVEL >= PERF_DEBUG_LEVEL)
 		{
 			t = cvGetTickCount() - t;
 			t = t / ((double)cvGetTickFrequency() * 1000.);
-			ci_debug_printf(8, "srv_classify_image: File: %s Object: %s (%d) Detection took: %gms.\n", (rindex(mySession->fname, '/'))+1, current->category->name, current->detected->total, t);
+			ci_debug_printf(8, "srv_classify_image: File: %s Object: %s (%d) Detection took: %gms.\n", (rindex(mySession->fname, '/'))+1, mySession->detected[current_category].category->name, mySession->detected[current_category].detected->total, t);
 		}
-
-		current = current->next;
 	}
 }
 
-ImageCategory *initImageCategory(ImageCategory *top, const char *name, const char *cascade_loc, const CvScalar Color)
+int initImageCategory(const char *name, const char *cascade_loc, const CvScalar Color)
 {
-ImageCategory *current = top, *recover = NULL;
-LinkedCascade *new_cascade;
+ImageCategory *new;
 int copies;
+int ret = 1;
 
+	if(IMAGE_CATEGORY_COPIES == 0) return 0;
 	ci_thread_rwlock_wrlock(&imageclassify_rwlock);
 
-	if(current != NULL)
-	{
-		// scan for place to insert
-		while (current->next != NULL) current = current->next;
-		// Save our recovery point
-		recover = current;
-		// Malloc and setup
-		current->next = malloc(sizeof(ImageCategory));
-		current = current->next;
-		current->next = NULL;
-	}
-	else
-	{
-		current = malloc(sizeof(ImageCategory));
-		top = current;
-		current->next = NULL;
+	new = realloc(imageCategories, (num_image_categories + 1) * sizeof(ImageCategory));
+	if(new) imageCategories = new;
+	else {
+		ci_debug_printf(1, "initImageCategory: Couldn't allocate more memory for new categories\n");
+		return 0;
 	}
 
 	// do insertion
-	strncpy(current->name, name, CATMAXNAME);
-	current->name[CATMAXNAME] = '\0';
-	strncpy(current->cascade_location, cascade_loc, CATMAXNAME);
-	current->cascade_location[CATMAXNAME] = '\0';
-	current->Color = Color;
-	current->coalesceOverlap = 1.0f;
-	current->free_cascade = NULL;
-	current->busy_cascade = NULL;
-	current->freeing_category = 0;
+	strncpy(imageCategories[num_image_categories].name, name, CATMAXNAME);
+	imageCategories[num_image_categories].name[CATMAXNAME] = '\0';
+	strncpy(imageCategories[num_image_categories].cascade_location, cascade_loc, CATMAXNAME);
+	imageCategories[num_image_categories].cascade_location[CATMAXNAME] = '\0';
+	imageCategories[num_image_categories].Color = Color;
+	imageCategories[num_image_categories].coalesceOverlap = 1.0f;
+	imageCategories[num_image_categories].cascade_array = NULL;
+	imageCategories[num_image_categories].free_cascade = NULL;
+	imageCategories[num_image_categories].freeing_category = 0;
 
-	ci_thread_mutex_init(&current->mutex);
-	ci_thread_mutex_lock(&current->mutex);
-
-	for(copies = 0; copies < IMAGE_CATEGORY_COPIES; copies++)
+	// We really treat this as a linked list
+	// The structure is arranged as such
+	// We allocate it as an array to minimize cache misses
+	if((imageCategories[num_image_categories].cascade_array = calloc(IMAGE_CATEGORY_COPIES, sizeof(LinkedCascade))) != NULL)
 	{
-		new_cascade = calloc(1, sizeof(LinkedCascade));
-		new_cascade->cascade = (CvHaarClassifierCascade*) cvLoad(current->cascade_location, NULL, NULL, NULL );
-		if( !new_cascade->cascade )
+		for(copies = 0; copies < IMAGE_CATEGORY_COPIES - 1; copies++)
 		{
-			ci_debug_printf(3, "srv_classify_image: Failed to load cascade for %s\n", current->name);
-			free(new_cascade);
-			copies = IMAGE_CATEGORY_COPIES;
-			if(copies == 0)
+			imageCategories[num_image_categories].cascade_array[copies].cascade = (CvHaarClassifierCascade*) cvLoad(imageCategories[num_image_categories].cascade_location, NULL, NULL, NULL );
+			if( !imageCategories[num_image_categories].cascade_array[copies].cascade )
 			{
-				top = NULL;
-				if(recover)
-				{
-					free(recover->next);
-					recover->next = NULL;
-				}
+				ci_debug_printf(3, "srv_classify_image: Failed to load cascade for %s\n", imageCategories[num_image_categories].name);
+				imageCategories = realloc(imageCategories, sizeof(ImageCategory) * num_image_categories);
+				ret = 0;
 			}
+			else imageCategories[num_image_categories].cascade_array[copies].next = &imageCategories[num_image_categories].cascade_array[copies + 1];
 		}
-		else
-		{
-			ci_debug_printf(10, "srv_classify_image: Successfully loaded cascade for %s\n", current->name);
-			new_cascade->next = current->free_cascade;
-			current->free_cascade = new_cascade;
-		}
+		imageCategories[num_image_categories].free_cascade = imageCategories[num_image_categories].cascade_array;
 	}
-	ci_thread_mutex_unlock(&current->mutex);
+	else {
+		ci_debug_printf(3, "srv_classify_image: Failed to allocate memory for cascade array for category %s\n", imageCategories[num_image_categories].name);
+		imageCategories = realloc(imageCategories, sizeof(ImageCategory) * num_image_categories);
+		ret = 0;
+	}
+
+	if(ret) num_image_categories++;
 	ci_thread_rwlock_unlock(&imageclassify_rwlock);
-	return top;
+	return ret;
 }
 
-static void freeImageCategories(ImageCategory *top)
+static void freeImageCategories(void)
 {
-struct timespec sleep_time = { 0, 100000000};
-LinkedCascade *next;
+uint16_t current_category, copies;
 
-	if(top == NULL) return;
+	if(num_image_categories == 0) return;
 
-	if(top->next != NULL)
-        {
-		freeImageCategories(top->next);
-		top->next = NULL;
-	}
-	top->freeing_category = 1;
-	while(top->busy_cascade) nanosleep(&sleep_time, NULL);
-
-	ci_thread_mutex_lock(&top->mutex);
-	while(top->free_cascade)
+	for(current_category = 0; current_category < num_image_categories; current_category++)
 	{
-		next = top->free_cascade->next;;
-		cvReleaseHaarClassifierCascade(&top->free_cascade->cascade);
-		free(top->free_cascade);
-		top->free_cascade = next;
+		imageCategories[current_category].freeing_category = 1;
+
+		ci_thread_mutex_lock(&imageCategories[current_category].mutex);
+
+		// Free cascades
+		for(copies = 0; copies < IMAGE_CATEGORY_COPIES; copies++)
+			cvReleaseHaarClassifierCascade(&imageCategories[current_category].cascade_array[copies].cascade);
+		free(imageCategories[current_category].cascade_array);
+
+		ci_thread_cond_destroy(&imageCategories[current_category].cond);
+		ci_thread_mutex_unlock(&imageCategories[current_category].mutex);
+		ci_thread_mutex_destroy(&imageCategories[current_category].mutex);
 	}
-	ci_thread_mutex_unlock(&top->mutex);
-	ci_thread_mutex_destroy(&top->mutex);
-	free(top);
-        top = NULL;
+	free(imageCategories);
+	imageCategories = NULL;
+	num_image_categories = 0;
 }
 
 void classifyImagePrepReload(void)
 {
 	ci_thread_rwlock_wrlock(&imageclassify_rwlock);
-	freeImageCategories(imageCategories);
+	freeImageCategories();
 	imageCategories = NULL;
 	ci_thread_rwlock_unlock(&imageclassify_rwlock);
 }
 
 static int initImageSession(image_session_t *mySession, ci_request_t *req, ImageCategory *categories, char *filename)
 {
-ImageCategory *current = categories;
-image_detected_t *nDetected = NULL, *cDetected = NULL;
+uint16_t current_category;
 
 	// Obtain Write Lock
 	ci_thread_rwlock_rdlock(&imageclassify_rwlock);
 
-	// If there are no categories, we cannot detect anything
-	if(current == NULL)
-	{
-		ci_debug_printf(3, "srv_classify_image: No categories present. I cannot initiate session.\n");
-		return NO_CATEGORIES;
-	}
-
+	// Create a sane enivronment, even if we aren't going to do a complete setup
 	mySession->scale = 1.0f;
 	mySession->detected = NULL;
 	mySession->rightImage = NULL;
 	mySession->featuresDetected = 0;
+	mySession->detected = NULL;
+	mySession->lstorage = NULL;
+	mySession->dstorage = NULL;
+
+	// If there are no categories, we cannot detect anything
+	if(num_image_categories == 0)
+	{
+		ci_debug_printf(3, "srv_classify_image: No categories present. I cannot initiate session.\n");
+		return NO_CATEGORIES;
+	}
 
 	if(filename == NULL)
 	{
@@ -776,27 +764,16 @@ image_detected_t *nDetected = NULL, *cDetected = NULL;
 	}
 	cvClearMemStorage( mySession->dstorage );
 	cvClearMemStorage( mySession->lstorage );
-	while(current != NULL)
+
+	if (!(mySession->detected = ci_object_pool_alloc(IMAGEDETECTED_POOL))) {
+		ci_debug_printf(1,
+                       "Error allocation memory for service data!!!!!!!\n");
+		return NO_MEMORY;
+	}
+	for(current_category = 0; current_category < num_image_categories; current_category++)
 	{
-		if (!(nDetected = ci_object_pool_alloc(IMAGEDETECTED_POOL))) {
-			ci_debug_printf(1,
-                               "Error allocation memory for service data!!!!!!!\n");
-			return NO_MEMORY;
-		}
-		nDetected->category = current;
-		nDetected->detected = NULL;
-		nDetected->next = NULL;
-		if(mySession->detected == NULL)
-		{
-			mySession->detected = nDetected;
-			cDetected = nDetected;
-		}
-		else
-		{
-			cDetected->next = nDetected;
-			cDetected = cDetected->next;
-		}
-		current = current->next;
+		mySession->detected[current_category].category = &imageCategories[current_category];
+		mySession->detected[current_category].detected = NULL;
 	}
 	// Remember c_icap request
 	mySession->req = req;
@@ -809,48 +786,50 @@ image_detected_t *nDetected = NULL, *cDetected = NULL;
 static void clearImageDetected(image_detected_t *detected)
 {
 	if(detected == NULL) return;
-	if(detected->next != NULL)
+	for(uint16_t current_category = 0; current_category < num_image_categories; current_category++)
         {
-		clearImageDetected(detected->next);
+		if(detected[current_category].detected) cvClearSeq( detected[current_category].detected );
 	}
-	if(detected->detected) cvClearSeq( detected->detected );
 }
 
 static void freeImageDetected(image_detected_t *detected)
 {
 	if(detected == NULL) return;
-	if(detected->next != NULL)
+	for(uint16_t current_category = 0; current_category < num_image_categories; current_category++)
         {
-		freeImageDetected(detected->next);
-		detected->next = NULL;
+		if(detected[current_category].detected) cvClearSeq( detected[current_category].detected );
 	}
-	if(detected->detected) cvClearSeq( detected->detected );
+
 	ci_object_pool_free(detected);
 }
 
 static void freeImageDetectedCount(image_detected_count_t *detected)
 {
 	if(detected == NULL) return;
-	if(detected->next != NULL)
-        {
-		freeImageDetectedCount(detected->next);
-		detected->next = NULL;
-	}
+
 	ci_object_pool_free(detected);
 }
 
 static void deinitImageSession(image_session_t *mySession)
 {
+	if(!mySession) return;
+
 	// Deallocate detected areas
-        freeImageDetected(mySession->detected);
+        if(mySession->detected) freeImageDetected(mySession->detected);
 	// Release the image memory
 	if(mySession->origImage) cvReleaseImage(&mySession->origImage);
 	if(mySession->rightImage) cvReleaseImage(&mySession->rightImage);
 	// OpenCV memory management cleanup
-	cvClearMemStorage( mySession->dstorage );
-	cvReleaseMemStorage( &mySession->dstorage );
-	cvClearMemStorage( mySession->lstorage );
-	cvReleaseMemStorage( &mySession->lstorage );
+	if(mySession->dstorage)
+	{
+		cvClearMemStorage( mySession->dstorage );
+		cvReleaseMemStorage( &mySession->dstorage );
+	}
+	if(mySession->lstorage)
+	{
+		cvClearMemStorage( mySession->lstorage );
+		cvReleaseMemStorage( &mySession->lstorage );
+	}
 }
 
 int categorize_image(ci_request_t *req)
@@ -881,16 +860,16 @@ CvMat myCvMat;
         {
             ci_debug_printf(10, "srv_classify_image: Image too small for classification per configuration and/or sanity, letting pass.\n");
             cvReleaseImage(&mySession.origImage);
-            return 0; // Image is too small, let it pass
+            return CI_OK; // Image is too small, let it pass
         }
 
 	// Setup Session
 	ret = initImageSession(&mySession, req, imageCategories, data->mem_body ? NULL : data->disk_body->filename);
 	if(ret < 0)
         {
-		addImageErrorHeaders(&mySession, ret);
+		addImageErrorHeaders(req, ret);
 		deinitImageSession(&mySession);
-		return -1;
+		return CI_ERROR;
         }
 	getRightSize(&mySession);
 
@@ -939,8 +918,7 @@ CvMat myCvMat;
 	{
                 ci_debug_printf(8, "srv_classify_image: Could not load image (%s) for classification.\n", data->disk_body->filename);
 	}
-	mySession.req = req;
-	addImageErrorHeaders(&mySession, IMAGE_FAILED_LOAD);
+	addImageErrorHeaders(req, IMAGE_FAILED_LOAD);
         return CI_ERROR;
     }
 
@@ -961,9 +939,8 @@ DIR *dirp;
 struct dirent *dp;
 char old_dir[PATH_MAX];
 char **localargs;
-image_detected_t *current_detected;
-image_detected_count_t *nDetectedCount = NULL, *cDetectedCount = NULL, *detectedCount = NULL;
-ImageCategory *current_category = imageCategories;
+image_detected_count_t *count = NULL;
+uint16_t current_category;
 
 	mySession.origImage = NULL;
 
@@ -1013,7 +990,7 @@ ImageCategory *current_category = imageCategories;
 		ret = initImageSession(&mySession, req, imageCategories, "/categorize_external_image");
 		if(ret < 0)
 		{
-			addImageErrorHeaders(&mySession, ret);
+			addImageErrorHeaders(req, ret);
 			deinitImageSession(&mySession);
 			unlink_directory(data->external_body->filename);
 			free(data->external_body);
@@ -1024,27 +1001,15 @@ ImageCategory *current_category = imageCategories;
 		getReferrerClassification(ci_http_request_get_header((ci_request_t *)req, "Referer"), &mySession.referrer_fhs_classification, &mySession.referrer_fnb_classification);
 
 		// Create detected count structure
-		while(current_category != NULL)
+		if((count = ci_object_pool_alloc(IMAGEDETECTEDCOUNT_POOL)) == NULL)
 		{
-			if((nDetectedCount = ci_object_pool_alloc(IMAGEDETECTEDCOUNT_POOL)) == NULL)
-			{
-				ci_debug_printf(1, "srv_classify_image: categorize_external_image: couldn't allocate memory");
-				return NO_MEMORY;
-			}
-			nDetectedCount->category = current_category;
-			nDetectedCount->count = 0;
-			nDetectedCount->next = NULL;
-			if(detectedCount == NULL)
-			{
-				detectedCount = nDetectedCount;
-				cDetectedCount = nDetectedCount;
-			}
-			else
-			{
-				cDetectedCount->next = nDetectedCount;
-				cDetectedCount = cDetectedCount->next;
-			}
-			current_category = current_category->next;
+			ci_debug_printf(1, "srv_classify_image: categorize_external_image: couldn't allocate memory");
+			return NO_MEMORY;
+		}		
+		for(current_category = 0; current_category < num_image_categories; current_category++)
+		{
+			count[current_category].category = &imageCategories[current_category];
+			count[current_category].count = 0;
 		}
 
 		// Obtain Read Lock - Write lock not grabbed in normal operations,
@@ -1076,16 +1041,12 @@ ImageCategory *current_category = imageCategories;
 							detect(&mySession);
 							doCoalesce(&mySession);
 
-							// Do statistics (keep worst for each class for now)
-							cDetectedCount = detectedCount;
-							current_detected = mySession.detected;
 							// Loop through categories
-							while (current_detected != NULL) {
+							for(current_category = 0; current_category < num_image_categories; current_category++)
+							{
 								// Loop the number of detected objects
-								if(current_detected->detected->total > cDetectedCount->count)
-									cDetectedCount->count = current_detected->detected->total;
-								cDetectedCount = cDetectedCount->next;
-								current_detected = current_detected->next;
+								if(mySession.detected[current_category].detected->total > count->count)
+									count->count = mySession.detected[current_category].detected->total;
 							}
 							// We won't use the detected again, clear it
 							clearImageDetected(mySession.detected);
@@ -1110,11 +1071,11 @@ ImageCategory *current_category = imageCategories;
 
 		chdir(old_dir);
 		// ADD HEADERS
-		createImageGroupClassificationHeaders(&mySession, detectedCount);
+		createImageGroupClassificationHeaders(&mySession, count);
 
 		// Clean up
 		// Free Detected Count Structure
-		freeImageDetectedCount(detectedCount->next);
+		freeImageDetectedCount(count);
 
 		// Deinit Session
 		deinitImageSession(&mySession);
@@ -1156,6 +1117,7 @@ int fmt_srv_classify_image_destination_directory(ci_request_t *req, char *buf, i
 /*Configuration Functions                                                               */
 int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata)
 {
+     int ret;
      unsigned int RED=0xFF, GREEN=0XFF, BLUE=0XFF;
 
      if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
@@ -1172,9 +1134,9 @@ int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata
                 if(argv[4] != NULL) sscanf(argv[4], "%x", &BLUE);
            }
     }
-    imageCategories = initImageCategory(imageCategories, argv[0], argv[1], CV_RGB(RED, GREEN, BLUE));
+    ret = initImageCategory(argv[0], argv[1], CV_RGB(RED, GREEN, BLUE));
     ci_debug_printf(1, "Setting parameter :%s (Name: %s Cascade File: %s Red: 0x%x Green: 0x%x Blue: 0x%x)\n", directive, argv[0], argv[1], RED, GREEN, BLUE);
-    return 1;
+    return ret;
 }
 
 int cfg_ImageInterpolation(const char *directive, const char **argv, void *setdata)
@@ -1202,20 +1164,19 @@ int cfg_ImageInterpolation(const char *directive, const char **argv, void *setda
 
 int cfg_coalesceOverlap(const char *directive, const char **argv, void *setdata)
 {
-ImageCategory *current=imageCategories;
+uint16_t current_category = 0;
      if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
           return 0;
      }
-     while(current!=NULL)
+     for(current_category = 0; current_category < num_image_categories; current_category++)
      {
-          if(strcasecmp(argv[0], current->name) == 0)
+          if(strcasecmp(argv[0], imageCategories[current_category].name) == 0)
           {
-              sscanf(argv[1], "%f", &current->coalesceOverlap);
+              sscanf(argv[1], "%f", &imageCategories[current_category].coalesceOverlap);
               ci_debug_printf(1, "Setting parameter :%s=(%s,%s)\n", directive, argv[0], argv[1]);
               return 1;
           }
-          current = current->next;
      }
      ci_debug_printf(1, "Category in directive %s not found. Add category before setting coalesce overlap.\n", directive);
      return 0;
@@ -1233,7 +1194,11 @@ int cfg_imageCategoryCopies(const char *directive, const char **argv, void *setd
           return 0;
      }
      sscanf(argv[0], "%d", &IMAGE_CATEGORY_COPIES);
-     if(IMAGE_CATEGORY_COPIES < IMAGE_CATEGORY_COPIES_MIN) IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN;
-     ci_debug_printf(1, "Setting parameter :%s=(%s,%s)\n", directive, argv[0], argv[1]);
+     if(IMAGE_CATEGORY_COPIES == -1) IMAGE_CATEGORY_COPIES = START_SERVERS;
+     else if(IMAGE_CATEGORY_COPIES < IMAGE_CATEGORY_COPIES_MIN)
+          IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN;
+     if(IMAGE_CATEGORY_COPIES > START_SERVERS) IMAGE_CATEGORY_COPIES = START_SERVERS;
+
+     ci_debug_printf(1, "Setting parameter :%s=(%d)\n", directive, IMAGE_CATEGORY_COPIES);
      return 1;
 }

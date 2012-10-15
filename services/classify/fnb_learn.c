@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -45,20 +45,32 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <langinfo.h>
 #include <wchar.h>
 #include <wctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <pthread.h>
 
 #include "hash.c"
 #include "bayes.c"
+#include "train_common.h"
+#include "train_common_threads.h"
 
 char *learn_in_file = NULL;
 char *fbc_out_file = NULL;
 int do_directory_learn = -1;
 int learning = 0;
 uint32_t zero_point = 0;
+int num_threads = 2;
+
+pthread_mutex_t file_mtx, train_mtx;
+pthread_cond_t file_avl_cnd, need_file_cnd;
+int file_need_data = 0;
+int file_available = 0;
+int shutdown = 0;
+
+process_entry *file_names = NULL;
+process_entry *busy_file_names = NULL;
 
 int readArguments(int argc, char *argv[])
 {
@@ -76,6 +88,7 @@ int i;
 		printf("\tOR\n");
 		printf("\t-o OUTPUT_FNB_FILE\n");
 		printf("\t-z ZERO (REMOVE) HASH IF COUNT IS LESS THAN THIS NUMBER\n");
+		printf("\t-m NUMBER_OF_THREADS_TO_USE (default: 2 and should be <= NUM_CORES_ON_CPU)\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -108,6 +121,10 @@ int i;
 		{
 			zero_point = strtol(argv[i+1], NULL, 10);
 		}
+		else if(strcmp(argv[i], "-m") == 0)
+		{
+			num_threads = atoi(argv[i+1]);
+		}
 	}
 	if(fbc_out_file == NULL) goto HELP;
 	if(argc == 5 && (zero_point < 1 || fbc_out_file == NULL))
@@ -120,35 +137,6 @@ int i;
 	printf("Learn File: %s\n", learn_in_file);
 	printf("FNB Output File: %s\n", fbc_out_file);*/
 	return 0;
-}
-
-void checkMakeUTF8(void)
-{
-	setlocale(LC_ALL, "");
-	int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-	if(!utf8_mode) setlocale(LC_ALL, "en_US.UTF-8");
-}
-
-wchar_t *makeData(char *input_file)
-{
-int data=0;
-struct stat stat_buf;
-char *tempData=NULL;
-wchar_t *myData=NULL;
-int32_t realLen;
-	data=open(input_file, O_RDONLY);
-	fstat(data, &stat_buf);
-	tempData=malloc(stat_buf.st_size+1);
-	if(tempData==NULL) exit(-1);
-	read(data, tempData, stat_buf.st_size);
-	close(data);
-	tempData[stat_buf.st_size] = '\0';
-	myData=malloc((stat_buf.st_size+1) * UTF32_CHAR_SIZE);
-	realLen=mbstowcs(myData, tempData, stat_buf.st_size);
-	if(realLen!=-1) myData[realLen] = L'\0';
-	else printf("Bad character data in %s\n", input_file);
-	free(tempData);
-	return myData;
 }
 
 void doLearn(char *data_file)
@@ -171,16 +159,19 @@ HashList myHashes;
 
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 
+	pthread_mutex_lock(&train_mtx);
 	learnHashesBayesCategory(0, &myHashes);
+	pthread_mutex_unlock(&train_mtx);
 
 	free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 }
 
-void learnDirectory(char *directory)
+void learnDirectory(char *directory, struct thread_info *tinfo)
 {
 char full_path[PATH_MAX];
 struct stat info;
+int tnum;
 
 #ifndef _SVID_SOURCE
 DIR *dirp;
@@ -202,7 +193,15 @@ struct dirent *dp;
 			{
 				printf("Learning %s\n", dp->d_name);
 				fprintf(stderr, "Learning %s\n", dp->d_name);
-				doLearn(full_path);
+
+				pthread_mutex_lock(&file_mtx);
+				while(!file_need_data)
+				{
+					pthread_cond_wait(&need_file_cnd, &file_mtx);
+				}
+
+				addFile(full_path, dp->d_name);
+				pthread_mutex_unlock(&file_mtx);
 			}
 		}
 	} while (dp != NULL);
@@ -230,19 +229,80 @@ uint32_t n;
 			{
 				printf("Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
 				fprintf(stderr, "Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
-				doLearn(full_path);
+				pthread_mutex_lock(&file_mtx);
+				while(!file_need_data)
+				{
+					pthread_cond_wait(&need_file_cnd, &file_mtx);
+				}
+
+				addFile(full_path, namelist[i]->d_name);
+				pthread_mutex_unlock(&file_mtx);
 			}
 			free(namelist[i]);
 		}
 		free(namelist);
 	}
 #endif
+
+	/* Tell threads to shutdown */
+	pthread_mutex_lock(&file_mtx);
+	shutdown = 1;
+	pthread_mutex_unlock(&file_mtx);
+	/* Wait for threads to terminate */
+	for (tnum = 0; tnum < num_threads; tnum++) {
+		pthread_mutex_lock(&file_mtx);
+		pthread_cond_broadcast(&file_avl_cnd);
+		pthread_mutex_unlock(&file_mtx);
+		pthread_join(tinfo[tnum].thread_id, NULL);
+	}
+}
+
+/* Thread start function: display address near top of our stack,
+and return upper-cased copy of argv_string */
+
+static void *thread_start(void *arg)
+{
+struct thread_info *tinfo = (struct thread_info *) arg;
+process_entry entry;
+
+	while(!shutdown || file_available)
+	{
+		// check to see if file is available
+
+		pthread_mutex_lock(&file_mtx);
+		while(!file_available)
+		{
+			file_need_data++;
+			pthread_cond_signal(&need_file_cnd);
+			pthread_cond_wait(&file_avl_cnd, &file_mtx);
+			if(shutdown && !file_available)
+			{
+				pthread_mutex_unlock(&file_mtx);
+				return "SHUTDOWN_IN_RUN";
+			}
+		}
+
+		entry = getNextFile();
+		pthread_mutex_unlock(&file_mtx);
+
+		doLearn(entry.full_path);
+
+
+		free(entry.full_path);
+		free(entry.file_name);
+	}
+
+	return "NORMAL_SHUTDOWN";
 }
 
 int main (int argc, char *argv[])
 {
 FBC_HEADERv1 header;
 int fbc_file;
+struct thread_info *tinfo;
+int i;
+process_entry *temp;
+
 	if(readArguments(argc, argv)==-1) exit(-1);
 	checkMakeUTF8();
 	initHTML();
@@ -254,7 +314,30 @@ int fbc_file;
 	if(learning)
 	{
 		if(do_directory_learn == 0) doLearn(learn_in_file);
-		else learnDirectory(learn_in_file);
+		else {
+			/* Allocate memory for pthread_create() arguments */
+
+			tinfo = calloc(num_threads, sizeof(struct thread_info));
+			if (tinfo == NULL)
+				handle_error("calloc");
+
+			for(i = 0; i < num_threads; i++)
+			{
+				temp = calloc(1, sizeof(process_entry));
+				temp->next = file_names;
+				file_names = temp;
+			}
+
+			start_threads(tinfo, num_threads, thread_start);
+			learnDirectory(learn_in_file, tinfo);
+			destroy_threads(tinfo);
+
+			do {
+				temp = file_names;
+				file_names = file_names->next;
+				free(temp);
+			} while (file_names);
+		}
 	}
 
 	fbc_file = openFBC(fbc_out_file, &header, 1);

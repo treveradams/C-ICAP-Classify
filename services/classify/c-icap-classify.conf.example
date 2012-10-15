@@ -19,7 +19,9 @@ srv_classify.Allow204Responces on
 # The Maximum object to be classified.
 srv_classify.MaxObjectSize 40M
 # Number of cascades to load per image cateogry
+# This is process local, so each process will have this number to use.
 # Default: 10
+# Note: -1 means ThreadsPerChild, which is the maximum
 srv_classify.ImageCategoryCopies 50
 # Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or
 #     debugDemonstrateMarked is activated
@@ -133,7 +135,7 @@ srv_classify.MaxMemClassification 32K
 # objects done in memory because of MaxMemClassificaion. This parameter is NOT
 # exact. Real memory usage can be 4x, or more, what you set here. This is due
 # to certain optimizations in C-ICAP that are used.
-# NOTE: I am not certain if this is per process or global.
+# NOTE: This is per process, not thread or global.
 # NOTE: This will cause a performance hit due to locking issues. Leave this at
 # default, unless you see DoS problems.
 # Default: 0

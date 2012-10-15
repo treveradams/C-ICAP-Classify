@@ -32,25 +32,23 @@ typedef struct _linkedcascade {
 typedef struct _Category {
 	char name[CATMAXNAME+1];
 	char cascade_location[CI_MAX_PATH+1];
+	LinkedCascade *cascade_array; // This is simply an array of the cascades, only here so we can free properly
 	LinkedCascade *free_cascade; // don't forget to free me on any reload
-	LinkedCascade *busy_cascade; // don't forget to free me on any reload, wait for this to be null and all free_cascade to be released
 	CvScalar Color;
 	float coalesceOverlap;
 	ci_thread_mutex_t mutex;
+	ci_thread_cond_t cond;
 	int freeing_category;
-	struct _Category *next;
 } ImageCategory;
 
 typedef struct _Detected {
 	ImageCategory *category; // Don't free this. This is a copy.
 	CvSeq *detected;
-	struct _Detected *next;
 } image_detected_t;
 
 typedef struct _DetectedCount {
 	ImageCategory *category; // Don't free this. This is a copy.
 	uint16_t count;
-	struct _DetectedCount *next;
 } image_detected_count_t;
 
 typedef struct {

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -299,7 +299,10 @@ int writecheck;
 				}
 			}
 		}
-		ftruncate(file, lseek64(file, 0, SEEK_CUR));
+		if(ftruncate(file, lseek64(file, 0, SEEK_CUR)) != 0)
+		{
+			ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
+		}
 		/* Ok, have written hashes, now save new count */
 //		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		header->records = qty;
@@ -368,7 +371,7 @@ static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 	return header->records;
 }
 
-int loadBayesCategory(const char *fbc_name, char *cat_name)
+int loadBayesCategory(const char *fbc_name, const char *cat_name)
 {
 int fbc_file;
 uint32_t i, z, shortcut=0, offsetPos=3;

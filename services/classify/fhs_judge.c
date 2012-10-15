@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -41,7 +41,6 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <langinfo.h>
 #include <wchar.h>
 #include <wctype.h>
 #include <time.h>
@@ -49,6 +48,7 @@
 
 #include "hash.c"
 #include "hyperspace.c"
+#include "train_common.h"
 
 char *judge_file;
 char *fhs_dir;
@@ -87,35 +87,6 @@ int i;
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", judge_file);*/
 	return 0;
-}
-
-void checkMakeUTF8(void)
-{
-	setlocale(LC_ALL, "");
-	int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-	if(!utf8_mode) setlocale(LC_ALL, "en_US.UTF-8");
-}
-
-wchar_t *makeData(char *input_file)
-{
-int data=0;
-struct stat stat_buf;
-char *tempData=NULL;
-wchar_t *myData=NULL;
-int32_t realLen;
-	data=open(input_file, O_RDONLY);
-	fstat(data, &stat_buf);
-	tempData=malloc(stat_buf.st_size+1);
-	if(tempData==NULL) exit(-1);
-	read(data, tempData, stat_buf.st_size);
-	close(data);
-	tempData[stat_buf.st_size] = '\0';
-	myData=malloc((stat_buf.st_size+1) * UTF32_CHAR_SIZE);
-	realLen=mbstowcs(myData, tempData, stat_buf.st_size);
-	if(realLen!=-1) myData[realLen] = L'\0';
-	else printf("Bad character data in %s\n", input_file);
-	free(tempData);
-	return myData;
 }
 
 int main (int argc, char *argv[])

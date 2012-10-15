@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -41,18 +41,33 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <langinfo.h>
 #include <wchar.h>
 #include <wctype.h>
-#include <string.h>
+#include <libgen.h>
 
 #include "hash.c"
 #include "hyperspace.c"
+#include "findtolearn_util.c"
+#include "train_common.h"
+#include "train_common_threads.h"
 
 char *judge_dir;
 char *fhs_dir;
 char *train_as_category;
 double threshhold;
+int num_threads = 2;
+
+pthread_mutex_t file_mtx, train_mtx;
+pthread_cond_t file_avl_cnd, need_file_cnd;
+int file_need_data = 0;
+int file_available = 0;
+int shutdown = 0;
+
+process_entry *file_names = NULL;
+process_entry *busy_file_names = NULL;
+
+HTMLClassification lowest = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+char lowest_file[PATH_MAX] = "\0";
 
 int readArguments(int argc, char *argv[])
 {
@@ -66,10 +81,11 @@ int i;
 		printf("\t-d CATEGORY_FHS_FILES_DIR\n");
 		printf("\t-c CATEGORY_INPUT_DIRECTORY_FILES_SHOULD_BE\n");
 		printf("\t-t THRESHHOLD_NOT_TO_EXCEED_TO_REPORT_NEED_TO_TRAIN\n");
+		printf("\t-m NUMBER_OF_THREADS_TO_USE (default: 2 and should be <= NUM_CORES_ON_CPU)\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
-	for(i=1; i<13; i+=2)
+	for(i = 1; i < argc; i += 2)
 	{
 		if(strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
 		else if(strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
@@ -95,40 +111,15 @@ int i;
 		{
 			sscanf(argv[i+1], "%lf", &threshhold);
 		}
+		else if(strcmp(argv[i], "-m") == 0)
+		{
+			sscanf(argv[i+1], "%d", &num_threads);
+		}
 	}
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", judge_file);*/
 	return 0;
-}
-
-void checkMakeUTF8(void)
-{
-	setlocale(LC_ALL, "");
-	int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-	if(!utf8_mode) setlocale(LC_ALL, "en_US.UTF-8");
-}
-
-wchar_t *makeData(char *input_file)
-{
-int data=0;
-struct stat stat_buf;
-char *tempData=NULL;
-wchar_t *myData=NULL;
-int32_t realLen;
-	data=open(input_file, O_RDONLY);
-	fstat(data, &stat_buf);
-	tempData=malloc(stat_buf.st_size+1);
-	if(tempData==NULL) exit(-1);
-	read(data, tempData, stat_buf.st_size);
-	close(data);
-	tempData[stat_buf.st_size] = '\0';
-	myData=malloc((stat_buf.st_size+1) * UTF32_CHAR_SIZE);
-	realLen=mbstowcs(myData, tempData, stat_buf.st_size);
-	if(realLen!=-1) myData[realLen] = L'\0';
-	else ci_debug_printf(10, "Bad character data in %s\n", input_file);
-	free(tempData);
-	return myData;
 }
 
 HTMLClassification judgeFile(char *judge_file)
@@ -198,15 +189,13 @@ int prehash_data_file = 0;
 	return classification;
 }
 
-int judgeDirectory(char *directory)
+int judgeDirectory(char *directory, struct thread_info *tinfo)
 {
 char full_path[PATH_MAX];
-char lowest_file[PATH_MAX];
-HTMLClassification lowest = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  } , this;
-
 DIR *dirp;
 struct dirent *dp;
 struct stat info;
+int tnum;
 
 	if ((dirp = opendir(directory)) == NULL)
 	{
@@ -222,32 +211,14 @@ struct stat info;
 			stat(full_path, &info);
 			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && S_ISREG(info.st_mode))
 			{
-				this = judgeFile(full_path);
-				if(lowest.primary_name == NULL)
+				pthread_mutex_lock(&file_mtx);
+				while(!file_need_data)
 				{
-					strcpy(lowest_file, dp->d_name);
-					lowest = this;
+					pthread_cond_wait(&need_file_cnd, &file_mtx);
 				}
-				else if(strcmp(lowest.primary_name, train_as_category) == 0) // lowest is the correct category
-				{
-					if(strcmp(this.primary_name, train_as_category) != 0) // this is NOT the correct category
-					{
-						strcpy(lowest_file, dp->d_name);
-						lowest = this;
-					}
-					else if(lowest.primary_probability > this.primary_probability) // this is the correct category, but a lower score
-					{
-						strcpy(lowest_file, dp->d_name);
-						lowest = this;
-					}
-				}
-				else { // lowest is NOT the correct category
-					if(strcmp(this.primary_name, train_as_category) != 0 && lowest.primary_probability < this.primary_probability) // this is NOT the correct category and has a higher score (which is further from the right category)
-					{
-						strcpy(lowest_file, dp->d_name);
-						lowest = this;
-					}
-				}
+
+				addFile(full_path, dp->d_name);
+				pthread_mutex_unlock(&file_mtx);
 			}
 		}
 	} while (dp != NULL);
@@ -255,6 +226,18 @@ struct stat info;
 		perror("error reading directory");
 	else
 		(void) closedir(dirp);
+
+	/* Tell threads to shutdown */
+	pthread_mutex_lock(&file_mtx);
+	shutdown = 1;
+	pthread_mutex_unlock(&file_mtx);
+	/* Wait for threads to terminate */
+	for (tnum = 0; tnum < num_threads; tnum++) {
+		pthread_mutex_lock(&file_mtx);
+		pthread_cond_broadcast(&file_avl_cnd);
+		pthread_mutex_unlock(&file_mtx);
+		pthread_join(tinfo[tnum].thread_id, NULL);
+	}
 
 	if(strcmp(lowest.primary_name, train_as_category) != 0 || (strcmp(lowest.primary_name, train_as_category) == 0 && lowest.primary_probScaled < threshhold))
 	{
@@ -290,13 +273,93 @@ void setupPrimarySecondary(char *primary, char *secondary, int bidirectional)
 	number_secondaries++;
 }
 
+
+/* Thread start function: display address near top of our stack,
+and return upper-cased copy of argv_string */
+
+static void *thread_start(void *arg)
+{
+struct thread_info *tinfo = (struct thread_info *) arg;
+HTMLClassification this;
+process_entry entry;
+
+	while(!shutdown || file_available)
+	{
+		// check to see if file is available
+
+		pthread_mutex_lock(&file_mtx);
+		while(!file_available)
+		{
+			file_need_data++;
+			pthread_cond_signal(&need_file_cnd);
+			pthread_cond_wait(&file_avl_cnd, &file_mtx);
+			if(shutdown && !file_available)
+			{
+				pthread_mutex_unlock(&file_mtx);
+				return "SHUTDOWN_IN_RUN";
+			}
+		}
+
+		entry = getNextFile();
+		pthread_mutex_unlock(&file_mtx);
+
+		this = judgeFile(entry.full_path);
+
+		pthread_mutex_lock(&train_mtx);
+		if(lowest.primary_name == NULL)
+		{
+			strcpy(lowest_file, entry.file_name);
+			lowest = this;
+//			printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+		}
+		else if(strcmp(lowest.primary_name, train_as_category) == 0) // lowest is the correct category
+		{
+			if(strcmp(this.primary_name, train_as_category) != 0) // this is NOT the correct category
+			{
+				strcpy(lowest_file, entry.file_name);
+				lowest = this;
+//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+			}
+			else if(lowest.primary_probability > this.primary_probability) // this is the correct category, but a lower score
+			{
+				strcpy(lowest_file, entry.file_name);
+				lowest = this;
+//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+			}
+		}
+		else { // lowest is NOT the correct category
+			if(strcmp(this.primary_name, train_as_category) != 0 && lowest.primary_probability < this.primary_probability) // this is NOT the correct category and has a higher score (which is further from the right category)
+			{
+				strcpy(lowest_file, entry.file_name);
+				lowest = this;
+//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+			}
+		}
+		pthread_mutex_unlock(&train_mtx);
+		free(entry.full_path);
+		free(entry.file_name);
+	}
+
+	return "NORMAL_SHUTDOWN";
+}
+
 int main (int argc, char *argv[])
 {
 int ret;
+struct thread_info *tinfo;
+int i;
+process_entry *temp;
+
 	checkMakeUTF8();
 	initHTML();
 	initHyperSpaceClassifier();
 	if(readArguments(argc, argv)==-1) exit(-1);
+
+	/* Allocate memory for pthread_create() arguments */
+
+	tinfo = calloc(num_threads, sizeof(struct thread_info));
+	if (tinfo == NULL)
+		handle_error("calloc");
 
 	loadMassHSCategories(fhs_dir);
 	setupPrimarySecondary("adult.affairs", "social.dating", 1);
@@ -304,7 +367,24 @@ int ret;
 	setupPrimarySecondary("clothing.*","clothing.*", 0);
 	setupPrimarySecondary("information.culinary","commerce.food", 1);
 
-	ret = judgeDirectory(judge_dir);
+	for(i = 0; i < num_threads; i++)
+	{
+		temp = calloc(1, sizeof(process_entry));
+		temp->next = file_names;
+		file_names = temp;
+	}
+
+	start_threads(tinfo, num_threads, thread_start);
+
+	ret = judgeDirectory(judge_dir, tinfo);
+
+	destroy_threads(tinfo);
+
+	do {
+		temp = file_names;
+		file_names = file_names->next;
+		free(temp);
+	} while (file_names);
 
 	free(judge_dir);
 	free(fhs_dir);

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2011 Trever L. Adams
+ *  Copyright (C) 2008-2012 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -81,7 +81,7 @@ extern int cfg_ImageInterpolation(const char *directive, const char **argv, void
 extern int cfg_coalesceOverlap(const char *directive, const char **argv, void *setdata);
 extern int cfg_imageCategoryCopies(const char *directive, const char **argv, void *setdata);
 extern void classifyImagePrepReload(void);
-extern int initImageClassificationService(void);
+extern int postInitImageClassificationService(void);
 extern int closeImageClassification(void);
 int cfg_ExternalImageConversion(const char *directive, const char **argv, void *setdata); // In this file
 #endif
@@ -124,13 +124,13 @@ ci_thread_mutex_t memmanage_mtx;
 int ImageScaleDimension = 240; // Scale to this dimension
 int ImageMaxScale = 4; // Maximum rescale
 int ImageMinProcess = 30; // don't process images whose minimum dimension is under this size
-int IMAGE_DEBUG_SAVE_ORIG = 0; // DEBUG: Do we save the orignal?
+int IMAGE_DEBUG_SAVE_ORIG = 0; // DEBUG: Do we save the original?
 int IMAGE_DEBUG_SAVE_PARTS = 0; // DEBUG: Do we save the parts?
 int IMAGE_DEBUG_SAVE_MARKED = 0; // DEBUG: Do save the original marked?
-int IMAGE_DEBUG_DEMONSTRATE = 0; // DEBUG: Do we domonstrate?
+int IMAGE_DEBUG_DEMONSTRATE = 0; // DEBUG: Do we demonstrate?
 int IMAGE_DEBUG_DEMONSTRATE_MASKED = 0; // DEBUG: we demonstrate with a mask?
 int IMAGE_INTERPOLATION=CV_INTER_LINEAR; // Interpolation function to use.
-int IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN; // How many copies of each cascade do we load to avoid openCV bug and bottle necks
+int IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN; // How many copies of each cascade do we load to avoid OpenCV bug and bottle necks
 extern ci_thread_rwlock_t imageclassify_rwlock;
 #endif
 
@@ -330,7 +330,7 @@ ci_membuf_t *tempbody;
 	tempbody = data->mem_body;
 
 	lseek(data->disk_body->fd, 0, SEEK_SET);
-	tempbody->endpos = 0;
+
 	while(tempbody->endpos < ci_simple_file_size(data->disk_body))
 		tempbody->endpos += read(data->disk_body->fd, tempbody->buf + tempbody->endpos, data->disk_body->endpos - tempbody->endpos);
 
@@ -421,21 +421,21 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      initHTML();
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-     initImageClassificationService();
-
-     ci_thread_rwlock_init(&referrers_rwlock);
-     createReferrerTable();
-#endif
-
      return 1;
 }
 
 int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
                            struct ci_server_conf *server_conf)
 {
+int ret = CI_OK;
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+     ret = postInitImageClassificationService();
+
+     ci_thread_rwlock_init(&referrers_rwlock);
+     createReferrerTable();
+#endif
     set_istag(srv_classify_xdata);
-    return CI_OK;
+    return ret;
 }
 
 void srvclassify_close_service()
@@ -724,7 +724,7 @@ int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
      if (wbuf && wlen) {
           *wlen = srvclassify_write_to_net(wbuf, *wlen, req);
      }
-     return CI_OK;
+     return ret;
 }
 
 int srvclassify_end_of_data_handler(ci_request_t *req)
@@ -1339,7 +1339,7 @@ int classify_uncompress(ci_request_t * req)
      } while (ret != Z_STREAM_END);
      strm.avail_out = MAX_WINDOW;
      strm.next_out = (Bytef *) outputBuffer;
-     ret=inflate(&strm, Z_FINISH);
+     ret = inflate(&strm, Z_FINISH);
      ci_membuf_write(data->uncompressedbody, outputBuffer, MAX_WINDOW - strm.avail_out, 0);
     // DO NOT APPEND NULL HERE AS make_wchar (iconv) SEEMS TO CAUSE CORRUPTION / CRASHES WITH A NULL
 
@@ -1508,11 +1508,11 @@ int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdat
                      (type == 1 ? "TEXT" : "IMAGE"));
      for (i = 0; i < ci_magic_types_num(magic_db); i++) {
           if (classifytypes[i] == type)
-               ci_debug_printf(2, ",%s", ci_data_type_name(magic_db, i));
+               ci_debug_printf(1, ",%s", ci_data_type_name(magic_db, i));
      }
      for (i = 0; i < ci_magic_groups_num(magic_db); i++) {
           if (classifygroups[i] == type)
-               ci_debug_printf(2, ",%s", ci_data_group_name(magic_db, i));
+               ci_debug_printf(1, ",%s", ci_data_group_name(magic_db, i));
      }
      ci_debug_printf(1, "\n");
      return 1;
@@ -1818,8 +1818,17 @@ void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassi
 {
 uint32_t primary = 0, secondary = 0;
 int oldest = 0, i;
+HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 	// Compute hash outside of lock
 	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
+
+/*	Not sure if this is the right thing to do, but I do not know how to make it work with memcache any other way
+	// It is the classification only if it is a solid match
+	if(fhs_classification.primary_probScaled < (float) SolidMatch)
+		fhs_classification = emptyClassification;
+	if(fnb_classification.primary_probScaled < (float) SolidMatch)
+		fnb_classification = emptyClassification;
+*/
 
 	ci_thread_rwlock_wrlock(&referrers_rwlock);
 
