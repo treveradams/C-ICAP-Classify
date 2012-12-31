@@ -116,9 +116,9 @@ int i;
 			sscanf(argv[i+1], "%d", &num_threads);
 		}
 	}
-/*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
-	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
-	printf("Learn File: %s\n", judge_file);*/
+/*	ci_debug_printf(10, "Primary Seed: %"PRIX32"\n", HASHSEED1);
+	ci_debug_printf(10, "Secondary Seed: %"PRIX32"\n", HASHSEED2);
+	ci_debug_printf(10, "Learn File: %s\n", judge_file);*/
 	return 0;
 }
 
@@ -164,7 +164,7 @@ int prehash_data_file = 0;
 		normalizeCurrency(&myRegexHead);
 		regexMakeSingleBlock(&myRegexHead);
 
-	//	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
+	//	ci_debug_printf(10, "%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
 		myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
 		myHashes.slots = HTML_MAX_FEATURE_COUNT;
@@ -197,10 +197,11 @@ DIR *dirp;
 struct dirent *dp;
 struct stat info;
 int tnum;
+struct timespec delay = { 0, 10000000L};
 
 	if ((dirp = opendir(directory)) == NULL)
 	{
-		printf("couldn't open '%s'", directory);
+		ci_debug_printf(10, "couldn't open '%s'", directory);
 		return -1;
 	}
 
@@ -231,12 +232,16 @@ int tnum;
 	/* Tell threads to shutdown */
 	pthread_mutex_lock(&file_mtx);
 	shutdown = 1;
+	pthread_cond_broadcast(&file_avl_cnd);
 	pthread_mutex_unlock(&file_mtx);
+	// Wait for everyone to be ready
+	nanosleep(&delay, NULL);
 	/* Wait for threads to terminate */
 	for (tnum = 0; tnum < num_threads; tnum++) {
 		pthread_mutex_lock(&file_mtx);
 		pthread_cond_broadcast(&file_avl_cnd);
 		pthread_mutex_unlock(&file_mtx);
+		nanosleep(&delay, NULL);
 		pthread_join(tinfo[tnum].thread_id, NULL);
 	}
 
@@ -311,7 +316,7 @@ process_entry entry;
 		{
 			strcpy(lowest_file, entry.file_name);
 			lowest = this;
-//			printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+//			ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 		}
 		else if(strcmp(lowest.primary_name, train_as_category) == 0) // lowest is the correct category
 		{
@@ -319,13 +324,13 @@ process_entry entry;
 			{
 				strcpy(lowest_file, entry.file_name);
 				lowest = this;
-//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 			}
 			else if(lowest.primary_probability > this.primary_probability) // this is the correct category, but a lower score
 			{
 				strcpy(lowest_file, entry.file_name);
 				lowest = this;
-//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 			}
 		}
 		else { // lowest is NOT the correct category
@@ -333,7 +338,7 @@ process_entry entry;
 			{
 				strcpy(lowest_file, entry.file_name);
 				lowest = this;
-//				printf("*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 			}
 		}
 		pthread_mutex_unlock(&train_mtx);

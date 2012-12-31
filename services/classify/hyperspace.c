@@ -113,7 +113,7 @@ int offsetFixup;
 	{
 		if(memcmp(header->ID, "FHS", FHS_HEADERv1_ID_SIZE) != 0)
 		{
-			ci_debug_printf(10, "Not a FastHyperSpace file\n");
+			ci_debug_printf(1, "Not a FastHyperSpace file\n");
 			return -1;
 		}
 		do {
@@ -122,7 +122,7 @@ int offsetFixup;
 		} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv1_VERSION_SIZE);
 		if(header->version != HYPERSPACE_FORMAT_VERSION && header->version != OLD_HYPERSPACE_FORMAT_VERSION)
 		{
-			ci_debug_printf(10, "Wrong version of FastHyperSpace file\n");
+			ci_debug_printf(1, "Wrong version of FastHyperSpace file\n");
 			return -2;
 		}
 		do {
@@ -131,7 +131,7 @@ int offsetFixup;
 		} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv1_UBM_SIZE);
 		if(header->UBM != UNICODE_BYTE_MARK)
 		{
-			ci_debug_printf(10, "FastHyperSpace file of incompatible endianness\n");
+			ci_debug_printf(1, "FastHyperSpace file of incompatible endianness\n");
 			return -3;
 		}
 		if(header->version >= 2) // Make sure we have a proper WCS
@@ -142,14 +142,14 @@ int offsetFixup;
 			} while(offsetFixup > 0 && offsetFixup < FHS_HEADERv2_WCS_SIZE);
 			if(header->WCS != sizeof(wchar_t))
 			{
-				ci_debug_printf(10, "FastHyperSpace file of incompatible wchar_t format\n");
+				ci_debug_printf(1, "FastHyperSpace file of incompatible wchar_t format\n");
 				return -6;
 			}
 		}
 		else ci_debug_printf(5, "Loading old FastHyperSpace file\n");
 		if(read(fhs_file, &header->records, FHS_HEADERv1_RECORDS_QTY_SIZE) != FHS_HEADERv1_RECORDS_QTY_SIZE)
 		{
-			ci_debug_printf(10, "FastHyperSpace file has invalid header: no records count\n");
+			ci_debug_printf(1, "FastHyperSpace file has invalid header: no records count\n");
 			return -4;
 		}
 		return 0;
@@ -202,7 +202,7 @@ int file=0;
 		if(forWriting == 1)
 		{
 			writeFHSHeader(file, header);
-//			printf("Created FastHyperSpace file: %s\n", filename);
+//			ci_debug_printf(7, "Created FastHyperSpace file: %s\n", filename);
 		}
 		else return -1;
 	}
@@ -307,7 +307,7 @@ uint16_t hash;
 		// Make sure that we never write out more than FHS_HEADERv1_RECORDS_QTY_MAX times as this is our maximum document count
 		if(header->records > FHS_HEADERv1_RECORDS_QTY_MAX)
 		{
-			printf("PROBLEM: We have more hashes than allowed!!\n");
+			ci_debug_printf(5, "PROBLEM: We have more hashes than allowed!!\n");
 		}
 
 		// Change hashes_list->used
@@ -333,8 +333,8 @@ int64_t mid=0;
 	if(start > end)
 		return -1;
 	mid = start + ((end - start) / 2);
-//	printf("Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
-//	printf("Keys @ mid: %"PRIX64" looking for %"PRIX64"\n", hashes_list->hashes[mid].hash, key);
+//	ci_debug_printf(10, "Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
+//	ci_debug_printf(10, "Keys @ mid: %"PRIX64" looking for %"PRIX64"\n", hashes_list->hashes[mid].hash, key);
 	if(hashes_list->hashes[mid].hash > key)
 		return HSBinarySearch(hashes_list, start, mid-1, key);
 	else if(hashes_list->hashes[mid].hash < key)
@@ -359,7 +359,7 @@ int status = 0;
 int bytes = 0;
 int to_read = FHS_v1_HASH_SIZE * numHashes;
         hashes = malloc(FHS_v1_HASH_SIZE * numHashes);
-	// printf("Going to read %"PRIu16" hashes from record %"PRIu16"\n", numHashes, i);
+	// ci_debug_printf(5, "Going to read %"PRIu16" hashes from record %"PRIu16"\n", numHashes, i);
         do {
 		status = read(fhs_file, hashes + bytes, to_read);
 		if(status > 0)
@@ -409,7 +409,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 		HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
 	}
 
-//	printf("Going to read %"PRIu16" records from %s\n", header.records, cat_name);
+//	ci_debug_printf(7, "Going to read %"PRIu16" records from %s\n", header.records, cat_name);
 	offsets[1] = HSJudgeHashList.used;
 	for(i = 0; i < header.records; i++)
 	{
@@ -427,7 +427,7 @@ uint32_t startHashes = HSJudgeHashList.used;
 
 		for(j = 0; j < numHashes; j++)
 		{
-//			printf("Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes[j], cat_name, i);
+//			ci_debug_printf(10, "Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes[j], cat_name, i);
 			if(i > 0 || offsets[0] != offsets[1])
 			{
 				shortcut = 0;
@@ -771,14 +771,14 @@ HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .p
 	{
 		if((BSRet = HSBinarySearch(&HSJudgeHashList, 0, HSJudgeHashList.used-1, toClassify->hashes[i]))>=0)
 		{
-//			printf("Found %"PRIX64"\n", toClassify->hashes[i]);
+//			ci_debug_printf(10, "Found %"PRIX64"\n", toClassify->hashes[i]);
 			for(j = 0; j < HSJudgeHashList.hashes[BSRet].used; j++)
 			{
 				categories[HSJudgeHashList.hashes[BSRet].users[j].category][HSJudgeHashList.hashes[BSRet].users[j].document]++;
 			}
 		}
 	}
-//	printf("Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
+//	ci_debug_printf(10, "Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
 
 	data = doHyperSpaceClassify(categories, toClassify);
 

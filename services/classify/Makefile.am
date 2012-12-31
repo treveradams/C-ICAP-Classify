@@ -10,8 +10,7 @@ srv_classify_la_CFLAGS=  -I../../include/ -std=gnu99
 srv_classify_la_LDFLAGS=  -module -avoid-version -lm -ltre
 srv_classify_la_SOURCES = srv_classify.c bayes.c hyperspace.c html.c hash.c
 
-bin_PROGRAMS = fhs_judge fhs_learn fhs_makepreload fnb_judge fnb_learn fnb_makepreload
-# fhs_findtolearn fnb_findtolearn 
+bin_PROGRAMS = fhs_judge fhs_learn fhs_makepreload fnb_judge fnb_learn fnb_makepreload fhs_findtolearn fnb_findtolearn 
 
 fhs_judge_SOURCES = fhs_judge.c html.c train_common.c
 fhs_judge_CFLAGS = -DNOT_CICAP -std=gnu99
@@ -22,7 +21,7 @@ fhs_learn_CFLAGS = -DNOT_CICAP -std=gnu99
 fhs_learn_LDFLAGS = -ltre -lm
 
 fhs_findtolearn_SOURCES = fhs_findtolearn.c html.c train_common.c train_common_threads.c
-fhs_findtolearn_CFLAGS = -DNOT_CICAP -std=gnu99
+fhs_findtolearn_CFLAGS = -DNOT_CICAP -std=gnu99 -lpthread
 fhs_findtolearn_LDFLAGS = -ltre -lm
 
 fhs_makepreload_SOURCES = fhs_makepreload.c html.c

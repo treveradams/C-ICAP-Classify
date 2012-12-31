@@ -103,7 +103,7 @@ void makeSortedUniqueHashes(HashList *hashes_list)
 {
 uint32_t i = 1, j = 0;
 	qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare );
-//	printf("\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
+//	ci_debug_printf(10, "\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
 	for(i = 1; i < hashes_list->used; i++)
 	{
 		if(hashes_list->hashes[i] != hashes_list->hashes[j])
@@ -113,8 +113,8 @@ uint32_t i = 1, j = 0;
 		}
 	}
 	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
-//	for(i=0; i<hashes_list->used; i++) printf("Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
-//	printf("Total unique features: %"PRIu32"\n", hashes_list->used);
+//	for(i=0; i<hashes_list->used; i++) ci_debug_printf(10, "Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
+//	ci_debug_printf(10, "Total unique features: %"PRIu32"\n", hashes_list->used);
 }
 
 void initHTML(void)
@@ -205,7 +205,7 @@ myRegmatch_t *myRet;
 	if(myHead->lastarray->used < regexEDITS)
 		myRet = &myHead->lastarray->matches[myHead->lastarray->used];
 	else {
-//		printf("\n\nMaking new EmptyRegexBlock\n");
+//		ci_debug_printf(10, "\n\nMaking new EmptyRegexBlock\n");
 		myHead->lastarray->next = calloc(1, sizeof(myRegmatchArray));
 		myHead->lastarray = myHead->lastarray->next;
 		myRet = &myHead->lastarray->matches[myHead->lastarray->used];
@@ -247,7 +247,7 @@ myRegmatch_t *current = myHead->head, *newmatch;
 			{
 				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
 				{
-//					printf("Head Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, myHead->main_memory + to_remove->rm_so);
+//					ci_debug_printf(10, "Head Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, myHead->main_memory + to_remove->rm_so);
 					newmatch = getEmptyRegexBlock(myHead);
 					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
 					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
@@ -256,16 +256,16 @@ myRegmatch_t *current = myHead->head, *newmatch;
 					current->next = newmatch; // insert new match
 					if(newmatch->next == NULL) myHead->tail = newmatch;
 					myHead->dirty = 1;
-//					printf("After Head Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 20 ? 20: newmatch->rm_eo - newmatch->rm_so, &myHead->main_memory[newmatch->rm_so]);
+//					ci_debug_printf(10, "After Head Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 20 ? 20: newmatch->rm_eo - newmatch->rm_so, &myHead->main_memory[newmatch->rm_so]);
 					return;
 				}
-				else printf("regexRemove: (To remove: %d - %d, Current: %d - %d,\n", to_remove->rm_so, to_remove->rm_eo, current->rm_so, current->rm_eo);
+				else ci_debug_printf(5, "regexRemove: (To remove: %d - %d, Current: %d - %d,\n", to_remove->rm_so, to_remove->rm_eo, current->rm_so, current->rm_eo);
 			}
 			else if(current->data != NULL) // we process private memory blocks here.
 			{
 				if(current->rm_so <= to_remove->rm_so && current->rm_eo >= to_remove->rm_eo) // we found the start
 				{
-//					printf("Private Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, current->data + to_remove->rm_so);
+//					ci_debug_printf(10, "Private Removing: %.*ls\n", to_remove->rm_eo - to_remove->rm_so, current->data + to_remove->rm_so);
 					newmatch = getEmptyRegexBlock(myHead);
 					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
 					newmatch->rm_eo = current->rm_eo; // the new block ends where the old one used to
@@ -275,14 +275,14 @@ myRegmatch_t *current = myHead->head, *newmatch;
 					current->next = newmatch; // insert new match
 					if(newmatch->next == NULL) myHead->tail = newmatch;
 					myHead->dirty = 1;
-//					printf("After Private Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 10 ? 10 : newmatch->rm_eo - newmatch->rm_so, newmatch->data + newmatch->rm_so);
+//					ci_debug_printf(10, "After Private Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 10 ? 10 : newmatch->rm_eo - newmatch->rm_so, newmatch->data + newmatch->rm_so);
 					return;
 				}
 			}
 		}
 		current = current->next;
 	}
-	printf("regexRemove not handled. Ooops. (%s: %.*ls)\n", startblock->data ? "Private" : "Head", to_remove->rm_eo - to_remove->rm_so, startblock->data ? startblock->data + to_remove->rm_so : myHead->main_memory + to_remove->rm_so);
+	ci_debug_printf(5, "regexRemove not handled. Ooops. (%s: %.*ls)\n", startblock->data ? "Private" : "Head", to_remove->rm_eo - to_remove->rm_so, startblock->data ? startblock->data + to_remove->rm_so : myHead->main_memory + to_remove->rm_so);
 	if(to_remove->rm_eo - to_remove->rm_so == 1) printf("Character in unhandled regexRemove %"PRIX32"\n", *(myHead->main_memory + to_remove->rm_so));
 }
 
@@ -319,7 +319,7 @@ uint32_t myLen = 0;
 						current->rm_eo = to_remove->rm_so + myLen;
 						current->next = newmatch; // insert new match
 						newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
-//						printf("regexReplace Internal/Inserted: \"%.*ls\"\n", myLen, myHead->main_memory + to_remove->rm_so);
+//						ci_debug_printf(10,"regexReplace Internal/Inserted: \"%.*ls\"\n", myLen, myHead->main_memory + to_remove->rm_so);
 					}
 					else {
 						newdata = getEmptyRegexBlock(myHead);
@@ -330,7 +330,7 @@ uint32_t myLen = 0;
 						current->rm_eo = to_remove->rm_so; // the old block ends where we started
 						current->next = newdata; // insert new data
 						newdata->next = newmatch; // insert new match
-//						printf("regexReplace Internal/Inserted/Allocate: %.*ls\n", newdata->rm_eo, newdata->data);
+//						ci_debug_printf(10, "regexReplace Internal/Inserted/Allocate: %.*ls\n", newdata->rm_eo, newdata->data);
 					}
 					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
 					if(newmatch->next == NULL) myHead->tail = newmatch;
@@ -362,7 +362,7 @@ uint32_t myLen = 0;
 						}
 						current->rm_eo = to_remove->rm_so + myLen;
 						current->next = newmatch; // insert new match
-//						printf("regexReplace Private/Inserted: \"%.*ls\"\n", myLen, current->data + to_remove->rm_so);
+//						ci_debug_printf(10, "regexReplace Private/Inserted: \"%.*ls\"\n", myLen, current->data + to_remove->rm_so);
 					}
 					else {
 						newdata = getEmptyRegexBlock(myHead);
@@ -373,7 +373,7 @@ uint32_t myLen = 0;
 						current->rm_eo = to_remove->rm_so; // the old block ends where we started
 						current->next = newdata; // insert new data
 						newdata->next = newmatch; // insert new match
-//						printf("regexReplace Private/Inserted/Allocate: \"%.*ls\"\n", newdata->rm_eo, newdata->data);
+//						ci_debug_printf(10, "regexReplace Private/Inserted/Allocate: \"%.*ls\"\n", newdata->rm_eo, newdata->data);
 					}
 					newmatch->rm_so = to_remove->rm_eo; // the new block starts right after the found regex
 					if(newmatch->next == NULL) myHead->tail = newmatch;
@@ -399,7 +399,7 @@ uint32_t offset;
 		newdata->data[offset] = L' ';
 		memcpy(newdata->data + offset + 1, appendMe, len * sizeof(wchar_t));
 		newdata->rm_eo = newdata->rm_eo + len + 1; // offset was newdata->rm_eo
-//		printf("regexAppend: Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo + 1, newdata->data);
+//		ci_debug_printf(10, "regexAppend: Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo + 1, newdata->data);
 	}
 	else {
 		newdata = getEmptyRegexBlock(myHead);
@@ -413,7 +413,7 @@ uint32_t offset;
 		newdata->data[0] = L' ';
 		//	wcsncpy(newdata->data+1, appendMe, len);
 		memcpy(newdata->data + 1, appendMe, len * sizeof(wchar_t));
-//		printf("regexAppend: New Appending: %.*ls\n", len, appendMe);
+//		ci_debug_printf(10, "regexAppend: New Appending: %.*ls\n", len, appendMe);
 		newdata->rm_so = 0;
 		newdata->owns_memory = 1;
 		myHead->tail->next = newdata;
@@ -536,7 +536,7 @@ int len;
 			currencyMatch[4].rm_eo += currentOffset;
 			len = swprintf(replace, 101, L"$ %.*ls%ls%.*ls", currencyMatch[3].rm_eo - currencyMatch[3].rm_so, XS, (currencyMatch[4].rm_eo - currencyMatch[4].rm_so > 0 ? L"." : L""),
 				(currencyMatch[4].rm_eo - currencyMatch[4].rm_so > 0 ? (currencyMatch[4].rm_eo - currencyMatch[4].rm_so) - 1 : 0), XS);
-//			printf("Currency %.*ls to %.*ls\n", currencyMatch[0].rm_eo - currencyMatch[0].rm_so, myData + currencyMatch[0].rm_so, len, replace);
+//			ci_debug_printf(10, "Currency %.*ls to %.*ls\n", currencyMatch[0].rm_eo - currencyMatch[0].rm_so, myData + currencyMatch[0].rm_so, len, replace);
 			regexReplace(myHead, current, &currencyMatch[0], replace, len, 0);
 			currentOffset = currencyMatch[0].rm_eo;
 		}
@@ -551,8 +551,8 @@ int ret;
 	if(start > end)
 		return -1;
 	mid = start + ((end - start) / 2);
-//	printf("Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
-//	printf("Keys @ mid: %ls looking for %.*ls\n", htmlentities[mid].name, len, key);
+//	ci_debug_printf(10, "Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
+//	ci_debug_printf(10, "Keys @ mid: %ls looking for %.*ls\n", htmlentities[mid].name, len, key);
 	ret = wcsncmp(htmlentities[mid].name, key, len);
 	if(ret == 0 && wcslen(htmlentities[mid].name) > len) ret = 1;
 	if(ret > 0) return findEntityBS(start, mid-1, key, len);
@@ -587,7 +587,7 @@ uint32_t tempUTF32CHAR;
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
-//			printf("Killing Script/Style Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
+//			ci_debug_printf(10, "Killing Script/Style Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
 		}
@@ -603,7 +603,7 @@ uint32_t tempUTF32CHAR;
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
-//			printf("Killing Comment Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
+//			ci_debug_printf(10, "Killing Comment Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
 		}
@@ -621,7 +621,7 @@ uint32_t tempUTF32CHAR;
 			singleMatch[0].rm_eo += currentOffset;
 			singleMatch[1].rm_so += currentOffset;
 			singleMatch[1].rm_eo += currentOffset;
-//			printf("Meta found: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
+//			ci_debug_printf(10, "Meta found: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 			if (tre_regwnexec(&metaDescription, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, doubleMatch, 0) != REG_NOMATCH)
 			{
 				doubleMatch[0].rm_so += singleMatch[1].rm_so;
@@ -634,7 +634,7 @@ uint32_t tempUTF32CHAR;
 					tripleMatch[0].rm_eo += singleMatch[1].rm_so;
 					tripleMatch[1].rm_so += singleMatch[1].rm_so;
 					tripleMatch[1].rm_eo += singleMatch[1].rm_so;
-//					printf("Saving Meta Description: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
+//					ci_debug_printf(10, "Saving Meta Description: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
 					regexReplace(myHead, current, &singleMatch[0], myData + tripleMatch[1].rm_so, tripleMatch[1].rm_eo - tripleMatch[1].rm_so, 1);
 				}
 			}
@@ -652,12 +652,12 @@ uint32_t tempUTF32CHAR;
 					tripleMatch[1].rm_eo += singleMatch[1].rm_so;
 					for(metacount = 0; metacount < tripleMatch[1].rm_eo - tripleMatch[1].rm_so; metacount++)
 						if(*(myData + tripleMatch[1].rm_so + metacount) == L',') *(myData + tripleMatch[1].rm_so + metacount) = L' ';
-//					printf("Saving Meta Keywords: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
+//					ci_debug_printf(10, "Saving Meta Keywords: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
 					regexReplace(myHead, current, &singleMatch[0], myData + tripleMatch[1].rm_so, tripleMatch[1].rm_eo - tripleMatch[1].rm_so, 1);
 				}
 			}
 			else {
-//				printf("Killing Meta Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
+//				ci_debug_printf(10, "Killing Meta Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 				regexRemove(myHead, current, &singleMatch[0]);
 			}
 			currentOffset=singleMatch[0].rm_eo;
@@ -683,7 +683,7 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				printf("Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
+//				ci_debug_printf(10, "Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
 			}
 			else if (tre_regwnexec(&title2, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, doubleMatch, 0) != REG_NOMATCH)
 			{
@@ -700,7 +700,7 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				printf("Alt found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
+//				ci_debug_printf(10, "Alt found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
 			}
 			else if	(tre_regwnexec(&alt2, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, doubleMatch, 0) != REG_NOMATCH)
 			{
@@ -710,8 +710,8 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
 				regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
 			}
-//			printf("Killing Image Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
-//			printf("Image Data: %.*ls\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
+//			ci_debug_printf(10, "Killing Image Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
+//			ci_debug_printf(10, "Image Data: %.*ls\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
 		}
@@ -727,7 +727,7 @@ uint32_t tempUTF32CHAR;
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
-//			printf("Killing Uncared Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
+//			ci_debug_printf(10, "Killing Uncared Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
 			if(tre_regwnexec(&title1, myData + singleMatch[0].rm_so, singleMatch[0].rm_eo - singleMatch[0].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
 			{
 				doubleMatch[0].rm_so += singleMatch[0].rm_so;
@@ -735,20 +735,20 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[1].rm_so += singleMatch[0].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[0].rm_so;
 				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				printf("Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
+//				ci_debug_printf(10, "Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
 			}
 			if(singleMatch[1].rm_so != -1 && singleMatch[1].rm_eo - singleMatch[1].rm_so > 0)
 			{
 				singleMatch[1].rm_so += currentOffset;
 				singleMatch[1].rm_eo += currentOffset;
-//				printf("Space was: '%.*ls'\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
+//				ci_debug_printf(10, "Space was: '%.*ls'\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
 				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
 			}
 			else if(singleMatch[10].rm_so != -1 && singleMatch[10].rm_eo - singleMatch[10].rm_so > 0)
 			{
 				singleMatch[10].rm_so += currentOffset;
 				singleMatch[10].rm_eo += currentOffset;
-//				printf("Space was: '%.*ls'\n", singleMatch[10].rm_eo - singleMatch[10].rm_so, myData + singleMatch[10].rm_so);
+//				ci_debug_printf(10, "Space was: '%.*ls'\n", singleMatch[10].rm_eo - singleMatch[10].rm_so, myData + singleMatch[10].rm_so);
 				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
 			}
 			else regexRemove(myHead, current, &singleMatch[0]);
@@ -863,9 +863,9 @@ uint32_t tempUTF32CHAR;
 		{
 /*			if(iswupper(myData[currentOffset]))
 			{
-				printf("Changing %lc", myData[currentOffset]);*/
+				ci_debug_printf(10, "Changing %lc", myData[currentOffset]);*/
 			myData[currentOffset] = towlower(myData[currentOffset]);
-/*				printf(" to %lc\n", myData[currentOffset]);
+/*				ci_debug_printf(10, " to %lc\n", myData[currentOffset]);
 			}*/
 		}
 		current=current->next;
@@ -908,7 +908,7 @@ int foundCJK = 0;
 			(myData[currentOffset] >= 0x0000F900 && myData[currentOffset] <= 0x0000FAFF) ||
 			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
 			{
-//				printf("Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
+//				ci_debug_printf(10, "Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
 				if(matches[i].rm_so == currentOffset)
 					currentOffset++;
 				foundCJK = CJK_BREAK;
@@ -944,7 +944,7 @@ int foundCJK = 0;
 		}
 		matches[i].rm_eo = currentOffset;
 		if(matches[i].rm_so == matches[i].rm_eo) currentOffset++;
-//		printf("New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
+//		ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
 	}
 	if(i < 5) return;
 	prime1 = HASHSEED1;
@@ -961,7 +961,7 @@ int foundCJK = 0;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+/*			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/
@@ -984,7 +984,7 @@ int foundCJK = 0;
 			(myData[currentOffset] >= 0x0000F900 && myData[currentOffset] <= 0x0000FAFF) ||
 			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
 			{
-//				printf("Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
+//				ci_debug_printf(10, "Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
 				if(matches[pos].rm_so == currentOffset)
 					currentOffset++;
 				foundCJK = CJK_BREAK;
@@ -1022,7 +1022,7 @@ int foundCJK = 0;
 		morematches = matches[pos].rm_eo - matches[pos].rm_so;
 		if(morematches > 0)
 		{
-//			printf("New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
+//			ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
 			prime1 = HASHSEED1;
 			prime2 = HASHSEED2;
 			pos++;
@@ -1032,7 +1032,7 @@ int foundCJK = 0;
 				makeSortedUniqueHashes(hashes_list); // Attempt to make more room by removing duplicates
 				if(hashes_list->used + 4 >= hashes_list->slots) // If this is still the condition, we cannot handle more hashes
 				{
-					printf("This file creates too many hashes\n");
+					ci_debug_printf(5, "This file creates too many hashes\n");
 					return;
 				}
 			}
@@ -1058,7 +1058,7 @@ int foundCJK = 0;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			printf("Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+/*			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/

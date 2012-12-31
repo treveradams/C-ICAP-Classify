@@ -72,7 +72,7 @@ int32_t status;
 	myData = malloc((stat_buf.st_size + 1) * UTF32_CHAR_SIZE);
 	realLen = mbstowcs(myData, tempData, stat_buf.st_size);
 	if(realLen!=-1) myData[realLen] = L'\0';
-	else printf("*** Bad character data in %s\n", input_file);
+	else ci_debug_printf(1, "*** Bad character data in %s\n", input_file);
 	free(tempData);
 	return myData;
 }

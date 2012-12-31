@@ -172,6 +172,7 @@ void learnDirectory(char *directory, struct thread_info *tinfo)
 char full_path[PATH_MAX];
 struct stat info;
 int tnum;
+struct timespec delay = { 0, 10000000L};
 
 #ifndef _SVID_SOURCE
 DIR *dirp;
@@ -247,12 +248,16 @@ uint32_t n;
 	/* Tell threads to shutdown */
 	pthread_mutex_lock(&file_mtx);
 	shutdown = 1;
+	pthread_cond_broadcast(&file_avl_cnd);
 	pthread_mutex_unlock(&file_mtx);
+	// Wait for everyone to be ready
+	nanosleep(&delay, NULL);
 	/* Wait for threads to terminate */
 	for (tnum = 0; tnum < num_threads; tnum++) {
 		pthread_mutex_lock(&file_mtx);
 		pthread_cond_broadcast(&file_avl_cnd);
 		pthread_mutex_unlock(&file_mtx);
+		nanosleep(&delay, NULL);
 		pthread_join(tinfo[tnum].thread_id, NULL);
 	}
 }

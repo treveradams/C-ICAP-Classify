@@ -1,5 +1,5 @@
 Name:           c_icap_classify
-Version:        20110901
+Version:        20121231
 Release:        1%{?dist}
 Summary:        Classification module for c-icap.
 
@@ -68,9 +68,11 @@ rm -rf $RPM_BUILD_ROOT
 %{_bindir}/fhs_judge
 %{_bindir}/fhs_learn
 %{_bindir}/fhs_makepreload
+%{_bindir}/fhs_findtolearn
 %{_bindir}/fnb_judge
 %{_bindir}/fnb_learn
 %{_bindir}/fnb_makepreload
+%{_bindir}/fnb_findtolearn
 
 
 %changelog

@@ -119,7 +119,7 @@ uint64_t count;
 			if(hashes->hashes[i].users[j].data.probability < MAGIC_MINIMUM) hashes->hashes[i].users[j].data.probability = MAGIC_MINIMUM;
 			else if(hashes->hashes[i].users[j].data.probability > 1) hashes->hashes[i].users[j].data.probability = 1;
 			hashes->hashes[i].users[j].data.probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathematically accurate, but it conserves bits
-//			printf("Probability %G\n", hashes->hashes[i].users[j].data.probability);
+//			ci_debug_printf(10, "Probability %G\n", hashes->hashes[i].users[j].data.probability);
 		}
 	}
 	hashes->FBC_LOCKED = 1;
@@ -244,7 +244,7 @@ int file=0;
 		if(forWriting == 1)
 		{
 			writeFBCHeader(file, header);
-//			printf("Created FastBayesClassifier file: %s\n", filename);
+//			ci_debug_printf(10, "Created FastBayesClassifier file: %s\n", filename);
 		}
 		else return -1;
 	}
@@ -304,7 +304,7 @@ int writecheck;
 			ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
 		}
 		/* Ok, have written hashes, now save new count */
-//		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
+//		ci_debug_printf(10, "%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		header->records = qty;
 		lseek64(file, 9, SEEK_SET);
 		do {
@@ -355,8 +355,8 @@ int64_t mid=0;
 	if(start > end)
 		return -1;
 	mid = start + ((end - start) / 2);
-//	printf("Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
-//	printf("Keys @ mid: %"PRIX64" looking for %"PRIX64"\n", hashes_list->hashes[mid].hash, key);
+//	ci_debug_printf(10, "Start %"PRId64" end %"PRId64" mid %"PRId64"\n", start, end, mid);
+//	ci_debug_printf(10, "Keys @ mid: %"PRIX64" looking for %"PRIX64"\n", hashes_list->hashes[mid].hash, key);
 	if(hashes_list->hashes[mid].hash > key)
 		return FBCBinarySearch(hashes_list, start, mid-1, key);
 	else if(hashes_list->hashes[mid].hash < key)
@@ -401,7 +401,7 @@ int status;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
-//	printf("Going to read %"PRIu32" records from %s\n", header.records, cat_name);
+//	ci_debug_printf(7, "Going to read %"PRIu32" records from %s\n", header.records, cat_name);
 	offsets[1] = NBJudgeHashList.used;
 	offsets[2] = NBJudgeHashList.used;
 
@@ -416,7 +416,7 @@ int status;
 			if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 
-//		printf("Loading key: %"PRIX64" in Category: %s\n", hash, cat_name);
+//		ci_debug_printf(10, "Loading key: %"PRIX64" in Category: %s\n", hash, cat_name);
 		if(i > 0 || offsets[0] != offsets[1])
 		{
 			shortcut = 0;
@@ -492,12 +492,12 @@ uint32_t startHashes = NBJudgeHashList.used;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
-//	printf("Going to learn %"PRIu32" hashes from input file\n", docHashes->used);
+//	ci_debug_printf(10, "Going to learn %"PRIu32" hashes from input file\n", docHashes->used);
 	offsets[1] = NBJudgeHashList.used;
 	offsets[2] = NBJudgeHashList.used;
 	for(i = 0; i < docHashes->used; i++)
 	{
-//		printf("Learning key: %"PRIX64" from input\n", docHashes->hashes[i]);
+//		ci_debug_printf(10, "Learning key: %"PRIX64" from input\n", docHashes->hashes[i]);
 		if(i > 0 || offsets[0] != offsets[1])
 		{
 			shortcut = 0;
@@ -597,7 +597,7 @@ int status;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
-//	printf("Going to read %"PRIu32" records from %s\n", header.records, cat_name);
+//	ci_debug_printf(7, "Going to read %"PRIu32" records from %s\n", header.records, cat_name);
 	for(i = 0; i < header.records; i++)
 	{
 		do { // read hash

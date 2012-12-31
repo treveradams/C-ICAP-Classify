@@ -44,7 +44,7 @@ int writecheck;
 		}
 		ftruncate(file, lseek64(file, 0, SEEK_CUR));
 		/* Ok, have written hashes, now save new count */
-//		printf("%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
+//		ci_debug_printf(10, "%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		return 0;
 	}
 	return -1;
