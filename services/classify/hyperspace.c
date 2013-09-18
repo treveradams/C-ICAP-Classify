@@ -157,6 +157,7 @@ int offsetFixup;
 	else return -5; // Empty FHS file
 }
 
+#ifdef TRAINER
 void writeFHSHeader(int file, FHS_HEADERv1 *header)
 {
 int i;
@@ -192,6 +193,7 @@ int i;
 		if(i < FHS_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -i, SEEK_CUR);
         } while (i >= 0 && i < FHS_HEADERv1_RECORDS_QTY_SIZE);
 }
+#endif
 
 int openFHS(const char *filename, FHS_HEADERv1 *header, int forWriting)
 {
@@ -199,12 +201,15 @@ int file=0;
 	file = open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
 	if(verifyFHS(file, header) < 0)
 	{
+#ifdef TRAINER
 		if(forWriting == 1)
 		{
 			writeFHSHeader(file, header);
 //			ci_debug_printf(7, "Created FastHyperSpace file: %s\n", filename);
 		}
-		else return -1;
+		else
+#endif
+			return -1;
 	}
 	return file;
 }
@@ -223,6 +228,7 @@ int file;
 return 0;
 }
 
+#ifdef TRAINER
 int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
 {
 uint16_t i;
@@ -326,6 +332,7 @@ uint16_t hash;
 	} while (writecheck >=0 && writecheck < FHS_HEADERv1_RECORDS_QTY_SIZE);
 	return header->records;
 }
+#endif
 
 static int64_t HSBinarySearch(HashListExt *hashes_list, int64_t start, int64_t end, uint64_t key)
 {

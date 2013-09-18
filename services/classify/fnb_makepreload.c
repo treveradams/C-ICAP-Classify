@@ -61,8 +61,8 @@ int i;
 		printf("Format of arguments is:\n");
 		printf("\t-p PRIMARY_HASH_SEED\n");
 		printf("\t-s SECONDARY_HASH_SEED\n");
-		printf("\t-d FNV DIRECTORY TO READ\n");
-		printf("\t-o OUTPUT_FBC_PRELOAD_FILE, must be a file name only, will be saved to FBC DIRECTORY\n");
+		printf("\t-d FNB_DIRECTORY\n");
+		printf("\t-o OUTPUT_FNB_PRELOAD_FILE, must be a file name only, will be saved to FNB DIRECTORY\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}

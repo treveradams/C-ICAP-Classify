@@ -29,7 +29,10 @@
 void addFile(char *full_path, char *file_name)
 {
 process_entry *item;
-	item = file_names;
+	if(file_names)
+		item = file_names;
+	else
+		item = calloc(1, sizeof(process_entry));
 	file_names = item->next;
 
 	// Add item to busy list

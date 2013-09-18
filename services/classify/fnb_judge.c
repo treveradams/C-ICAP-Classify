@@ -56,6 +56,8 @@ char *fbc_dir;
 int readArguments(int argc, char *argv[])
 {
 int i;
+char temp[PATH_MAX];
+
 	if(argc < 9)
 	{
 		printf("Format of arguments is:\n");
@@ -63,6 +65,7 @@ int i;
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_FILE_TO_JUDGE\n");
 		printf("\t-d CATEGORY_FNB_FILES_DIR\n");
+		printf("\t-r Related categories in form of \"primary,secondary,bidirectional\". Bidirectional should be 1 for yes, 0 for no. This option should only be supplied once. To include more than one, separate with \"=\".\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -81,6 +84,11 @@ int i;
 			fbc_dir = malloc(len + 1);
 			sscanf(argv[i+1], "%s", fbc_dir);
 			if(fbc_dir[len-1] == '/') fbc_dir[len-1] = '\0';
+		}
+		else if(strcmp(argv[i], "-r") == 0)
+		{
+			strncpy(temp, argv[i+1], PATH_MAX-1);
+			setupPrimarySecondFromCmdLine(temp);
 		}
 	}
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);

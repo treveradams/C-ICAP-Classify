@@ -199,6 +199,7 @@ int offsetFixup;
 	else return -5; // Empty FNB file
 }
 
+#ifdef TRAINER
 void writeFBCHeader(int file, FBC_HEADERv1 *header)
 {
 int i;
@@ -234,6 +235,7 @@ int i;
 		if(i < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -i, SEEK_CUR);
         } while (i >= 0 && i < FBC_HEADERv1_RECORDS_QTY_SIZE);
 }
+#endif
 
 int openFBC(const char *filename, FBC_HEADERv1 *header, int forWriting)
 {
@@ -241,12 +243,15 @@ int file=0;
 	file=open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
 	if(verifyFBC(file, header) < 0)
 	{
+#ifdef TRAINER
 		if(forWriting == 1)
 		{
 			writeFBCHeader(file, header);
 //			ci_debug_printf(10, "Created FastBayesClassifier file: %s\n", filename);
 		}
-		else return -1;
+		else
+#endif
+			return -1;
 	}
 	return file;
 }
@@ -265,6 +270,7 @@ int file;
 return 0;
 }
 
+#ifdef TRAINER
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, uint32_t zero_point)
 {
 uint32_t i;
@@ -348,6 +354,7 @@ int writecheck;
 	}
 	return -1;
 }
+#endif
 
 static int64_t FBCBinarySearch(FBCHashList *hashes_list, int64_t start, int64_t end, uint64_t key)
 {

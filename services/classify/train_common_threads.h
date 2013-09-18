@@ -47,6 +47,11 @@ extern int shutdown;
 
 extern process_entry *file_names;
 extern process_entry *busy_file_names;
+// The following is how many files names get added to the list
+// per request from a worker thread saying that more names are needed.
+// This should be at least 1. It should be small enough that the stat()
+// calls don't stall things out too badly.
+const int FILES_PER_NEED_MULT = 2;
 #endif
 
 #ifndef _TRAIN_COMMON_THREADS
@@ -54,4 +59,5 @@ extern process_entry getNextFile(void);
 extern void addFile(char *full_path, char *file_name);
 extern int start_threads(struct thread_info *tinfo, int num_threads, void *thread_start(void *arg));
 extern void destroy_threads(struct thread_info *tinfo);
+extern const int FILES_PER_NEED_MULT;
 #endif

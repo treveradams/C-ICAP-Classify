@@ -21,4 +21,6 @@
 #ifndef _TRAIN_COMMON
 extern wchar_t *makeData(char *input_file);
 extern void checkMakeUTF8(void);
+extern void setupPrimarySecondFromCmdLine(char *cmdline);
+extern void setupPrimarySecondary(char *primary, char *secondary, int bidirectional);
 #endif

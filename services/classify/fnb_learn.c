@@ -85,10 +85,10 @@ int i;
 		printf("\t-d INPUT_DIRECTORY_TO_LEARN -- cannot be used with -i\n");
 		printf("\t-o OUTPUT_FNB_FILE\n");
 		printf("\t-z ZERO (REMOVE) HASH IF COUNT IS LESS THAN THIS NUMBER (OPTIONAL)\n");
+		printf("\t-m NUMBER_OF_THREADS_TO_USE (default: 2 and should be <= NUM_CORES_ON_CPU)\n");
 		printf("\tOR\n");
 		printf("\t-o OUTPUT_FNB_FILE\n");
 		printf("\t-z ZERO (REMOVE) HASH IF COUNT IS LESS THAN THIS NUMBER\n");
-		printf("\t-m NUMBER_OF_THREADS_TO_USE (default: 2 and should be <= NUM_CORES_ON_CPU)\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -173,6 +173,12 @@ char full_path[PATH_MAX];
 struct stat info;
 int tnum;
 struct timespec delay = { 0, 10000000L};
+#ifdef _BSD_SOURCE
+unsigned char d_type;
+#else
+enum DTYPE {DT_UNKNOWN, DT_REG};
+DTYPE d_type;
+#endif
 
 #ifndef _SVID_SOURCE
 DIR *dirp;
@@ -189,8 +195,20 @@ struct dirent *dp;
 		if ((dp = readdir(dirp)) != NULL)
 		{
 			snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
+#ifdef _BSD_SOURCE
+			if(dp->d_type == DT_UNKNOWN)
+			{
+				stat(full_path, &info);
+				if(S_ISREG(info.st_mode)) d_type = DT_REG;
+				else d_type = DT_UNKNOWN;
+			}
+			else d_type = dp->d_type;
+#else
 			stat(full_path, &info);
-			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && S_ISREG(info.st_mode))
+			if(S_ISREG(info.st_mode)) d_type = DT_REG;
+			else d_type == DT_UNKNOWN;
+#endif
+			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && d_type == DT_REG)
 			{
 				printf("Learning %s\n", dp->d_name);
 				fprintf(stderr, "Learning %s\n", dp->d_name);
@@ -225,8 +243,20 @@ uint32_t n;
 		for(uint32_t i = 0; i <= n; i++)
 		{
 			snprintf(full_path, PATH_MAX, "%s/%s", directory, namelist[i]->d_name);
+#ifdef _BSD_SOURCE
+			if(namelist[i]->d_type == DT_UNKNOWN)
+			{
+				stat(full_path, &info);
+				if(S_ISREG(info.st_mode)) d_type = DT_REG;
+				else d_type = DT_UNKNOWN;
+			}
+			else d_type = namelist[i]->d_type;
+#else
 			stat(full_path, &info);
-			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0 && S_ISREG(info.st_mode))
+			if(S_ISREG(info.st_mode)) d_type = DT_REG;
+			else d_type == DT_UNKNOWN;
+#endif
+			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0 && d_type == DT_REG)
 			{
 				printf("Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
 				fprintf(stderr, "Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);

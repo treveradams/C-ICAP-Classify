@@ -76,3 +76,52 @@ int32_t status;
 	free(tempData);
 	return myData;
 }
+
+void setupPrimarySecondary(char *primary, char *secondary, int bidirectional)
+{
+
+	if(number_secondaries == 0 || secondary_compares == NULL)
+	{
+		secondary_compares = malloc(sizeof(secondaries_t));
+	}
+	else
+	{
+		secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+	}
+
+	if(tre_regcomp(&secondary_compares[number_secondaries].primary_regex, primary, REG_EXTENDED | REG_ICASE) != 0 ||
+		tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, secondary, REG_EXTENDED | REG_ICASE) != 0)
+	{
+		tre_regfree(&secondary_compares[number_secondaries].primary_regex);
+		tre_regfree(&secondary_compares[number_secondaries].secondary_regex);
+		number_secondaries--;
+		ci_debug_printf(1, "Invalid REGEX In Setting parameter (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", primary, secondary, bidirectional ? "TRUE" : "FALSE" );
+		exit(-1);
+	}
+	secondary_compares[number_secondaries].bidirectional = bidirectional;
+
+	number_secondaries++;
+}
+
+void setupPrimarySecondFromCmdLine(char *cmdline)
+{
+char *end, *start;
+char pri_name[513], sec_name[513];
+int bidir;
+	start = cmdline;
+	if(strstr(cmdline, "null,") != NULL) return;
+//	fprintf(stderr, "Got: %s\n", start);
+	while((end=strchr(start, '=')) != NULL)
+	{
+		*end = '\0';
+		sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
+//		fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
+//		fflush(stderr);
+		setupPrimarySecondary(pri_name, sec_name, bidir);
+		start = end + 1;
+	}
+	sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
+//	fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
+//	fflush(stderr);
+	setupPrimarySecondary(pri_name, sec_name, bidir);
+}

@@ -1,5 +1,5 @@
 Name:           c_icap_classify
-Version:        20121231
+Version:        20130918
 Release:        1%{?dist}
 Summary:        Classification module for c-icap.
 
@@ -12,10 +12,12 @@ BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 BuildRequires:  c_icap-devel opencv-devel
 BuildRequires:	opencv-devel
 BuildRequires:  tre-devel
+BuildRequires:  libicu-devel
 Requires:	c_icap_modules
 Requires:	opencv
 Requires:	tre
 Requires:       c_icap
+Requires:       libicu
 
 %description
 This module can be setup to classify text & HTML pages as well as images. These

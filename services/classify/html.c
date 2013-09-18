@@ -46,6 +46,9 @@
 #include <wctype.h>
 #include <float.h>
 #include <math.h>
+#include <unicode/ubrk.h>
+#include <unicode/ustring.h>
+#include <unicode/uclean.h>
 
 #define IN_HTML 1
 #ifndef NOT_CICAP
@@ -119,8 +122,10 @@ uint32_t i = 1, j = 0;
 
 void initHTML(void)
 {
+UErrorCode UError;
 	compileRegexes();
 	qsort(htmlentities, sizeof(htmlentities) / sizeof(htmlentities[0]) - 1, sizeof(_htmlentity), &entity_compare );
+	u_init(&UError);
 }
 
 void deinitHTML(void)
@@ -133,6 +138,7 @@ void deinitHTML(void)
 	free(secondary_compares);
 	secondary_compares = NULL;
 	freeRegexes();
+	u_cleanup();
 }
 
 static void compileRegexes(void)
@@ -141,6 +147,8 @@ wchar_t myRegex[PATH_MAX+1] = L"\0";
 
 //	swprintf(myRegex, PATH_MAX, L"([%ls])([[:space:]]|&nbsp;)*([[:digit:]]+)(\\.[[:digit:]]*)?", CURRENCY);
 	swprintf(myRegex, PATH_MAX, L"([%ls])([[:space:]]*)([[:digit:]]+)(\\.[[:digit:]]*)?", CURRENCY); // As is, we don't need to get rid of nbsp as we have done so
+//	The following is actually better. Eventually I need to do the work to move to this instead.
+//	swprintf(myRegex, PATH_MAX, L"([%ls])([[:space:]]*)[+-]?[0-9]{1,3}(?:[0-9]*(?:[\\.,][0-9]{2})?|(?:,[0-9]{3})*(?:\\.[0-9]{2})?|(?:\\.[0-9]{3})*(?:,[0-9]{2})?)", CURRENCY);
 	myRegex[PATH_MAX] = L'\0';
 	tre_regwcomp(&currencyFinder, myRegex, REG_EXTENDED);
 
@@ -781,7 +789,7 @@ uint32_t tempUTF32CHAR;
 				if(myData[doubleMatch[0].rm_so + 1] == L'X' || myData[doubleMatch[0].rm_so + 1] == L'x') { // Check for hex
 #if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData+doubleMatch[1].rm_so, &unicode_end, 16);
-	                                unicode_entity[1] = L'\0';
+					unicode_entity[1] = L'\0';
 #else
 					// This algorithm is from http://unicode.org/faq/utf_bom.html#utf16-4 adjusted for endianness
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 16);
@@ -801,7 +809,7 @@ uint32_t tempUTF32CHAR;
 				else {
 #if SIZEOFWCHAR == 4
 					unicode_entity[0] = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
-	                                unicode_entity[1] = L'\0';
+					unicode_entity[1] = L'\0';
 #else
 					tempUTF32CHAR = wcstoul(myData + doubleMatch[1].rm_so, &unicode_end, 10);
 					if(tempUTF32CHAR < 0xD7FF || (tempUTF32CHAR > 0xE000 && tempUTF32CHAR < 0xFFFF)) // Single UTF-16 character
@@ -872,86 +880,89 @@ uint32_t tempUTF32CHAR;
 	}
 }
 
-
+inline uint32_t u16Otou32O(int ubp_only, UChar *string, uint32_t u16_offset)
+{
+	if(ubp_only) return u16_offset;
+	else return u_countChar32(string, u16_offset);
+}
 
 void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list)
 {
 wchar_t *myData = NULL;
-regoff_t currentOffset = 0, morematches = 0;
 myRegmatch_t *current = myHead->head;
 regmatch_t matches[5];
 uint32_t i, j, pos, modPos;
 wchar_t *placeHolder = L"***";
 uint32_t prime1, prime2;
 uint32_t finalA, finalB;
-int foundCJK = 0;
+UChar *myHead_u16;
+UErrorCode status = U_ZERO_ERROR;
+int32_t u16_length;
+UBreakIterator *bi = NULL;
+uint32_t wordboundary;
+int ubp_only = 0; // Input has no UNICODE supplemental characters
 
 	current = myHead->head;
 	myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
-	currentOffset = current->rm_so;
-	for(i = 0; i < 5 && currentOffset < current->rm_eo; i++)
+
+	myHead_u16 = malloc((current->rm_eo + 1) * 2 * sizeof(UChar));
+	if(myHead_u16 == NULL)
 	{
-		// find words, skip non-graphical characthers (similar to regex([[:graph:]]+)
-		while (currentOffset < current->rm_eo && !iswgraph(myData[currentOffset]))
-			currentOffset++;
-		matches[i].rm_so = currentOffset;
-		foundCJK = CJK_NONE;
-		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK != CJK_BREAK)
-		{
-			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) || // Handle ideograph CJK
-			(myData[currentOffset] >= 0x00002FF0 && myData[currentOffset] <= 0x00002FFF) ||
-			(myData[currentOffset] >= 0x00003001 && myData[currentOffset] <= 0x0000303F) || // 0x00003000 is a space character, don't mask it out.
-			(myData[currentOffset] >= 0x000031C0 && myData[currentOffset] <= 0x000031EF) ||
-			(myData[currentOffset] >= 0x00003400 && myData[currentOffset] <= 0x00004DBF) ||
-			(myData[currentOffset] >= 0x00004E00 && myData[currentOffset] <= 0x00009FFF) ||
-//			(myData[currentOffset] >= 0x0000AC00 && myData[currentOffset] <= 0x0000D7AF) || // These are syllables, they still are separated with spaces
-			(myData[currentOffset] >= 0x0000F900 && myData[currentOffset] <= 0x0000FAFF) ||
-			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
-			{
-//				ci_debug_printf(10, "Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
-				if(matches[i].rm_so == currentOffset)
-					currentOffset++;
-				foundCJK = CJK_BREAK;
-			}
-			else if((myData[currentOffset] >= 0x000030A0 && myData[currentOffset] <= 0x000030FF) || // Handle "phonetic" CJK -- Katakana
-				(myData[currentOffset] >= 0x000031F0 && myData[currentOffset] <= 0x000031FF) ||
-				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
-				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
-			{
-				if(foundCJK == HIRAGANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
-				{
-					foundCJK = CJK_BREAK;
-				}
-				else
-				{
-					currentOffset++;
-					foundCJK = KATAKANA;
-				}
-			}
-			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
-			{
-				if(foundCJK == KATAKANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
-				{
-					foundCJK = CJK_BREAK;
-				}
-				else
-				{
-					currentOffset++;
-					foundCJK = HIRAGANA;
-				}
-			}
-			else currentOffset++;
-		}
-		matches[i].rm_eo = currentOffset;
-		if(matches[i].rm_so == matches[i].rm_eo) currentOffset++;
-//		ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
+		ci_debug_printf(3, "computeOSBHashes: unable to allocate memory\n");
+		return;
 	}
-	if(i < 5) return;
+
+	u_strFromUTF32(myHead_u16,
+		(current->rm_eo + 1) * 2 * sizeof(UChar),
+		&u16_length,
+		myData,
+		current->rm_eo,
+		&status);
+
+	if (u16_length == current->rm_eo) ubp_only = 1;
+
+	myHead_u16 = realloc(myHead_u16, ( u16_length + 1) * sizeof(UChar));
+
+	bi = ubrk_open(UBRK_WORD, 0, NULL, 0, &status);
+	ubrk_setText(bi, myHead_u16, u16_length, &status);
+
+	wordboundary = ubrk_current(bi);
+	for(i = 0; i < 5 && wordboundary != UBRK_DONE; i++)
+	{
+		matches[i].rm_so = u16Otou32O(ubp_only, myHead_u16, wordboundary);
+		wordboundary = ubrk_next(bi);
+		if(wordboundary != UBRK_DONE)
+		{
+			matches[i].rm_eo = u16Otou32O(ubp_only, myHead_u16, wordboundary);
+			while(u_isspace(myHead_u16[wordboundary])) wordboundary = ubrk_next(bi);
+		}
+		else matches[i].rm_eo = u16_length;
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+		ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
+#endif
+	}
+	if(i < 5)
+	{
+		if(myHead_u16) free(myHead_u16);
+		if(bi) ubrk_close(bi);
+		return;
+	}
 	prime1 = HASHSEED1;
 	prime2 = HASHSEED2;
 	lookup3_hashfunction((uint32_t *) myData+matches[0].rm_so, matches[0].rm_eo - matches[0].rm_so, &prime1, &prime2);
 	pos = 0;
+	wordboundary = ubrk_current(bi);
 	do {
+#ifdef TRAINER
+		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0)
+		{
+/*			for(i = 1; i < 5; i++)
+			{
+				ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+			}*/
+		}
+		else
+#endif
 		for(i = 1; i < 5; i++)
 		{
 			finalA = prime1;
@@ -961,72 +972,37 @@ int foundCJK = 0;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/
+				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+#endif
+#ifdef TRAINER
+			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0)
+			{
+#endif
+
 			hashes_list->used++;
+#ifdef TRAINER
+			}
+//			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with DONTTRAINME\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so);
+#endif
 		}
 		// skip non-graphical characters ([[:graph:]]+)
-		while (currentOffset < current->rm_eo && !iswgraph(myData[currentOffset]))
-			currentOffset++;
-		matches[pos].rm_so = currentOffset;
-		foundCJK = CJK_NONE;
-		while (currentOffset < current->rm_eo && iswgraph(myData[currentOffset]) && foundCJK != CJK_BREAK)
+		matches[pos].rm_so = u16Otou32O(ubp_only, myHead_u16, wordboundary);
+		wordboundary = ubrk_next(bi);
+		if(wordboundary != UBRK_DONE)
 		{
-			if((myData[currentOffset] >= 0x00002E80 && myData[currentOffset] <= 0x00002EFF) ||
-			(myData[currentOffset] >= 0x00002FF0 && myData[currentOffset] <= 0x00002FFF) ||
-			(myData[currentOffset] >= 0x00003001 && myData[currentOffset] <= 0x0000303F) || // 0x00003000 is a space
-			(myData[currentOffset] >= 0x000031C0 && myData[currentOffset] <= 0x000031EF) ||
-			(myData[currentOffset] >= 0x00003400 && myData[currentOffset] <= 0x00004DBF) ||
-			(myData[currentOffset] >= 0x00004E00 && myData[currentOffset] <= 0x00009FFF) ||
-//			(myData[currentOffset] >= 0x0000AC00 && myData[currentOffset] <= 0x0000D7AF) || // These are syllables, they still are separated with spaces
-			(myData[currentOffset] >= 0x0000F900 && myData[currentOffset] <= 0x0000FAFF) ||
-			(myData[currentOffset] >= 0x00020000 && myData[currentOffset] <= 0x0002A6DF))
-			{
-//				ci_debug_printf(10, "Found CJK %"PRIX32" @ %"PRIu32"\n", myData[currentOffset], currentOffset);
-				if(matches[pos].rm_so == currentOffset)
-					currentOffset++;
-				foundCJK = CJK_BREAK;
-			}
-			else if((myData[currentOffset] >= 0x000030A0 && myData[currentOffset] <= 0x000030FF) || // Handle "phonetic" CJK -- Katakana
-				(myData[currentOffset] >= 0x000031F0 && myData[currentOffset] <= 0x000031FF) ||
-				(myData[currentOffset] >= 0x00003200 && myData[currentOffset] <= 0x000032FF) ||
-				(myData[currentOffset] >= 0x0000FF00 && myData[currentOffset] <= 0x0000FEFF))
-			{
-				if(foundCJK == HIRAGANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
-				{
-					foundCJK = CJK_BREAK;
-				}
-				else
-				{
-					currentOffset++;
-					foundCJK = KATAKANA;
-				}
-			}
-			else if((myData[currentOffset] >= 0x00003040 && myData[currentOffset] <= 0x0000309F)) // Handle "phonetic" CJK -- Hiragana
-			{
-				if(foundCJK == KATAKANA || (foundCJK=CJK_NONE && matches[pos].rm_so != currentOffset))
-				{
-					foundCJK = CJK_BREAK;
-				}
-				else
-				{
-					currentOffset++;
-					foundCJK = HIRAGANA;
-				}
-			}
-			else currentOffset++;
-		}
-		matches[pos].rm_eo = currentOffset;
-		morematches = matches[pos].rm_eo - matches[pos].rm_so;
-		if(morematches > 0)
-		{
-//			ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
+			matches[pos].rm_eo = u16Otou32O(ubp_only, myHead_u16, wordboundary);
+			while(u_isspace(myHead_u16[wordboundary])) wordboundary = ubrk_next(bi);
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
+#endif
 			prime1 = HASHSEED1;
 			prime2 = HASHSEED2;
 			pos++;
-			if(pos>4) pos=0;
+			if(pos > 4) pos=0;
 			if(hashes_list->used + 4 >= hashes_list->slots)
 			{
 				makeSortedUniqueHashes(hashes_list); // Attempt to make more room by removing duplicates
@@ -1038,7 +1014,8 @@ int foundCJK = 0;
 			}
 			lookup3_hashfunction((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
 		}
-	} while(morematches > 0);
+		else matches[pos].rm_eo = u16_length;
+	} while(wordboundary != UBRK_DONE);
 	// compute remaining hashes
 	for(j = 4; j > 0; j--)
 	{
@@ -1049,6 +1026,16 @@ int foundCJK = 0;
 			makeSortedUniqueHashes(hashes_list);
 			if(hashes_list->used == hashes_list->slots) return;
 		}
+#ifdef TRAINER
+		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0)
+		{
+/*			for(i = 1; i < 5; i++)
+			{
+				ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+			} */
+			continue;
+		}
+#endif
 		for(i = 1; i < j; i++)
 		{
 			finalA = prime1;
@@ -1058,12 +1045,25 @@ int foundCJK = 0;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
-/*			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
-				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);*/
+				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+#endif
+#ifdef TRAINER
+			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0)
+			{
+#endif
+
 			hashes_list->used++;
+#ifdef TRAINER
+			}
+//			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with DONTTRAINME\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so);
+#endif
 		}
 	}
+	if(myHead_u16) free(myHead_u16);
+	if(bi) ubrk_close(bi);
 	makeSortedUniqueHashes(hashes_list);
 }

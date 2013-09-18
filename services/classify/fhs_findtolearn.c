@@ -59,6 +59,7 @@ int num_threads = 2;
 
 pthread_mutex_t file_mtx, train_mtx;
 pthread_cond_t file_avl_cnd, need_file_cnd;
+int FILES_PER_NEED = 0; // Treating this like a constant
 int file_need_data = 0;
 int file_available = 0;
 int shutdown = 0;
@@ -72,6 +73,8 @@ char lowest_file[PATH_MAX] = "\0";
 int readArguments(int argc, char *argv[])
 {
 int i;
+char temp[PATH_MAX];
+
 	if(argc < 13)
 	{
 		printf("Format of arguments is:\n");
@@ -79,9 +82,10 @@ int i;
 		printf("\t-s SECONDARY_HASH_SEED\n");
 		printf("\t-i INPUT_DIRECTORY_TO_JUDGE\n");
 		printf("\t-d CATEGORY_FHS_FILES_DIR\n");
-		printf("\t-c CATEGORY_INPUT_DIRECTORY_FILES_SHOULD_BE\n");
+		printf("\t-c TARGET_CATEGORY\n");
 		printf("\t-t THRESHHOLD_NOT_TO_EXCEED_TO_REPORT_NEED_TO_TRAIN\n");
 		printf("\t-m NUMBER_OF_THREADS_TO_USE (default: 2 and should be <= NUM_CORES_ON_CPU)\n");
+		printf("\t-r Related categories in form of \"primary,secondary,bidirectional\". Bidirectional should be 1 for yes, 0 for no. This option should only be supplied once. To include more than one, separate with \"=\".\n");
 		printf("Spaces and case matter.\n");
 		return -1;
 	}
@@ -106,14 +110,24 @@ int i;
 			int len = strlen(argv[i+1]);
 			train_as_category = malloc(len + 1);
 			sscanf(argv[i+1], "%s", train_as_category);
+			// This is an optimization to avoid extra checks later
+			lowest.primary_name = train_as_category;
 		}
 		else if(strcmp(argv[i], "-t") == 0)
 		{
 			sscanf(argv[i+1], "%lf", &threshhold);
+			// This is an optimization to avoid extra checks later
+			lowest.primary_probScaled = threshhold + 0.1;
 		}
 		else if(strcmp(argv[i], "-m") == 0)
 		{
 			sscanf(argv[i+1], "%d", &num_threads);
+			FILES_PER_NEED = num_threads * FILES_PER_NEED_MULT;
+		}
+		else if(strcmp(argv[i], "-r") == 0)
+		{
+			strncpy(temp, argv[i+1], PATH_MAX-1);
+			setupPrimarySecondFromCmdLine(temp);
 		}
 	}
 /*	ci_debug_printf(10, "Primary Seed: %"PRIX32"\n", HASHSEED1);
@@ -170,6 +184,7 @@ int prehash_data_file = 0;
 		myHashes.slots = HTML_MAX_FEATURE_COUNT;
 		myHashes.used = 0;
 		computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+		myData = NULL;
 	}
 
 	classification = doHSPrepandClassify(&myHashes);
@@ -197,6 +212,12 @@ struct dirent *dp;
 struct stat info;
 int tnum;
 struct timespec delay = { 0, 10000000L};
+#ifdef _BSD_SOURCE
+unsigned char d_type;
+#else
+enum DTYPE {DT_UNKNOWN, DT_REG};
+DTYPE d_type;
+#endif
 
 	if ((dirp = opendir(directory)) == NULL)
 	{
@@ -205,23 +226,38 @@ struct timespec delay = { 0, 10000000L};
 	}
 
 	do {
-		errno = 0;
-		if ((dp = readdir(dirp)) != NULL)
+		pthread_mutex_lock(&file_mtx);
+		while(!file_need_data)
 		{
-			snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
-			stat(full_path, &info);
-			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && S_ISREG(info.st_mode))
-			{
-				pthread_mutex_lock(&file_mtx);
-				while(!file_need_data)
-				{
-					pthread_cond_wait(&need_file_cnd, &file_mtx);
-				}
-
-				addFile(full_path, dp->d_name);
-				pthread_mutex_unlock(&file_mtx);
-			}
+			pthread_cond_wait(&need_file_cnd, &file_mtx);
+			file_need_data += FILES_PER_NEED;
 		}
+
+		do {
+			errno = 0;
+			if ((dp = readdir(dirp)) != NULL)
+			{
+				snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
+#ifdef _BSD_SOURCE
+				if(dp->d_type == DT_UNKNOWN)
+				{
+					stat(full_path, &info);
+					if(S_ISREG(info.st_mode)) d_type = DT_REG;
+					else d_type = DT_UNKNOWN;
+				}
+				else d_type = dp->d_type;
+#else
+				stat(full_path, &info);
+				if(S_ISREG(info.st_mode)) d_type = DT_REG;
+				else d_type == DT_UNKNOWN;
+#endif
+				if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && d_type == DT_REG)
+				{
+					addFile(full_path, dp->d_name);
+				}
+			}
+		} while (dp != NULL && file_need_data);
+		pthread_mutex_unlock(&file_mtx);
 	} while (dp != NULL);
 	if (errno != 0)
 		perror("error reading directory");
@@ -252,32 +288,6 @@ struct timespec delay = { 0, 10000000L};
 	return -1;
 }
 
-void setupPrimarySecondary(char *primary, char *secondary, int bidirectional)
-{
-
-	if(number_secondaries == 0 || secondary_compares == NULL)
-	{
-		secondary_compares = malloc(sizeof(secondaries_t));
-	}
-	else
-	{
-		secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
-	}
-
-	if(tre_regcomp(&secondary_compares[number_secondaries].primary_regex, primary, REG_EXTENDED | REG_ICASE) != 0 ||
-		tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, secondary, REG_EXTENDED | REG_ICASE) != 0)
-	{
-		tre_regfree(&secondary_compares[number_secondaries].primary_regex);
-		tre_regfree(&secondary_compares[number_secondaries].secondary_regex);
-		number_secondaries--;
-		ci_debug_printf(1, "Invalid REGEX In Setting parameter (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", primary, secondary, bidirectional ? "TRUE" : "FALSE" );
-		exit(-1);
-	}
-	secondary_compares[number_secondaries].bidirectional = bidirectional;
-
-	number_secondaries++;
-}
-
 
 /* Thread start function: display address near top of our stack,
 and return upper-cased copy of argv_string */
@@ -287,6 +297,7 @@ static void *thread_start(void *arg)
 struct thread_info *tinfo = (struct thread_info *) arg;
 HTMLClassification this;
 process_entry entry;
+int new_category_correct, lowest_category_correct;
 
 	while(!shutdown || file_available)
 	{
@@ -310,37 +321,44 @@ process_entry entry;
 
 		this = judgeFile(entry.full_path);
 
-		pthread_mutex_lock(&train_mtx);
-		if(lowest.primary_name == NULL)
+		new_category_correct = (strcmp(this.primary_name, train_as_category) == 0 ? 1 : 0);
+
+		// Avoid taking the mutex if possible. Things may change on us, so we redo all important checks inside the mutex.
+		// This is fast and loose but should not cause problems as we recheck in the mutex.
+		if(!new_category_correct || (new_category_correct && lowest.primary_probability > this.primary_probability))
 		{
-			strcpy(lowest_file, entry.file_name);
-			lowest = this;
-//			ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
-		}
-		else if(strcmp(lowest.primary_name, train_as_category) == 0) // lowest is the correct category
-		{
-			if(strcmp(this.primary_name, train_as_category) != 0) // this is NOT the correct category
+			pthread_mutex_lock(&train_mtx);
+
+			lowest_category_correct = (strcmp(lowest.primary_name, train_as_category) == 0 ? 1 : 0);
+
+			if(lowest_category_correct)
 			{
-				strcpy(lowest_file, entry.file_name);
-				lowest = this;
-//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+				// this is NOT the correct category
+				if(!new_category_correct)
+				{
+					strcpy(lowest_file, entry.file_name);
+					lowest = this;
+//					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+				}
+				// this is the correct category, but a lower score
+				else if(lowest.primary_probability > this.primary_probability)
+				{
+					strcpy(lowest_file, entry.file_name);
+					lowest = this;
+//					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+				}
 			}
-			else if(lowest.primary_probability > this.primary_probability) // this is the correct category, but a lower score
-			{
-				strcpy(lowest_file, entry.file_name);
-				lowest = this;
-//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+			else { // lowest is NOT the correct category
+				// this is NOT the correct category and has a higher score (which is further from the right category)
+				if(!new_category_correct && lowest.primary_probability < this.primary_probability)
+				{
+					strcpy(lowest_file, entry.file_name);
+					lowest = this;
+//					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
+				}
 			}
+			pthread_mutex_unlock(&train_mtx);
 		}
-		else { // lowest is NOT the correct category
-			if(strcmp(this.primary_name, train_as_category) != 0 && lowest.primary_probability < this.primary_probability) // this is NOT the correct category and has a higher score (which is further from the right category)
-			{
-				strcpy(lowest_file, entry.file_name);
-				lowest = this;
-//				ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
-			}
-		}
-		pthread_mutex_unlock(&train_mtx);
 		free(entry.full_path);
 		free(entry.file_name);
 	}
@@ -367,12 +385,8 @@ process_entry *temp;
 		handle_error("calloc");
 
 	loadMassHSCategories(fhs_dir);
-	setupPrimarySecondary("adult.affairs", "social.dating", 1);
-	setupPrimarySecondary("adult.*", "adult.*", 0);
-	setupPrimarySecondary("clothing.*","clothing.*", 0);
-	setupPrimarySecondary("information.culinary","commerce.food", 1);
 
-	for(i = 0; i < num_threads; i++)
+	for(i = 0; i < FILES_PER_NEED; i++)
 	{
 		temp = calloc(1, sizeof(process_entry));
 		temp->next = file_names;
