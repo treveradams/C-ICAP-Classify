@@ -52,8 +52,9 @@ typedef struct {
 #define FBC_HEADERv1_UBM_SIZE sizeof(uint_least16_t)
 #define FBC_HEADERv2_WCS_SIZE sizeof(uint_least16_t)
 #define FBC_HEADERv1_RECORDS_QTY_SIZE sizeof(uint_least32_t)
-#define FBC_v1_HASH_SIZE sizeof(uint_least64_t)
-#define FBC_v1_HASH_USE_COUNT_SIZE sizeof(uint_least32_t)
+typedef uint_least32_t FBC_v1_HASH_COUNT;
+#define FBC_v1_HASH_SIZE sizeof(HTMLFeature)
+#define FBC_v1_HASH_USE_COUNT_SIZE sizeof(FBC_v1_HASH_COUNT)
 
 #define FBC_HEADERv1_RECORDS_QTY_MAX UINT_LEAST32_MAX
 #define FBC_v1_QTY_MAX UINT_LEAST16_MAX

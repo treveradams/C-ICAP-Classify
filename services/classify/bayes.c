@@ -49,6 +49,9 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
+#ifdef _POSIX_MAPPED_FILES
+#include <sys/mman.h>
+#endif
 
 #include "html.h"
 
@@ -378,6 +381,11 @@ static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 	return header->records;
 }
 
+inline void char2binary(char *source, char *destination, int16_t bytes)
+{
+	for(int i=0; i < bytes; i++) destination[i] = source[i];
+}
+
 int loadBayesCategory(const char *fbc_name, const char *cat_name)
 {
 int fbc_file;
@@ -387,8 +395,14 @@ int64_t offsets[3];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
 HTMLFeature hash;
-uint_least32_t count;
+FBC_v1_HASH_COUNT count;
+#ifndef _POSIX_MAPPED_FILES
 int status;
+#else
+struct stat st;
+int64_t mmap_offset, size;
+char *address;
+#endif
 
         if(NBJudgeHashList.FBC_LOCKED) return -1; // We cannot load if we are optimized
 	offsets[0] = 0;
@@ -412,8 +426,20 @@ int status;
 	offsets[1] = NBJudgeHashList.used;
 	offsets[2] = NBJudgeHashList.used;
 
+#ifdef _POSIX_MAPPED_FILES
+	fstat(fbc_file, &st);
+	size = st.st_size + 1;
+	mmap_offset = lseek64(fbc_file, 0, SEEK_CUR);
+	address = mmap(0, size, PROT_READ, MAP_PRIVATE, fbc_file, 0);
+	if(address == MAP_FAILED)
+	{
+		ci_debug_printf(3, "Failed to mmap %s in loadBayesCategory\n", fbc_name);
+	}
+#endif
+
 	for(i = 0; i < header.records; i++)
 	{
+#ifndef _POSIX_MAPPED_FILES
 		do { // read hash
 			status = read(fbc_file, &hash, FBC_v1_HASH_SIZE);
 			if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
@@ -422,6 +448,14 @@ int status;
 			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT_SIZE);
 			if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
+#else
+		// read hash
+		char2binary(address+ mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
+		mmap_offset += FBC_v1_HASH_SIZE;
+		// read use count
+		char2binary(address + mmap_offset, (char *) &count, FBC_v1_HASH_USE_COUNT_SIZE);
+		mmap_offset += FBC_v1_HASH_USE_COUNT_SIZE;
+#endif
 
 //		ci_debug_printf(10, "Loading key: %"PRIX64" in Category: %s\n", hash, cat_name);
 		if(i > 0 || offsets[0] != offsets[1])
@@ -471,6 +505,9 @@ int status;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
+#ifdef _POSIX_MAPPED_FILES
+	munmap(address, size);
+#endif
 	close(fbc_file);
 	return 1;
 }
@@ -589,7 +626,13 @@ uint32_t i;
 FBC_HEADERv1 header;
 HTMLFeature hash;
 uint_least32_t count;
+#ifndef _POSIX_MAPPED_FILES
 int status;
+#else
+struct stat st;
+int64_t mmap_offset, size;
+char *address;
+#endif
 
 	if(NBJudgeHashList.used > 0)
 	{
@@ -604,17 +647,37 @@ int status;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
+#ifdef _POSIX_MAPPED_FILES
+	fstat(fbc_file, &st);
+	size = st.st_size + 1;
+	mmap_offset = lseek64(fbc_file, 0, SEEK_CUR);
+	address = mmap(0, size, PROT_READ, MAP_PRIVATE, fbc_file, 0);
+	if(address == MAP_FAILED)
+	{
+		ci_debug_printf(3, "Failed to mmap %s in loadBayesCategory\n", fbc_name);
+	}
+#endif
+
 //	ci_debug_printf(7, "Going to read %"PRIu32" records from %s\n", header.records, cat_name);
 	for(i = 0; i < header.records; i++)
 	{
+#ifndef _POSIX_MAPPED_FILES
 		do { // read hash
 			status = read(fbc_file, &hash, FBC_v1_HASH_SIZE);
-                        if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
+			if(status < FBC_v1_HASH_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_SIZE);
 		do { // read use count
 			status = read(fbc_file, &count, FBC_v1_HASH_USE_COUNT_SIZE);
-                        if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
+			if(status < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(fbc_file, -status, SEEK_CUR);
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
+#else
+		// read hash
+		char2binary(address+ mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
+		mmap_offset += FBC_v1_HASH_SIZE;
+		// read use count
+		char2binary(address + mmap_offset, (char *) &count, FBC_v1_HASH_USE_COUNT_SIZE);
+		mmap_offset += FBC_v1_HASH_USE_COUNT_SIZE;
+#endif
 
 		if(NBJudgeHashList.used > NBJudgeHashList.slots)
 		{
@@ -651,6 +714,9 @@ int status;
 		NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
 	}
 
+#ifdef _POSIX_MAPPED_FILES
+	munmap(address, size);
+#endif
 	close(fbc_file);
 	return 0;
 }
