@@ -325,7 +325,7 @@ int new_category_correct, lowest_category_correct;
 
 		// Avoid taking the mutex if possible. Things may change on us, so we redo all important checks inside the mutex.
 		// This is fast and loose but should not cause problems as we recheck in the mutex.
-		if(!new_category_correct || (new_category_correct && lowest.primary_probability > this.primary_probability))
+		if(!new_category_correct || (new_category_correct && lowest.primary_probScaled > this.primary_probScaled))
 		{
 			pthread_mutex_lock(&train_mtx);
 
@@ -341,7 +341,7 @@ int new_category_correct, lowest_category_correct;
 //					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 				}
 				// this is the correct category, but a lower score
-				else if(lowest.primary_probability > this.primary_probability)
+				else if(lowest.primary_probScaled > this.primary_probScaled)
 				{
 					strcpy(lowest_file, entry.file_name);
 					lowest = this;
@@ -350,7 +350,7 @@ int new_category_correct, lowest_category_correct;
 			}
 			else { // lowest is NOT the correct category
 				// this is NOT the correct category and has a higher score (which is further from the right category)
-				if(!new_category_correct && lowest.primary_probability < this.primary_probability)
+				if(!new_category_correct && lowest.primary_probScaled < this.primary_probScaled)
 				{
 					strcpy(lowest_file, entry.file_name);
 					lowest = this;
