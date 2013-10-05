@@ -938,7 +938,7 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 		}
 		else matches[i].rm_eo = u16_length;
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
-		ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
+		ci_debug_printf(10, "New Word: |%.*ls| @ %"PRIu32" with length %"PRIu32"\n", matches[i].rm_eo - matches[i].rm_so, myData+matches[i].rm_so, matches[i].rm_so, matches[i].rm_eo - matches[i].rm_so);
 #endif
 	}
 	if(i < 5)
@@ -949,17 +949,25 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 	}
 	prime1 = HASHSEED1;
 	prime2 = HASHSEED2;
-	lookup3_hashfunction((uint32_t *) myData+matches[0].rm_so, matches[0].rm_eo - matches[0].rm_so, &prime1, &prime2);
 	pos = 0;
+#ifdef TRAINER
+	while(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0) pos++;
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+	ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+#endif
+#endif
+	lookup3_hashfunction((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
 	wordboundary = ubrk_current(bi);
 	do {
 #ifdef TRAINER
-		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0)
+		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0 || (matches[pos].rm_eo - matches[pos].rm_so == 1 && iswpunct(myData[matches[pos].rm_so])))
 		{
-/*			for(i = 1; i < 5; i++)
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			for(i = 1; i < 5; i++)
 			{
-				ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
-			}*/
+				ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with \"%.*ls\"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[(i+pos)%5].rm_eo - matches[(i+pos)%5].rm_so, myData+matches[(i+pos)%5].rm_so);
+			}
+#endif
 		}
 		else
 #endif
@@ -979,14 +987,16 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
 #endif
 #ifdef TRAINER
-			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0)
+			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0 && !(matches[modPos].rm_eo - matches[modPos].rm_so == 1 && iswpunct(myData[matches[modPos].rm_so])))
 			{
 #endif
 
 			hashes_list->used++;
 #ifdef TRAINER
 			}
-//			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with DONTTRAINME\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so);
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with \"%.*ls\"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+#endif
 #endif
 		}
 		// skip non-graphical characters ([[:graph:]]+)
@@ -997,7 +1007,7 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			matches[pos].rm_eo = u16Otou32O(ubp_only, myHead_u16, wordboundary);
 			while(u_isspace(myHead_u16[wordboundary])) wordboundary = ubrk_next(bi);
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
-			ci_debug_printf(10, "New Word: %.*ls @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
+			ci_debug_printf(10, "New Word: |%.*ls| @ %"PRIu32" with length %"PRIu32"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so);
 #endif
 			prime1 = HASHSEED1;
 			prime2 = HASHSEED2;
@@ -1027,12 +1037,14 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			if(hashes_list->used == hashes_list->slots) return;
 		}
 #ifdef TRAINER
-		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0)
+		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0 || (matches[pos].rm_eo - matches[pos].rm_so == 1 && iswpunct(myData[matches[pos].rm_so])))
 		{
-/*			for(i = 1; i < 5; i++)
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			for(i = 1; i < 5; i++)
 			{
-				ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
-			} */
+				ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with \"%.*ls\"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[(i+pos)%5].rm_eo - matches[(i+pos)%5].rm_so, myData+matches[(i+pos)%5].rm_so);
+			}
+#endif
 			continue;
 		}
 #endif
@@ -1052,14 +1064,16 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
 #endif
 #ifdef TRAINER
-			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0)
+			if(wcsncmp(L"donttrainme", myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so) != 0 && !(matches[modPos].rm_eo - matches[modPos].rm_so == 1 && iswpunct(myData[matches[modPos].rm_so])))
 			{
 #endif
 
 			hashes_list->used++;
 #ifdef TRAINER
 			}
-//			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with DONTTRAINME\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so);
+#ifdef DANGEROUS_DEBUG_PARSE_HASH
+			else ci_debug_printf(10, "Skipping hashing of \"%.*ls\" with \"%.*ls\"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+#endif
 #endif
 		}
 	}

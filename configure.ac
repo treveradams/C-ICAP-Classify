@@ -247,4 +247,5 @@ AM_CONDITIONAL(USEOPENCV,[test a"$opencv" != ano])
 AC_OUTPUT([Makefile \
 services/Makefile \
 services/classify/Makefile \
+docs/Makefile docs/man/Makefile \
 ])

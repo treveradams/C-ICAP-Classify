@@ -1,0 +1,81 @@
+.\" fnb_makepreload - Fast Naive Bayes tool to make a preload hash file (makepreload)
+.TH "fnb_makepreload" "8" "Aug 2013"  "Trever Adams" ""
+.SH "NAME"
+fnb_makepreload \- Fast Naive Bayes tool to make a preload hash file (makepreload)
+.SH "SYNOPSIS"
+\fBfnb_makepreload\fP -p \fIPRIMARY_HASH_SEED\fP -s \fISECONDARY_HASH_SEED\fP -d \fIFNB_DIRECTORY\FP -o \fIOUTPUT_FNB_PRELOAD_FILE\fP
+.PP
+.SH "DESCRIPTION"
+.PP
+\fBfnb_makepreload\fP is a command-line tool to make a preload hash for for fnb classifiers. fnb stands for Fast Naive Bayes.
+.PP
+
+.PP
+.SH "OPTIONS"
+.PP
+.BR PRIMARY_HASH_SEED
+.br
+.BR SECONDARY_HASH_SEED
+.PP
+   The hash seeds are used to prime the hashing algorithm. If
+   these do not match in both the trainer, when training the
+   data, and the classifier when classifying, the results are
+   undefined. For this reason, this can be used as a sort of
+   pseudo copy protection.
+.PP
+   Additionally, these values determine, to an extent, the
+   number of collisions in hash data. The only way to know if
+   you have chosen a good value is testing.
+.PP
+   Each seed is a hexadecimal representation of a 32 bit number.
+   If is \fBnot\fR prefixed with "0x". All alpha characters
+   should be uppercase.
+.PP
+   These \fBmust\fR be the same for all categories.
+.PP
+.BR FNB_DIRECTORY
+.PP
+   This is the directory where the fnb files, aka fnb
+   classifier data, are stored. All the data here will
+   be read in and a preload written out.
+.PP
+.BR OUTPUT_FNB_PRELOAD_FILE
+.PP
+   This is the name which the preload file will be given.
+   It should not contain any directory compnents as the file
+   will be written to the \fBFNB_DIRECTORY\fR.
+.PP
+WARNING: Spaces and case matter.
+.PP
+.SH "NOTES"
+You must always have all the files within each category share the hash seeds.
+Additionally, all categories within the same classifier data set \fBmust\fR
+share the same hash seeds.
+The use of a preload file dramatically decreases the speed of start-up time for the classifier!
+.PP
+
+.SH "FILES"
+.nf
+NONE
+.fi
+
+.PP
+.SH "SEE ALSO"
+.nf
+.I fhs_findtolearn (8)
+.I fhs_judge (8)
+.I fhs_learn (8)
+.fi
+
+.PP
+.SH "AUTHORS"
+.nf
+Trever Adams
+.fi
+
+.PP
+.SH "BUGS"
+There of course aren't any bugs, but if you find any, you should first
+consult https://github.com/treveradams/C-ICAP-Classify and, if
+necessary, file a bug report there.
+.fi

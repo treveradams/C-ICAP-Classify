@@ -2,6 +2,6 @@
 CONFIGDIR = @CONFDIR@
 cicapmoduledir=@MODSDIR@
 
-SUBDIRS =  . services
+SUBDIRS =  . services docs
 
 EXTRA_DIST = common.h

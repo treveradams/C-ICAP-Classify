@@ -434,6 +434,7 @@ char *address;
 	if(address == MAP_FAILED)
 	{
 		ci_debug_printf(3, "Failed to mmap %s in loadBayesCategory\n", fbc_name);
+		return -1;
 	}
 #endif
 

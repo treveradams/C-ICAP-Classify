@@ -1,0 +1,78 @@
+.\" fhs_learn - Fast Hyperspace command line trainer (learn)
+.TH "fhs_learn" "8" "Aug 2013"  "Trever Adams" ""
+.SH "NAME"
+fhs_judge \- Fast Hyperspace command line trainer (learn)
+.SH "SYNOPSIS"
+\fBfhs_learn\fP -p \fIPRIMARY_HASH_SEED\fP -s \fISECONDARY_HASH_SEED\fP -i \fIINPUT_FILE_TO_LEARN\fP -o \fIOUTPUT_FHS_FILE\fP
+.SH "DESCRIPTION"
+.PP
+\fBfhs_learn\fP is a command-line, stand alone trainer used to train fhs
+classifiers. fhs stands for Fast Hyperspace.
+.PP
+
+.PP
+.SH "OPTIONS"
+.PP
+.BR PRIMARY_HASH_SEED
+.br
+.BR SECONDARY_HASH_SEED
+.PP
+   The hash seeds are used to prime the hashing algorithm. If
+   these do not match in both the trainer, when training the
+   data, and the classifier when classifying, the results are
+   undefined. For this reason, this can be used as a sort of
+   pseudo copy protection.
+.PP
+   Additionally, these values determine, to an extent, the
+   number of collisions in hash data. The only way to know if
+   you have chosen a good value is testing.
+.PP
+   Each seed is a hexadecimal representation of a 32 bit number.
+   If is \fBnot\fR prefixed with "0x". All alpha characters
+   should be uppercase.
+.PP
+   These \fBmust\fR be the same for all categories.
+.PP
+.BR INPUT_FILE_TO_LEARN
+.PP
+   This is the file to learn, of course. It must be a UTF-8
+   text file, HTML file, or XML file.
+.PP
+.BR OUTPUT_FHS_FILES_FILE
+.PP
+   This is the file name for the category. Generally it should
+   be CATEGORY_NAME.fhs. It should be stored in a directory
+   where only other fhs files are stored.
+.PP
+WARNING: Spaces and case matter.
+.PP
+.SH "NOTES"
+You must always have all the files within each category share the hash seeds.
+Additionally, all categories within the same classifier data set \fBmust\fR
+share the same hash seeds.
+.PP
+.SH "FILES"
+.nf
+NONE
+.fi
+
+.PP
+.SH "SEE ALSO"
+.nf
+.I fhs_findtolearn (8)
+.I fhs_judge (8)
+.I fhs_makepreload (8)
+.fi
+
+.PP
+.SH "AUTHORS"
+.nf
+Trever Adams
+.fi
+
+.PP
+.SH "BUGS"
+There of course aren't any bugs, but if you find any, you should first
+consult https://github.com/treveradams/C-ICAP-Classify and, if
+necessary, file a bug report there.
+.fi

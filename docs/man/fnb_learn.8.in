@@ -1,0 +1,101 @@
+.\" fnb_learn - Fast Naive Bayes command line trainer (learn)
+.TH "fnb_learn" "8" "Aug 2013"  "Trever Adams" ""
+.SH "NAME"
+fnb_judge \- Fast Naive Bayes command line trainer (learn)
+.SH "SYNOPSIS"
+\fBfnb_learn\fP -p \fIPRIMARY_HASH_SEED\fP -s \fISECONDARY_HASH_SEED\fP -i \fIINPUT_FILE_TO_LEARN\fP -d \fIINPUT_DIRECTORY_TO_LEARN\fP -o \fIOUTPUT_FNB_FILE\fP -z \fIZERO\fP -m \fINUMBER_OF_THREADS_TO_USE\fP
+.SH "DESCRIPTION"
+.PP
+\fBfnb_learn\fP is a command-line, stand alone trainer used to train fnb
+classifiers. fnb stands for Fast Naive Bayes.
+.PP
+
+.PP
+.SH "OPTIONS"
+.PP
+.BR PRIMARY_HASH_SEED
+.br
+.BR SECONDARY_HASH_SEED
+.PP
+   The hash seeds are used to prime the hashing algorithm. If
+   these do not match in both the trainer, when training the
+   data, and the classifier when classifying, the results are
+   undefined. For this reason, this can be used as a sort of
+   pseudo copy protection.
+.PP
+   Additionally, these values determine, to an extent, the
+   number of collisions in hash data. The only way to know if
+   you have chosen a good value is testing.
+.PP
+   Each seed is a hexadecimal representation of a 32 bit number.
+   If is \fBnot\fR prefixed with "0x". All alpha characters
+   should be uppercase.
+.PP
+   These \fBmust\fR be the same for all categories.
+.PP
+.BR INPUT_FILE_TO_LEARN
+.PP
+   This is the file to learn, of course. It must be a UTF-8
+   text file, HTML file, or XML file.
+.PP
+.BR INPUT_DIRECTORY_TO_LEARN
+.PP
+   Alternatively you can specify a directory to learn.
+   All files must follow the same rules for individual file
+   learning.
+.PP
+.BR OUTPUT_FNB_FILES_FILE
+.PP
+   This is the file name for the category. Generally it should
+   be CATEGORY_NAME.fnb. It should be stored in a directory
+   where only other fnb files are stored.
+.PP
+.BR ZERO
+.PP
+   \fBZERO\fR specifies the zero point, an integer. This is the
+   number of times that a hash feature must appear in the data
+   before it can be stored.
+.PP
+.BR NUMBER_OF_THREADS_TO_USE
+   This is the number of threads to use when doing training.
+   It will only have any useful effect when doing the training
+   of a directory; not an individual file. This should not
+   exceed the number of cores available.
+.PP
+WARNING: Spaces and case matter.
+.PP
+.SH "NOTES"
+You must always have all the files within each category share the hash seeds.
+Additionally, all categories within the same classifier data set \fBmust\fR
+share the same hash seeds.
+.PP
+.I -d\fR and \fI-i\fR are mutually exclusive. You can learn a single file or
+you can learn a directory. You cannot do both.
+.PP
+.I -o\fR and \fI-z\fR can be used alone to simply executing zero point setting. In all other cases, -z is optional!
+.PP
+.SH "FILES"
+.nf
+NONE
+.fi
+
+.PP
+.SH "SEE ALSO"
+.nf
+.I fnb_findtolearn (8)
+.I fnb_judge (8)
+.I fnb_makepreload (8)
+.fi
+
+.PP
+.SH "AUTHORS"
+.nf
+Trever Adams
+.fi
+
+.PP
+.SH "BUGS"
+There of course aren't any bugs, but if you find any, you should first
+consult https://github.com/treveradams/C-ICAP-Classify and, if
+necessary, file a bug report there.
+.fi

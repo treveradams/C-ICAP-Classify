@@ -330,7 +330,7 @@ process_entry entry;
 	return "NORMAL_SHUTDOWN";
 }
 
-int main (int argc, char *argv[])
+int main(int argc, char *argv[])
 {
 FBC_HEADERv1 header;
 int fbc_file;

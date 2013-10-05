@@ -1,0 +1,97 @@
+.\" fnb_judge - Fast Naive Bayes command line classifier (judge)
+.TH "fnb_judge" "8" "Aug 2013"  "Trever Adams" ""
+.SH "NAME"
+fnb_judge \- Fast Naive Bayes command line classifier (judge)
+.SH "SYNOPSIS"
+\fBfnb_judge\fP -p \fIPRIMARY_HASH_SEED\fP -s \fISECONDARY_HASH_SEED\fP -i \fIINPUT_FILE_TO_JUDGE\fP -d \fICATEGORY_FNB_FILES_DIR\fP
+.SH "DESCRIPTION"
+.PP
+\fBfnb_judge\fP is a command-line, stand alone classifier used to test fnb
+classifiers. fnb stands for Fast Naive Bayes.
+.PP
+
+.PP
+.SH "OPTIONS"
+.PP
+.BR PRIMARY_HASH_SEED
+.br
+.BR SECONDARY_HASH_SEED
+.PP
+   The hash seeds are used to prime the hashing algorithm. If
+   these do not match in both the trainer, when training the
+   data, and the classifier when classifying, the results are
+   undefined. For this reason, this can be used as a sort of
+   pseudo copy protection.
+.PP
+   Additionally, these values determine, to an extent, the
+   number of collisions in hash data. The only way to know if
+   you have chosen a good value is testing.
+.PP
+   Each seed is a hexadecimal representation of a 32 bit number.
+   If is \fBnot\fR prefixed with "0x". All alpha characters
+   should be uppercase.
+.PP
+   These \fBmust\fR be the same for all categories.
+.PP
+.BR INPUT_FILE_TO_JUDGE
+.PP
+   This is the file to judge, of course. It must be a UTF-8
+   text file, HTML file, or XML file.
+.PP
+.BR CATEGORY_FNB_FILES_DIR
+.PP
+   This is the directory where the FNB files, aka FNB
+   classifier data, are stored.
+.PP
+.BR RELATED_STRING
+.PP
+   This is the directory in which the candidate files are located.
+   This is specially formated string made up of substrings.
+   The substrigns are joined by "=".
+   Each substring has the format of "\fIprimary\fR,\fIsecondary\fR,\fIbidirectional\fR".
+.PP
+   \fBPrimary\fR is the primary category name.
+.PP
+   \fBSecondary\fR is the secondary category name.
+.PP
+   \fBbidirectional\fR determines whether or not the similarity goes both
+   directions. Not all should.
+.PP
+   An example of such a string is:
+   "adult.affairs,social.dating,1=adult.*,adult.*,0=clothing.*,clothing.*,0=information.culinary,commerce.food,1"
+.PP
+   Please, note, this string \fBmust\fR be enclosed in double quotes.
+   Also, this option (-r) cannot be provided more than once.
+.PP
+WARNING: Spaces and case matter.
+.PP
+.SH "NOTES"
+You must always have all the files within each category share the hash seeds.
+Additionally, all categories within the same classifier data set \fBmust\fR
+share the same hash seeds.
+
+.SH "FILES"
+.nf
+NONE
+.fi
+
+.PP
+.SH "SEE ALSO"
+.nf
+.I fnb_findtolearn (8)
+.I fnb_learn (8)
+.I fnb_makepreload (8)
+.fi
+
+.PP
+.SH "AUTHORS"
+.nf
+Trever Adams
+.fi
+
+.PP
+.SH "BUGS"
+There of course aren't any bugs, but if you find any, you should first
+consult https://github.com/treveradams/C-ICAP-Classify and, if
+necessary, file a bug report there.
+.fi
