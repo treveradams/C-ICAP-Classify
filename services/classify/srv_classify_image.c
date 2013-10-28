@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2013 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -72,16 +72,16 @@
 // What is the minimum debug level to do perfromance eval by timing
 static const int PERF_DEBUG_LEVEL = 8;
 
-extern int ImageScaleDimension; // Scale to this dimension
-extern int ImageMaxScale; // Maximum rescale
-extern int ImageMinProcess; // don't process images whose minimum dimesnion is under this size
-extern int IMAGE_DEBUG_SAVE_ORIG;
-extern int IMAGE_DEBUG_SAVE_PARTS;
-extern int IMAGE_DEBUG_SAVE_MARKED;
-extern int IMAGE_DEBUG_DEMONSTRATE;
-extern int IMAGE_DEBUG_DEMONSTRATE_MASKED;
-extern int IMAGE_INTERPOLATION;
-extern int IMAGE_CATEGORY_COPIES;
+int IMAGE_SCALE_DIMENSION = 240; // Scale to this dimension
+int IMAGE_MAX_SCALE = 4; // Maximum rescale
+int IMAGE_MIN_PROCESS = 30; // don't process images whose minimum dimension is under this size
+int IMAGE_DEBUG_SAVE_ORIG = 0; // DEBUG: Do we save the original?
+int IMAGE_DEBUG_SAVE_PARTS = 0; // DEBUG: Do we save the parts?
+int IMAGE_DEBUG_SAVE_MARKED = 0; // DEBUG: Do save the original marked?
+int IMAGE_DEBUG_DEMONSTRATE = 0; // DEBUG: Do we demonstrate?
+int IMAGE_DEBUG_DEMONSTRATE_MASKED = 0; // DEBUG: we demonstrate with a mask?
+int IMAGE_INTERPOLATION = CV_INTER_LINEAR; // Interpolation function to use.
+int IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN; // How many copies of each cascade do we load to avoid OpenCV bug and bottle necks
 
 extern external_conversion_t *externalclassifytypes;
 
@@ -443,11 +443,11 @@ uint16_t current_category;
 	        // Loop the number of detected objects
 	        for(i = 0; i < (current->detected ? current->detected->total : 0); i++ )
 	        {
-			// Create a new rectangle for drawing the face
+			// Create a new rectangle for drawing the object
 			CvRect* r = (CvRect*)cvGetSeqElem( current->detected, i );
 
 			// Draw the rectangle in the input image
-			// Find the dimensions of the face,and scale it if necessary
+			// Find the dimensions of the object, and scale it if necessary
 			CvPoint center;
 			int radius;
 			center.x = cvRound(r->x + r->width*0.5);
@@ -524,8 +524,8 @@ int maxDim = mySession->origImage->width > mySession->origImage->height ? mySess
 
 	// Create a new image based on the input image
 	if(CI_DEBUG_LEVEL >= PERF_DEBUG_LEVEL) t = (double)cvGetTickCount();
-	if(maxDim > ImageScaleDimension) mySession->scale = maxDim / (float) ImageScaleDimension;
-	if(mySession->scale > ImageMaxScale) mySession->scale = ImageMaxScale;
+	if(maxDim > IMAGE_SCALE_DIMENSION) mySession->scale = maxDim / (float) IMAGE_SCALE_DIMENSION;
+	if(mySession->scale > IMAGE_MAX_SCALE) mySession->scale = IMAGE_MAX_SCALE;
 	if(mySession->scale < 1.005f) mySession->scale = 1.0f; // We shouldn't waste time with such small rescales
 	mySession->rightImage = cvCreateImage( cvSize(cvRound(mySession->origImage->width / mySession->scale), cvRound(mySession->origImage->height / mySession->scale)),
 					IPL_DEPTH_8U, 1 );
@@ -848,7 +848,7 @@ CvMat myCvMat;
     }
     else {
 	mySession.origImage = cvLoadImage(data->disk_body->filename, CV_LOAD_IMAGE_COLOR);
-        ci_debug_printf(8, "Classifying IMAGE from file (size=%ld)\n", data->disk_body->endpos);
+        ci_debug_printf(8, "Classifying IMAGE from file (size=%d)\n", data->disk_body->endpos);
     }
 
     // If Image is loaded succesfully, then:
@@ -856,7 +856,7 @@ CvMat myCvMat;
     {
         // test to see if we should bypass classification
         minDim = mySession.origImage->width < mySession.origImage->height ? mySession.origImage->width : mySession.origImage->height;
-        if(ImageMinProcess >= minDim || minDim < 5)
+        if(IMAGE_MIN_PROCESS >= minDim || minDim < 5)
         {
             ci_debug_printf(10, "srv_classify_image: Image too small for classification per configuration and/or sanity, letting pass.\n");
             cvReleaseImage(&mySession.origImage);
@@ -1028,7 +1028,7 @@ uint16_t current_category;
 					{
 						// test to see if we should bypass classification
 						minDim = mySession.origImage->width < mySession.origImage->height ? mySession.origImage->width : mySession.origImage->height;
-						if(ImageMinProcess >= minDim || minDim < 5)
+						if(IMAGE_MIN_PROCESS >= minDim || minDim < 5)
 						{
 							ci_debug_printf(10, "categorize_external_image: Image too small for classification per configuration and/or sanity, letting pass.\n");
 							cvReleaseImage(&mySession.origImage);
@@ -1093,8 +1093,8 @@ uint16_t current_category;
 	return CI_ERROR;
 }
 
-/***********************************************************************************/
-/*Template Functions                                                               */
+/*************************************************************************************/
+/* Template Functions                                                                */
 int fmt_srv_classify_image_source(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
@@ -1194,10 +1194,10 @@ int cfg_imageCategoryCopies(const char *directive, const char **argv, void *setd
           return 0;
      }
      sscanf(argv[0], "%d", &IMAGE_CATEGORY_COPIES);
-     if(IMAGE_CATEGORY_COPIES == -1) IMAGE_CATEGORY_COPIES = START_SERVERS;
+     if(IMAGE_CATEGORY_COPIES == -1) IMAGE_CATEGORY_COPIES = CFG_NUM_CICAP_THREADS;
      else if(IMAGE_CATEGORY_COPIES < IMAGE_CATEGORY_COPIES_MIN)
           IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN;
-     if(IMAGE_CATEGORY_COPIES > START_SERVERS) IMAGE_CATEGORY_COPIES = START_SERVERS;
+     if(IMAGE_CATEGORY_COPIES > CFG_NUM_CICAP_THREADS) IMAGE_CATEGORY_COPIES = CFG_NUM_CICAP_THREADS;
 
      ci_debug_printf(1, "Setting parameter :%s=(%d)\n", directive, IMAGE_CATEGORY_COPIES);
      return 1;

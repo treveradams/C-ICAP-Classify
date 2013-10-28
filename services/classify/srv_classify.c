@@ -84,6 +84,7 @@ extern void classifyImagePrepReload(void);
 extern int postInitImageClassificationService(void);
 extern int closeImageClassification(void);
 int cfg_ExternalImageConversion(const char *directive, const char **argv, void *setdata); // In this file
+int CFG_NUM_CICAP_THREADS;
 #endif
 
 int must_classify(int type, classify_req_data_t * data);
@@ -108,8 +109,8 @@ external_conversion_t *externalclassifytypes = NULL;
 char *CLASSIFY_TMP_DIR = NULL;
 
 /* Match levels */
-static int Ambiguous = -2; // Lowest level to be considered ambiguous
-static int SolidMatch = 5; // Lowest level to be considered a solid match
+static int TEXT_AMBIGUOUS_LEVEL = -2; // Lowest level to be considered ambiguous
+static int TEXT_SOLID_LEVEL = 5; // Lowest level to be considered a solid match
 
 /* Window Size */
 static int MAX_WINDOW = 4096; // This is for sliding window buffers
@@ -120,17 +121,17 @@ ci_thread_mutex_t memmanage_mtx;
 
 /* Image processing information */
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-#include <opencv/cv.h>
-int ImageScaleDimension = 240; // Scale to this dimension
-int ImageMaxScale = 4; // Maximum rescale
-int ImageMinProcess = 30; // don't process images whose minimum dimension is under this size
-int IMAGE_DEBUG_SAVE_ORIG = 0; // DEBUG: Do we save the original?
-int IMAGE_DEBUG_SAVE_PARTS = 0; // DEBUG: Do we save the parts?
-int IMAGE_DEBUG_SAVE_MARKED = 0; // DEBUG: Do save the original marked?
-int IMAGE_DEBUG_DEMONSTRATE = 0; // DEBUG: Do we demonstrate?
-int IMAGE_DEBUG_DEMONSTRATE_MASKED = 0; // DEBUG: we demonstrate with a mask?
-int IMAGE_INTERPOLATION=CV_INTER_LINEAR; // Interpolation function to use.
-int IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN; // How many copies of each cascade do we load to avoid OpenCV bug and bottle necks
+//#include <opencv/cv.h>
+extern int IMAGE_SCALE_DIMENSION; // Scale to this dimension
+extern int IMAGE_MAX_SCALE; // Maximum rescale
+extern int IMAGE_MIN_PROCESS; // don't process images whose minimum dimesnion is under this size
+extern int IMAGE_DEBUG_SAVE_ORIG;
+extern int IMAGE_DEBUG_SAVE_PARTS;
+extern int IMAGE_DEBUG_SAVE_MARKED;
+extern int IMAGE_DEBUG_DEMONSTRATE;
+extern int IMAGE_DEBUG_DEMONSTRATE_MASKED;
+extern int IMAGE_INTERPOLATION;
+extern int IMAGE_CATEGORY_COPIES;
 extern ci_thread_rwlock_t imageclassify_rwlock;
 #endif
 
@@ -219,8 +220,8 @@ void freeReferrerTable(void);
 /*Configuration Table .....*/
 static struct ci_conf_entry conf_variables[] = {
      {"TmpDir", NULL, cfg_TmpDir, NULL},
-     {"TextAmbiguous", &Ambiguous, ci_cfg_set_int, NULL},
-     {"TextSolidMatch", &SolidMatch, ci_cfg_set_int, NULL},
+     {"TextAmbiguous", &TEXT_AMBIGUOUS_LEVEL, ci_cfg_set_int, NULL},
+     {"TextSolidMatch", &TEXT_SOLID_LEVEL, ci_cfg_set_int, NULL},
      {"TextFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ExternalTextFileType", NULL, cfg_ExternalTextConversion, NULL},
 /*     {"ExternalTextMimeType", NULL, cfg_ExternalTextConversion, NULL}, // Mime type handling not yet implemented */
@@ -238,10 +239,10 @@ static struct ci_conf_entry conf_variables[] = {
      {"MaxTotalMemClassification", &MAX_MEM_CLASS_TOTAL_SIZE, ci_cfg_size_off, NULL},
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
      {"ImageFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
-     {"ImageScaleDimension", &ImageScaleDimension, ci_cfg_set_int, NULL},
+     {"ImageScaleDimension", &IMAGE_SCALE_DIMENSION, ci_cfg_set_int, NULL},
      {"ImageInterpolation", NULL, cfg_ImageInterpolation, NULL},
-     {"ImageMaxScale", &ImageMaxScale, ci_cfg_set_int, NULL},
-     {"ImageMinProcess", &ImageMinProcess, ci_cfg_set_int, NULL},
+     {"ImageMaxScale", &IMAGE_MAX_SCALE, ci_cfg_set_int, NULL},
+     {"ImageMinProcess", &IMAGE_MIN_PROCESS, ci_cfg_set_int, NULL},
      {"ImageCategory", NULL, cfg_AddImageCategory, NULL},
      {"ImageCoalesceOverlap", NULL, cfg_coalesceOverlap, NULL},
      {"ImageCategoryCopies", NULL, cfg_imageCategoryCopies, NULL},
@@ -323,6 +324,7 @@ void diskBodyToMemBody(ci_request_t *req)
 {
 classify_req_data_t *data = ci_service_data(req);
 ci_membuf_t *tempbody;
+int rret;
 
 	if(!data->disk_body) return;
 
@@ -331,8 +333,20 @@ ci_membuf_t *tempbody;
 
 	lseek(data->disk_body->fd, 0, SEEK_SET);
 
-	while(tempbody->endpos < ci_simple_file_size(data->disk_body))
-		tempbody->endpos += read(data->disk_body->fd, tempbody->buf + tempbody->endpos, data->disk_body->endpos - tempbody->endpos);
+	while(ci_membuf_size(tempbody) < ci_simple_file_size(data->disk_body))
+	{
+		rret = read(data->disk_body->fd, tempbody->buf + ci_membuf_size(tempbody), ci_simple_file_size(data->disk_body) - ci_membuf_size(tempbody));
+		if(rret > 0) tempbody->endpos += rret;
+		else if(rret < 0 && errno == EINTR) continue;
+		else {
+//			ci_membuf_free(data->mem_body);
+//			data->mem_body = NULL;
+//			return;
+			break;
+		}
+	}
+	// Just let c_icap simple file api do the work:
+//	tempbody->endpos = ci_simple_file_read(data->disk_body, tempbody->buf, ci_simple_file_size(data->disk_body));
 
 	if(MAX_MEM_CLASS_TOTAL_SIZE)
 	{
@@ -341,7 +355,7 @@ ci_membuf_t *tempbody;
 		ci_thread_mutex_unlock(&memmanage_mtx);
 	}
 
-        ci_simple_file_destroy(data->disk_body);
+	ci_simple_file_destroy(data->disk_body);
 	data->disk_body = NULL;
 }
 
@@ -364,7 +378,7 @@ ci_simple_file_t *tempbody;
 		ci_thread_mutex_unlock(&memmanage_mtx);
 	}
 
-        ci_membuf_free(data->mem_body);
+	ci_membuf_free(data->mem_body);
 	data->mem_body = NULL;
 }
 
@@ -410,7 +424,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 	 return CI_ERROR;
      }
 
-     setlocale(LC_ALL, "");
+     setlocale(LC_ALL, NULL);
      int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
      if(!utf8_mode) setlocale(LC_ALL, "en_US.utf8");
 //#ifdef HAVE_TRE
@@ -419,6 +433,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      tre_regwcomp(&picslabel, L"<meta http-equiv=\"PICS-Label\" content='\\(PICS-1.1 ([^']*)'.*/?>", REG_EXTENDED | REG_ICASE);
 //#endif
      initHTML();
+     CFG_NUM_CICAP_THREADS = server_conf->THREADS_PER_CHILD;
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
      return 1;
@@ -600,7 +615,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
      }
 
      if((content_type = ci_http_response_get_header(req, "Content-Encoding")) != NULL) {
-          if(strstr(content_type, "gzip")) data->is_compressed =  CI_ENCODE_GZIP;
+          if(strstr(content_type, "gzip")) data->is_compressed = CI_ENCODE_GZIP;
           else if(strstr(content_type, "deflate")) data->is_compressed = CI_ENCODE_DEFLATE;
           else data->is_compressed = CI_ENCODE_UNKNOWN;
      }
@@ -634,12 +649,12 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
           if(data->mem_body)
           {
                if (ci_membuf_write(data->mem_body, preview_data, preview_data_len,
-				  ci_req_hasalldata(req)) == CI_ERROR)
+				ci_req_hasalldata(req)) == CI_ERROR)
 	          return CI_ERROR;
           }
           else {
                if (ci_simple_file_write(data->disk_body, preview_data, preview_data_len,
-				  ci_req_hasalldata(req)) == CI_ERROR)
+				ci_req_hasalldata(req)) == CI_ERROR)
 	          return CI_ERROR;
           }
      }
@@ -848,8 +863,8 @@ HTMLClassification HSclassification, NBclassification;
           ci_http_response_create(req, 1, 1);
      if(HSclassification.primary_name != NULL)
      {
-          if(HSclassification.primary_probScaled >= (float) Ambiguous && HSclassification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-          else if(HSclassification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          if(HSclassification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && HSclassification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+          else if(HSclassification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
           else strcpy(type,"NEAREST");
           snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-HS: %s", HSclassification.primary_name);
           reply[CI_MAX_PATH]='\0';
@@ -865,8 +880,8 @@ HTMLClassification HSclassification, NBclassification;
           ci_debug_printf(10, "Added header: %s\n", reply);
           if(HSclassification.secondary_name != NULL)
           {
-               if(HSclassification.secondary_probScaled >= (float) Ambiguous && HSclassification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-               else if(HSclassification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+               if(HSclassification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && HSclassification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+               else if(HSclassification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
                else strcpy(type,"NEAREST");
                snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-HS: %s", HSclassification.secondary_name);
                reply[CI_MAX_PATH]='\0';
@@ -884,8 +899,8 @@ HTMLClassification HSclassification, NBclassification;
      }
      if(NBclassification.primary_name != NULL)
      {
-          if(NBclassification.primary_probScaled >= (float) Ambiguous && NBclassification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-          else if(NBclassification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+          if(NBclassification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && NBclassification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+          else if(NBclassification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
           else strcpy(type,"NEAREST");
           snprintf(reply, CI_MAX_PATH, "X-TEXT-CATEGORY-NB: %s", NBclassification.primary_name);
           reply[CI_MAX_PATH]='\0';
@@ -901,8 +916,8 @@ HTMLClassification HSclassification, NBclassification;
           ci_debug_printf(10, "Added header: %s\n", reply);
           if(NBclassification.secondary_name != NULL)
           {
-               if(NBclassification.secondary_probScaled >= (float) Ambiguous && NBclassification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-               else if(NBclassification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+               if(NBclassification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && NBclassification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+               else if(NBclassification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
                else strcpy(type,"NEAREST");
                snprintf(reply, CI_MAX_PATH, "X-TEXT-SECONDARY-CATEGORY-NB: %s", NBclassification.secondary_name);
                reply[CI_MAX_PATH]='\0';
@@ -1460,8 +1475,8 @@ void srvclassify_parse_args(classify_req_data_t * data, char *args)
      }
 }
 
-/***********************************************************************************/
-/*Template Functions                                                               */
+/*************************************************************************************/
+/* Template Functions                                                                */
 int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
@@ -1480,8 +1495,8 @@ int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, const ch
     return snprintf(buf, len, "%s", data->external_body->filename);
 }
 
-/****************************************************************************************/
-/*Configuration Functions                                                               */
+/*************************************************************************************/
+/* Configuration Functions                                                           */
 
 int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdata)
 {
@@ -1818,15 +1833,15 @@ void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassi
 {
 uint32_t primary = 0, secondary = 0;
 int oldest = 0, i;
-HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+//HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 	// Compute hash outside of lock
 	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
 
 /*	Not sure if this is the right thing to do, but I do not know how to make it work with memcache any other way
 	// It is the classification only if it is a solid match
-	if(fhs_classification.primary_probScaled < (float) SolidMatch)
+	if(fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
 		fhs_classification = emptyClassification;
-	if(fnb_classification.primary_probScaled < (float) SolidMatch)
+	if(fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
 		fnb_classification = emptyClassification;
 */
 
@@ -1938,8 +1953,8 @@ char type[20];
 
      if(fhs_classification.primary_name != NULL)
      {
-	  if(fhs_classification.primary_probScaled >= (float) Ambiguous && fhs_classification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-	  else if(fhs_classification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	  if(fhs_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	  else if(fhs_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
 	  else strcpy(type,"NEAREST");
 	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-HS: %s", fhs_classification.primary_name);
 	  reply[CI_MAX_PATH]='\0';
@@ -1951,8 +1966,8 @@ char type[20];
 	  ci_debug_printf(10, "Added header: %s\n", reply);
 	  if(fhs_classification.secondary_name != NULL)
 	  {
-	       if(fhs_classification.secondary_probScaled >= (float) Ambiguous && fhs_classification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-	       else if(fhs_classification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	       if(fhs_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	       else if(fhs_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
 	       else strcpy(type,"NEAREST");
 	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-HS: %s", fhs_classification.secondary_name);
 	       reply[CI_MAX_PATH]='\0';
@@ -1966,8 +1981,8 @@ char type[20];
      }
      if(fnb_classification.primary_name != NULL)
      {
-	  if(fnb_classification.primary_probScaled >= (float) Ambiguous && fnb_classification.primary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-	  else if(fnb_classification.primary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	  if(fnb_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	  else if(fnb_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
 	  else strcpy(type,"NEAREST");
 	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-NB: %s", fnb_classification.primary_name);
 	  reply[CI_MAX_PATH]='\0';
@@ -1979,8 +1994,8 @@ char type[20];
 	  ci_debug_printf(10, "Added header: %s\n", reply);
 	  if(fnb_classification.secondary_name != NULL)
 	  {
-	       if(fnb_classification.secondary_probScaled >= (float) Ambiguous && fnb_classification.secondary_probScaled < (float) SolidMatch) strcpy(type,"AMBIGUOUS");
-	       else if(fnb_classification.secondary_probScaled >= (float) SolidMatch) strcpy(type, "SOLID");
+	       if(fnb_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	       else if(fnb_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
 	       else strcpy(type,"NEAREST");
 	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-NB: %s", fnb_classification.secondary_name);
 	       reply[CI_MAX_PATH]='\0';

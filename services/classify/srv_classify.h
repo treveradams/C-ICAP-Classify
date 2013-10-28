@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2010 Trever L. Adams
+ *  Copyright (C) 2008-2013 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -24,8 +24,6 @@
 #define MAX_URI_LENGTH 2083
 
 #define myMAX_HEADER 512
-
-extern int START_SERVERS;
 
 #define IMAGE_CATEGORY_COPIES_MIN 10
 
@@ -71,4 +69,5 @@ extern void getReferrerClassification(const char *uri, HTMLClassification *fhs_c
 extern void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification);
 extern void memBodyToDiskBody(ci_request_t *req);
 extern char *CLASSIFY_TMP_DIR;
+extern int CFG_NUM_CICAP_THREADS;
 #endif

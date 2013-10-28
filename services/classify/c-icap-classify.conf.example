@@ -26,6 +26,9 @@ srv_classify.ImageCategoryCopies 50
 # Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or
 #     debugDemonstrateMarked is activated
 srv_classify.ImageCategory CATEGORY_NAME FILE RED_CIRCLE_COLOR BLUE_CIRCLE_COLOR GREEN_CIRCLE_COLOR
+# Coalesce detected objects if objects overlap by a givern percentage
+# (.5 is 50%, 1 is 100%)
+srv_classify.ImageCoalesceOverlap CATEGORY_NAME PERCENT_OVERLAP
 
 # Save the Original image
 # srv_classify.debugSaveOriginal 1
@@ -41,9 +44,29 @@ srv_classify.debugDemonstrate 1
 # Type of interpolation to use for images. NN (fastest), LINEAR (default), AREA,
 #     BICUBIC (slowest).
 srv_classify.ImageInterpolation LINEAR
-# Coalesce detected objects if objects overlap by a givern percentage
-# (.5 is 50%, 1 is 100%)
-srv_classify.ImageCoalesceOverlap CATEGORY_NAME PERCENT_OVERLAP
+# Maximum Scaling factor for images
+# Default: 4
+srv_classify.ImageMaxScale 4
+# If an image has an x or y dimension larger than this value, it is scaled by
+#     a factor that makes its maximum dimension fit this value (scaling factor
+#     can never be larger than ImageMaxScale)
+# Default: 240
+srv_classify.ImageScaleDimension 240
+
+# Type of interpolation to use for video. FAST (fastest), LINEAR (lowest
+#     recommended), AREA (default), BICUBIC (slowest).
+srv_classify.VideoInterpolation AREA
+# Maximum Scaling factor for images
+# Default: 4
+srv_classify.VideoMaxScale 4
+# If an video has an x or y dimension larger than this value, it is scaled by
+#     a factor that makes its maximum dimension fit this value (scaling factor
+#     can never be larger than VideoMaxScale)
+# Default: 320
+srv_classify.VideoScaleDimension 320
+# Video is slow to process, so we only process a certain number per second
+# Default: 3
+srv_classify.VideoProcessFramesPerSecond 3
 
 # Add text categories.
 # srv_classify.TextHashSeeds Sets the key for the hash seed. It acts as
@@ -142,4 +165,4 @@ srv_classify.MaxMemClassification 32K
 srv_classify.MaxTotalMemClassification 0
 
 # Currently implemented but undocumented:
-# MaxWindowSize, ImageScaleDimension, ImageMaxScale, ImageMinProcess
+# MaxWindowSize, ImageMinProcess
