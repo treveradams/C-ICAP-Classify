@@ -1,7 +1,7 @@
 GENERAL DESCRIPTION
 ===================
 C-ICAP Classify is a module that allows classification (labeling) of 
-web pages, images, (and soon video) based, on content. Labels are 
+web pages, images, (and soon video) based on content. Labels are
 placed in HTTP Headers. Any PIC-Label META tags are exported into HTTP 
 headers. This allows for creation of very flexible filters according to 
 rules defined by the user, using the ICAP enabled proxy's ACLs. This is 
