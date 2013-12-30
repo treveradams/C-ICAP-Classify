@@ -121,6 +121,7 @@ uint16_t category;
 
 	if(IMAGEDETECTED_POOL < 0) {
 		ci_debug_printf(1, " srvclassify_init_service: error registering object_pool image_detected_t\n");
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
 		return CI_ERROR;
 	}
 
@@ -129,6 +130,7 @@ uint16_t category;
 	if(IMAGEDETECTEDCOUNT_POOL < 0) {
 		ci_debug_printf(1, " srvclassify_init_service: error registering object_pool image_detected_count_t\n");
 		ci_object_pool_unregister(IMAGEDETECTED_POOL);
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
 		return CI_ERROR;
 	}
 
@@ -768,6 +770,7 @@ uint16_t current_category;
 	if (!(mySession->detected = ci_object_pool_alloc(IMAGEDETECTED_POOL))) {
 		ci_debug_printf(1,
                        "Error allocation memory for service data!!!!!!!\n");
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
 		return NO_MEMORY;
 	}
 	for(current_category = 0; current_category < num_image_categories; current_category++)

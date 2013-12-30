@@ -95,7 +95,7 @@ char *srvclassify_compute_name(ci_request_t * req);
 /* Module definitions                                                              */
 
 static int ALLOW204 = 0;
-static ci_off_t MAX_OBJECT_SIZE = 0;
+static ci_off_t MAX_OBJECT_SIZE = INT_MAX;
 static ci_off_t MAX_MEM_CLASS_SIZE = 32768;
 static ci_off_t MAX_MEM_CLASS_TOTAL_SIZE = 0;
 uint32_t total_mem_class_used = 0;
@@ -413,6 +413,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
 
      if(CLASSIFYREQDATA_POOL < 0) {
 	 ci_debug_printf(1, " srvclassify_init_service: error registering object_pool classify_req_data_t\n");
+	 ci_thread_rwlock_unlock(&textclassify_rwlock);
 	 return CI_ERROR;
      }
 
@@ -421,6 +422,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      if(HASHDATA_POOL < 0) {
          ci_object_pool_unregister(CLASSIFYREQDATA_POOL);
 	 ci_debug_printf(1, " srvclassify_init_service: error registering object_pool HTMLFeature\n");
+	 ci_thread_rwlock_unlock(&textclassify_rwlock);
 	 return CI_ERROR;
      }
 
@@ -449,8 +451,11 @@ int ret = CI_OK;
      ci_thread_rwlock_init(&referrers_rwlock);
      createReferrerTable();
 #endif
-    set_istag(srv_classify_xdata);
-    return ret;
+     set_istag(srv_classify_xdata);
+
+     if(CI_BODY_MAX_MEM > MAX_MEM_CLASS_SIZE) MAX_MEM_CLASS_SIZE = CI_BODY_MAX_MEM - 1;
+     if(MAX_OBJECT_SIZE > INT_MAX) MAX_OBJECT_SIZE = INT_MAX;
+     return ret;
 }
 
 void srvclassify_close_service()
@@ -675,15 +680,22 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
 
      if(data->mem_body)
      {
-          /* FIXME the following if should just process what is had at the moment... possible? */
-          if (ci_membuf_size(data->mem_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-               ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
-               data->must_classify = 0;
-               ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
-               ci_membuf_unlock_all(data->mem_body);        /*Unlock all body data to continue send them..... */
+          /* FIXME the following should just process what is had at the moment... possible? */
+          if (ci_membuf_size(data->mem_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE){
+               if(data->args.mode == 1){
+                   /* This shouldn't happen... we are in simple mode, cannot send early ICAP responses... */
+                   ci_debug_printf(1, "Object does not fit to max object size and early responses are not allowed! \n");
+                   return CI_ERROR;
+               }
+               else { /*Send early response.*/
+                    ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+                    data->must_classify = 0;
+                    ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+                    ci_membuf_unlock_all(data->mem_body);        /*Unlock all body data to continue send them..... */
+               }
            }
           /* anything where we are not in over max object size, simply write and exit */
-          if(ci_membuf_size(data->mem_body) + len > data->mem_body->bufsize)
+          else if(ci_membuf_size(data->mem_body) + len > data->mem_body->bufsize)
           {
                memBodyToDiskBody(req);
                return ci_simple_file_write(data->disk_body, buf, len, iseof);
@@ -691,15 +703,22 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
           else return ci_membuf_write(data->mem_body, buf, len, iseof);
       }
       else {
-          /* FIXME the following if should just process what is had at the moment... possible? */
+          /* FIXME the following should just process what is had at the moment... possible? */
           if(ci_simple_file_size(data->disk_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-               ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
-               data->must_classify = 0;
-               ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
-               ci_simple_file_unlock_all(data->disk_body);        /*Unlock all body data to continue send them..... */
+               if(data->args.mode == 1){
+                   /* This shouldn't happen... we are in simple mode, cannot send early ICAP responses... */
+                   ci_debug_printf(1, "Object does not fit to max object size and early responses are not allowed! \n");
+                   return CI_ERROR;
+               }
+               else { /*Send early response.*/
+                    ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+                    data->must_classify = 0;
+                    ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+                    ci_simple_file_unlock_all(data->disk_body);        /*Unlock all body data to continue send them..... */
+               }
           }
           /* anything where we are not in over max object size, simply write and exit */
-          return ci_simple_file_write(data->disk_body, buf, len, iseof);
+          else return ci_simple_file_write(data->disk_body, buf, len, iseof);
      }
 }
 
@@ -724,13 +743,12 @@ int srvclassify_write_to_net(char *buf, int len, ci_request_t * req)
 int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
                  ci_request_t * req)
 {
-     int ret = CI_OK;
      if (rbuf && rlen) {
           *rlen = srvclassify_read_from_net(rbuf, *rlen, iseof, req);
 	  if (*rlen == CI_ERROR)
 	       return CI_ERROR;
-          else if (*rlen < 0)
-	       ret = CI_OK;
+/*          else if (*rlen < 0)
+	       ret = CI_OK; */ // Ignore
      }
      else if (iseof) {
 	 if (srvclassify_read_from_net(NULL, 0, iseof, req) == CI_ERROR)
@@ -739,7 +757,7 @@ int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
      if (wbuf && wlen) {
           *wlen = srvclassify_write_to_net(wbuf, *wlen, req);
      }
-     return ret;
+     return CI_OK;
 }
 
 int srvclassify_end_of_data_handler(ci_request_t *req)
@@ -760,7 +778,7 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
                ci_membuf_unlock_all(mem_body);
           else {
                ci_simple_file_unlock_all(disk_body);          /*Unlock all data to continue send them . Not really needed here.... */
-               lseek(disk_body->fd, 0, SEEK_SET);
+//               lseek(disk_body->fd, 0, SEEK_SET); // Not sure why I put this here after all!
           }
           return CI_MOD_DONE;
      }
@@ -784,7 +802,8 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
      {
           categorize_image(req);
      }
-     // The following may look screwy, but it is necessary so that both EXTERNAL IMAGE and EXTERNAL TEXT can be used
+     // The following may look screwy not having the second being "else if",
+     // but it is necessary so that both EXTERNAL IMAGE and EXTERNAL TEXT can be used
      else if (data->must_classify & EXTERNAL_IMAGE || data->must_classify & EXTERNAL_TEXT || data->must_classify & EXTERNAL_TEXT_PIPE)
      {
           if (data->must_classify & EXTERNAL_IMAGE)
@@ -810,8 +829,9 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
           return CI_MOD_ALLOW204;
      }
 
-     if(mem_body)
+     if(mem_body) {
           ci_membuf_unlock_all(mem_body);
+     }
      else {
           ci_simple_file_unlock_all(disk_body);   /*Unlock all data to continue send them, after all we only modify headers in this module..... */
           ci_debug_printf(7, "file unlocked, flags :%d (unlocked:%" PRINTF_OFF_T ")\n",
@@ -1452,6 +1472,220 @@ char header[myMAX_HEADER + 1];
 	ci_debug_printf(3, "Added error header: %s\n", header);
 }
 
+char *myStrDup(const char *string)
+{
+char *temp;
+	if(string == NULL) return NULL;
+
+	temp=malloc(strlen(string)+1);
+	strcpy(temp, string);
+	return temp;
+}
+
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+/* All of this code below uses a very simple table.
+   It might be better to re-implement this using a tree of some kind. */
+void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
+{
+uint32_t primary = 0, secondary = 0;
+int oldest = 0, i;
+//HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+	// Compute hash outside of lock
+	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
+
+/*	Not sure if this is the right thing to do, but I do not know how to make it work with memcache any other way
+	// It is the classification only if it is a solid match
+	if(fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
+		fhs_classification = emptyClassification;
+	if(fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
+		fnb_classification = emptyClassification;
+*/
+
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+
+	// If we already exist, update age and bail
+	// While we are at it, find the oldest
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		if(referrers[i].hash == primary)
+		{
+			if(strcmp(uri, referrers[i].uri) == 0)
+			{
+				// Avoid fake outs by resetting the classification
+				referrers[i].fhs_classification = fhs_classification;
+				referrers[i].fnb_classification = fnb_classification;
+				// Reset the age as well
+				referrers[i].age = classify_requests;
+				ci_thread_rwlock_unlock(&referrers_rwlock);
+				return;
+			}
+		}
+		// Find the oldest here to save time
+		// We don't do an else because the hash may match while URI doesn't
+		if(referrers[i].age < referrers[oldest].age)
+		{
+			oldest = i;
+		}
+	}
+
+	// Avoid wrap around problems
+	if(classify_requests == 0 && referrers[oldest].age > 0)
+	{
+		int largest = 0;
+		int32_t adjust;
+
+		// We already found the oldest in the previous for loop
+
+		// Adjust downward
+		adjust = referrers[oldest].age;
+
+		for(i = 0; i < REFERRERS_SIZE; i++)
+		{
+			referrers[i].age = referrers[i].age - adjust;
+			if(referrers[i].age > referrers[largest].age) // Find largest
+				largest = i;
+		}
+		classify_requests = largest + 1; // Reset our count
+	}
+
+	// Replace oldest
+	referrers[oldest].hash = primary;
+	if(referrers[oldest].uri) free(referrers[oldest].uri);
+	referrers[oldest].uri = myStrDup(uri);
+	referrers[oldest].fhs_classification = fhs_classification;
+	referrers[oldest].fnb_classification = fnb_classification;
+	referrers[oldest].age = classify_requests;
+	classify_requests++;
+
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
+{
+uint32_t primary = 0, secondary = 0;
+HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+int i;
+char *realURI, *pos;
+	if(uri == NULL)
+	{
+		*fhs_classification = emptyClassification;
+		*fnb_classification = emptyClassification;
+		return;
+	}
+	// Process the URI to hash and remove cgi parts before lock
+	realURI = myStrDup(uri);
+	pos = strstr(realURI, "?");
+	if(pos != NULL) *pos = '\0';
+	hashword2((uint32_t *) realURI, strlen(realURI)/4, &primary, &secondary);
+
+	// lock and find
+	ci_thread_rwlock_rdlock(&referrers_rwlock);
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		if(referrers[i].hash == primary)
+		{
+			if(strcmp(realURI, referrers[i].uri) == 0)
+			{
+				*fhs_classification = referrers[i].fhs_classification;
+				*fnb_classification = referrers[i].fnb_classification;
+				referrers[i].age = classify_requests;
+				free(realURI);
+				ci_thread_rwlock_unlock(&referrers_rwlock);
+				return;
+			}
+		}
+	}
+	// We failed to find the URI, return empty classification
+	*fhs_classification = emptyClassification;
+	*fnb_classification = emptyClassification;
+	free(realURI);
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
+{
+char reply[2 * CI_MAX_PATH + 1];
+char type[20];
+
+     if(fhs_classification.primary_name != NULL)
+     {
+	  if(fhs_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	  else if(fhs_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
+	  else strcpy(type,"NEAREST");
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-HS: %s", fhs_classification.primary_name);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-HS: %s", type);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  if(fhs_classification.secondary_name != NULL)
+	  {
+	       if(fhs_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	       else if(fhs_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
+	       else strcpy(type,"NEAREST");
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-HS: %s", fhs_classification.secondary_name);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-HS: %s", type);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	  }
+     }
+     if(fnb_classification.primary_name != NULL)
+     {
+	  if(fnb_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	  else if(fnb_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
+	  else strcpy(type,"NEAREST");
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-NB: %s", fnb_classification.primary_name);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-NB: %s", type);
+	  reply[CI_MAX_PATH]='\0';
+	  ci_http_response_add_header(req, reply);
+	  ci_debug_printf(10, "Added header: %s\n", reply);
+	  if(fnb_classification.secondary_name != NULL)
+	  {
+	       if(fnb_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
+	       else if(fnb_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
+	       else strcpy(type,"NEAREST");
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-NB: %s", fnb_classification.secondary_name);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-NB: %s", type);
+	       reply[CI_MAX_PATH]='\0';
+	       ci_http_response_add_header(req, reply);
+	       ci_debug_printf(10, "Added header: %s\n", reply);
+	  }
+     }
+}
+
+void createReferrerTable(void)
+{
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+	referrers = calloc(sizeof(REFERRERS_T), REFERRERS_SIZE);
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+
+void freeReferrerTable(void)
+{
+int i;
+	ci_thread_rwlock_wrlock(&referrers_rwlock);
+	for(i = 0; i < REFERRERS_SIZE; i++)
+	{
+		free(referrers[i].uri);
+	}
+	free(referrers);
+	referrers = NULL;
+	ci_thread_rwlock_unlock(&referrers_rwlock);
+}
+#endif
+
 /***************************************************************************************/
 /* Parse arguments function -
    Current arguments: allow204=on|off, force=on, sizelimit=off
@@ -1813,219 +2047,5 @@ int cfg_ExternalImageConversion(const char *directive, const char **argv, void *
 
      ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s)\n", directive, argv[1], argv[0]);
      return 1;
-}
-#endif
-
-char *myStrDup(const char *string)
-{
-char *temp;
-	if(string == NULL) return NULL;
-
-	temp=malloc(strlen(string)+1);
-	strcpy(temp, string);
-	return temp;
-}
-
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-/* All of this code below uses a very simple table.
-   It might be better to re-implement this using a tree of some kind. */
-void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
-{
-uint32_t primary = 0, secondary = 0;
-int oldest = 0, i;
-//HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
-	// Compute hash outside of lock
-	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
-
-/*	Not sure if this is the right thing to do, but I do not know how to make it work with memcache any other way
-	// It is the classification only if it is a solid match
-	if(fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
-		fhs_classification = emptyClassification;
-	if(fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL)
-		fnb_classification = emptyClassification;
-*/
-
-	ci_thread_rwlock_wrlock(&referrers_rwlock);
-
-	// If we already exist, update age and bail
-	// While we are at it, find the oldest
-	for(i = 0; i < REFERRERS_SIZE; i++)
-	{
-		if(referrers[i].hash == primary)
-		{
-			if(strcmp(uri, referrers[i].uri) == 0)
-			{
-				// Avoid fake outs by resetting the classification
-				referrers[i].fhs_classification = fhs_classification;
-				referrers[i].fnb_classification = fnb_classification;
-				// Reset the age as well
-				referrers[i].age = classify_requests;
-				ci_thread_rwlock_unlock(&referrers_rwlock);
-				return;
-			}
-		}
-		// Find the oldest here to save time
-		// We don't do an else because the hash may match while URI doesn't
-		if(referrers[i].age < referrers[oldest].age)
-		{
-			oldest = i;
-		}
-	}
-
-	// Avoid wrap around problems
-	if(classify_requests == 0 && referrers[oldest].age > 0)
-	{
-		int largest = 0;
-		int32_t adjust;
-
-		// We already found the oldest in the previous for loop
-
-		// Adjust downward
-		adjust = referrers[oldest].age;
-
-		for(i = 0; i < REFERRERS_SIZE; i++)
-		{
-			referrers[i].age = referrers[i].age - adjust;
-			if(referrers[i].age > referrers[largest].age) // Find largest
-				largest = i;
-		}
-		classify_requests = largest + 1; // Reset our count
-	}
-
-	// Replace oldest
-	referrers[oldest].hash = primary;
-	if(referrers[oldest].uri) free(referrers[oldest].uri);
-	referrers[oldest].uri = myStrDup(uri);
-	referrers[oldest].fhs_classification = fhs_classification;
-	referrers[oldest].fnb_classification = fnb_classification;
-	referrers[oldest].age = classify_requests;
-	classify_requests++;
-
-	ci_thread_rwlock_unlock(&referrers_rwlock);
-}
-
-void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
-{
-uint32_t primary = 0, secondary = 0;
-HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
-int i;
-char *realURI, *pos;
-	if(uri == NULL)
-	{
-		*fhs_classification = emptyClassification;
-		*fnb_classification = emptyClassification;
-		return;
-	}
-	// Process the URI to hash and remove cgi parts before lock
-	realURI = myStrDup(uri);
-	pos = strstr(realURI, "?");
-	if(pos != NULL) *pos = '\0';
-	hashword2((uint32_t *) realURI, strlen(realURI)/4, &primary, &secondary);
-
-	// lock and find
-	ci_thread_rwlock_rdlock(&referrers_rwlock);
-	for(i = 0; i < REFERRERS_SIZE; i++)
-	{
-		if(referrers[i].hash == primary)
-		{
-			if(strcmp(realURI, referrers[i].uri) == 0)
-			{
-				*fhs_classification = referrers[i].fhs_classification;
-				*fnb_classification = referrers[i].fnb_classification;
-				referrers[i].age = classify_requests;
-				free(realURI);
-				ci_thread_rwlock_unlock(&referrers_rwlock);
-				return;
-			}
-		}
-	}
-	// We failed to find the URI, return empty classification
-	*fhs_classification = emptyClassification;
-	*fnb_classification = emptyClassification;
-	free(realURI);
-	ci_thread_rwlock_unlock(&referrers_rwlock);
-}
-
-void addReferrerHeaders(ci_request_t *req, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
-{
-char reply[2 * CI_MAX_PATH + 1];
-char type[20];
-
-     if(fhs_classification.primary_name != NULL)
-     {
-	  if(fhs_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
-	  else if(fhs_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
-	  else strcpy(type,"NEAREST");
-	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-HS: %s", fhs_classification.primary_name);
-	  reply[CI_MAX_PATH]='\0';
-	  ci_http_response_add_header(req, reply);
-	  ci_debug_printf(10, "Added header: %s\n", reply);
-	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-HS: %s", type);
-	  reply[CI_MAX_PATH]='\0';
-	  ci_http_response_add_header(req, reply);
-	  ci_debug_printf(10, "Added header: %s\n", reply);
-	  if(fhs_classification.secondary_name != NULL)
-	  {
-	       if(fhs_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fhs_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
-	       else if(fhs_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
-	       else strcpy(type,"NEAREST");
-	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-HS: %s", fhs_classification.secondary_name);
-	       reply[CI_MAX_PATH]='\0';
-	       ci_http_response_add_header(req, reply);
-	       ci_debug_printf(10, "Added header: %s\n", reply);
-	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-HS: %s", type);
-	       reply[CI_MAX_PATH]='\0';
-	       ci_http_response_add_header(req, reply);
-	       ci_debug_printf(10, "Added header: %s\n", reply);
-	  }
-     }
-     if(fnb_classification.primary_name != NULL)
-     {
-	  if(fnb_classification.primary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.primary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
-	  else if(fnb_classification.primary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
-	  else strcpy(type,"NEAREST");
-	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-NB: %s", fnb_classification.primary_name);
-	  reply[CI_MAX_PATH]='\0';
-	  ci_http_response_add_header(req, reply);
-	  ci_debug_printf(10, "Added header: %s\n", reply);
-	  snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-CATEGORY-CONFIDENCE-NB: %s", type);
-	  reply[CI_MAX_PATH]='\0';
-	  ci_http_response_add_header(req, reply);
-	  ci_debug_printf(10, "Added header: %s\n", reply);
-	  if(fnb_classification.secondary_name != NULL)
-	  {
-	       if(fnb_classification.secondary_probScaled >= (float) TEXT_AMBIGUOUS_LEVEL && fnb_classification.secondary_probScaled < (float) TEXT_SOLID_LEVEL) strcpy(type,"AMBIGUOUS");
-	       else if(fnb_classification.secondary_probScaled >= (float) TEXT_SOLID_LEVEL) strcpy(type, "SOLID");
-	       else strcpy(type,"NEAREST");
-	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-NB: %s", fnb_classification.secondary_name);
-	       reply[CI_MAX_PATH]='\0';
-	       ci_http_response_add_header(req, reply);
-	       ci_debug_printf(10, "Added header: %s\n", reply);
-	       snprintf(reply, CI_MAX_PATH, "X-REFERRER-TEXT-SECONDARY-CATEGORY-CONFIDENCE-NB: %s", type);
-	       reply[CI_MAX_PATH]='\0';
-	       ci_http_response_add_header(req, reply);
-	       ci_debug_printf(10, "Added header: %s\n", reply);
-	  }
-     }
-}
-
-void createReferrerTable(void)
-{
-	ci_thread_rwlock_wrlock(&referrers_rwlock);
-	referrers = calloc(sizeof(REFERRERS_T), REFERRERS_SIZE);
-	ci_thread_rwlock_unlock(&referrers_rwlock);
-}
-
-void freeReferrerTable(void)
-{
-int i;
-	ci_thread_rwlock_wrlock(&referrers_rwlock);
-	for(i = 0; i < REFERRERS_SIZE; i++)
-	{
-		free(referrers[i].uri);
-	}
-	free(referrers);
-	referrers = NULL;
-	ci_thread_rwlock_unlock(&referrers_rwlock);
 }
 #endif

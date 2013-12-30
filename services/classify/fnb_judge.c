@@ -102,7 +102,7 @@ int main (int argc, char *argv[])
 regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
 wchar_t *myData;
 HashList myHashes;
-clock_t start, end;
+clock_t start, s2, end;
 HTMLClassification classification;
 	checkMakeUTF8();
 	initHTML();
@@ -128,10 +128,11 @@ HTMLClassification classification;
 	myHashes.slots = HTML_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+	s2=clock();
 
 	classification=doBayesPrepandClassify(&myHashes);
 	end=clock();
-	printf("Classification took %lf milliseconds\n", (double)((end-start)/(CLOCKS_PER_SEC/1000)));
+	printf("Classification took %lf milliseconds (Prep: %lf)\n", (double)((end-s2)/(CLOCKS_PER_SEC/1000)), (double)((s2-start)/(CLOCKS_PER_SEC/1000)));
 	printf("Best match: %s prob: %lf pR: %lf\n", classification.primary_name, classification.primary_probability, classification.primary_probScaled);
 	if(classification.secondary_name != NULL)
 		printf("Best match: %s prob: %lf pR: %lf\n", classification.secondary_name, classification.secondary_probability, classification.secondary_probScaled);
