@@ -587,7 +587,7 @@ uint32_t tempUTF32CHAR;
 #endif
 
 	current = myHead->head;
-	while(current != NULL) // scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
+	while(current != NULL) // kill scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
 	{
 		myData= (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
@@ -603,7 +603,7 @@ uint32_t tempUTF32CHAR;
 	}
 
 	current = myHead->head;
-	while(current != NULL) // scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
+	while(current != NULL) // kill comments
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
@@ -619,7 +619,7 @@ uint32_t tempUTF32CHAR;
 	}
 
 	current = myHead->head;
-	while(current != NULL) // metas
+	while(current != NULL) // kill metas
 	{
 		myData = (wchar_t *)(current->data==NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
@@ -674,7 +674,7 @@ uint32_t tempUTF32CHAR;
 	}
 
 	current = myHead->head;
-	while(current != NULL) // images
+	while(current != NULL) // kill images (save alt and title tags)
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
@@ -727,7 +727,7 @@ uint32_t tempUTF32CHAR;
 	}
 
 	current = myHead->head;
-	while(current != NULL) // kill all unused tags
+	while(current != NULL) // kill all unused tags (save titles)
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
@@ -903,13 +903,20 @@ uint32_t wordboundary;
 int ubp_only = 0; // Input has no UNICODE supplemental characters
 
 	current = myHead->head;
-	myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
-
-	myHead_u16 = malloc((current->rm_eo + 1) * 2 * sizeof(UChar));
-	if(myHead_u16 == NULL)
+	if(current->rm_eo < 2)
 	{
-		ci_debug_printf(3, "computeOSBHashes: unable to allocate memory\n");
+		ci_debug_printf(3, "computeOSBHashes: text is too small to bother with (%d)\n", current->rm_eo);
 		return;
+	}
+	else {
+		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
+		myHead_u16 = malloc((current->rm_eo + 1) * 2 * sizeof(UChar));
+
+		if(myHead_u16 == NULL)
+		{
+			ci_debug_printf(3, "computeOSBHashes: unable to allocate memory\n");
+			return;
+		}
 	}
 
 	u_strFromUTF32(myHead_u16,

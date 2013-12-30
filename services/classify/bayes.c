@@ -72,6 +72,34 @@
 FBCTextCategoryExt NBCategories = { .categories = NULL };
 FBCHashList NBJudgeHashList = { .FBC_LOCKED = 0 };
 
+// Radix hybrid binary search does speed things up in my testing
+// if it doesn't for you, please comment the following define
+#define CLASSIFYWITHRADIX
+#ifdef CLASSIFYWITHRADIX
+myRadix_t radixNodes[256];
+
+static void initRadix(FBCHashList *hashes)
+{
+uint8_t lastRadix = 0, curRadix = 0;
+uint32_t i;
+	memset(radixNodes, 0, sizeof(myRadix_t) * 256);
+	// Do precomputing
+	for(i = 0; i < hashes->used; i++)
+	{
+		curRadix = (hashes->hashes[i].hash & 0xFF00000000000000LL) >> 56;
+		if(curRadix != lastRadix)
+		{
+			radixNodes[curRadix].start = i;
+			radixNodes[lastRadix].stop = i ? i - 1 : 0;
+			lastRadix = curRadix;
+		}
+	}
+	radixNodes[lastRadix].stop = i ? i - 1 : 0;
+/*	for(i = 0; i < 256; i++)
+		printf("Radix %X starts at %d and ends at %d\n", i, radixNodes[i].start, radixNodes[i].stop); */
+}
+#endif
+
 void initBayesClassifier(void)
 {
 	NBJudgeHashList.slots = 0;
@@ -126,6 +154,9 @@ uint64_t count;
 		}
 	}
 	hashes->FBC_LOCKED = 1;
+#ifdef CLASSIFYWITHRADIX
+	initRadix(hashes);
+#endif
         return 0;
 }
 
@@ -376,6 +407,277 @@ int64_t mid=0;
 	return -1; // This should never be reached
 }
 
+#ifdef CLASSIFYWITHRADIX
+static int64_t FBCRadixBinarySearch(FBCHashList *hashes_list, uint64_t key)
+{
+uint8_t radix;
+	radix = (key & 0xFF00000000000000LL) >> 56;
+	return FBCBinarySearch(hashes_list, radixNodes[radix].start, radixNodes[radix].stop, key);
+}
+#endif
+
+static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown, double correction_factor)
+{
+double total_probability = DBL_MIN;
+double remainder = DBL_MIN;
+
+uint32_t cls;
+
+uint32_t bestseen = 0, secondbest = 1;
+
+const double DBL_MAX_SPEC = DBL_MAX / (MINIMUM_MATCHES + 1);
+
+HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+
+	// Re-normalize Result to probability
+	do {
+		if(total_probability > DBL_MAX_SPEC) // reset total_probability so that we are not overflowing
+		{
+			total_probability = DBL_MIN;
+			for (cls = 0; cls < NBCategories.used; cls++)
+			{
+				categories[cls].naiveBayesResult /= 100;
+			}
+		}
+
+		for (cls = 0; cls < NBCategories.used; cls++)
+		{
+			// Avoid divide by zero and keep value small, for log10(remainder) below
+			if (categories[cls].naiveBayesResult > DBL_MAX)
+				categories[cls].naiveBayesResult = DBL_MAX;
+			else if (categories[cls].naiveBayesResult < DBL_MIN)
+				categories[cls].naiveBayesResult = DBL_MIN;
+			total_probability += categories[cls].naiveBayesResult;
+		}
+	} while (total_probability > DBL_MAX_SPEC); // Do until we are a valid double number
+
+	if(correction_factor > 1.0f)
+		total_probability *= correction_factor;
+
+	// Find the best and second best categories
+	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
+	{
+		categories[cls].naiveBayesResult = categories[cls].naiveBayesResult / total_probability; // fix-up probability
+		if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
+		{
+			secondbest = bestseen;
+			bestseen = cls; // are we the best
+		}
+		else if (cls != bestseen && categories[cls].naiveBayesResult > categories[secondbest].naiveBayesResult) secondbest = cls;
+		remainder += categories[cls].naiveBayesResult; // add up remainder
+	}
+
+	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
+	if(remainder < DBL_MIN) remainder = DBL_MIN;
+
+	// Setup data for second best category, if applicable
+	for(int i = 0; i < number_secondaries; i++)
+	{
+		if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
+		{
+			remainder -= categories[secondbest].naiveBayesResult;
+			if(remainder < DBL_MIN) remainder = DBL_MIN;
+			myReply.secondary_probability = categories[secondbest].naiveBayesResult;
+			myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
+			myReply.secondary_name = NBCategories.categories[secondbest].name;
+			i = number_secondaries;
+		}
+		else if(secondary_compares[i].bidirectional == 1)
+		{
+			if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
+			{
+				remainder -= categories[secondbest].naiveBayesResult;
+				if(remainder < DBL_MIN) remainder = DBL_MIN;
+				myReply.secondary_probability = categories[secondbest].naiveBayesResult;
+				myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
+				myReply.secondary_name = NBCategories.categories[secondbest].name;
+				i = number_secondaries;
+			}
+		}
+	}
+
+/*	for (cls = 0; cls < NBCategories.used; cls++)
+	{
+		ci_debug_printf(10, "Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
+	}*/
+
+	myReply.primary_probability = categories[bestseen].naiveBayesResult;
+	myReply.primary_probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
+	myReply.primary_name = NBCategories.categories[bestseen].name;
+
+return myReply;
+}
+
+HTMLClassification doBayesPrepandClassify(HashList *toClassify)
+{
+uint32_t i, j, processed = 0, total_processed = 0;
+uint16_t missing, nextReal;
+FBCJudge *categories = NULL;
+int64_t BSRet = -1;
+HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
+uint64_t total;
+double local_probability;
+// Variables for scaling
+uint32_t cls, bestseen = 0;
+double scale = 0;
+double correction_factor = 1;
+const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
+
+	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
+	else categories = malloc(NBCategories.used * sizeof(FBCJudge));
+
+	// Set result to 1 so we don't have 0's as all answers
+	for(i = 0; i < NBCategories.used; i++)
+	{
+		categories[i].naiveBayesResult = BAYES_MAXIMUM;
+	}
+
+	// do bayes multiplication
+	for(i = 0; i < toClassify->used; i++)
+	{
+// See comment on Radix at top
+#ifdef CLASSIFYWITHRADIX
+		if((BSRet=FBCRadixBinarySearch(&NBJudgeHashList, toClassify->hashes[i])) >= 0)
+#else
+		if((BSRet=FBCBinarySearch(&NBJudgeHashList, 0, NBJudgeHashList.used-1, toClassify->hashes[i])) >= 0)
+#endif
+		{
+//			ci_debug_printf(10, "Found %"PRIX64"\n", toClassify->hashes[i]);
+			if(NBJudgeHashList.FBC_LOCKED)
+			{
+				for(j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
+				{
+					/*BAYES*/
+					if(j == 0) // Catch missing at the beginning
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
+						for(missing = 0; missing < nextReal; missing++)
+						{
+//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
+						}
+					}
+
+//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used - 1);
+
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
+
+					// Catch missing at the end or in between
+					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
+					}
+					else nextReal = NBCategories.used;
+					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
+					{
+//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
+					}
+				}
+			}
+			else
+			{
+				/*BAYES*/
+				total = MARKOV_C2 + 1;
+				for(uint_least16_t k = 0; k < NBJudgeHashList.hashes[BSRet].used; k++)
+				{
+					total += NBJudgeHashList.hashes[BSRet].users[k].data.count;
+				}
+
+				for(uint_least16_t j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
+				{
+					if(j == 0) // Catch missing at the beginning
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
+						for(missing = 0; missing < nextReal; missing++)
+						{
+//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
+							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
+						}
+					}
+
+//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
+
+					local_probability =  ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
+					local_probability /= ((double) (total - NBJudgeHashList.hashes[BSRet].users[j].data.count) / (double) (total)); // compute and divide by P(w|not C)
+					if(local_probability < MAGIC_MINIMUM) local_probability = MAGIC_MINIMUM;
+					else if(local_probability > 1) local_probability = 1;
+					local_probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathematically accurate, but it conserves bits
+
+					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= local_probability;
+
+					// Catch missing at the end or in between
+					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
+					{
+						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
+					}
+					else nextReal = NBCategories.used;
+					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
+					{
+//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
+						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
+					}
+				}
+			}
+			processed++;
+			// Do bit conservation by occasionally maximizing values
+			if(processed == KEYS_PROCESS_BEFORE_RESCALE)
+			// This used to be if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
+			// It has been changed to do a simple compare instead of a division and compare.
+			{
+				// Find class with highest naiveBayesResult
+				for (cls = 0; cls < NBCategories.used; cls++)
+				{
+					// If we are over DBL_MAX reset to DBL_MAX.
+					// Doing this only every so many processed keys
+					// makes this not be perfectly accurate, but it is worth
+					// the saved cycles.
+					// If this turns out not to be enough, we only need to check
+					// this above when we actually find a key in the category in question.
+					// Missing values will always shrink the value, not grow it.
+					if (categories[cls].naiveBayesResult > DBL_MAX)
+					{
+						categories[cls].naiveBayesResult = DBL_MAX;
+						bestseen = cls;
+					}
+					// If we are the bestseen, record it.
+					else if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
+					{
+						bestseen = cls; // are we the best
+					}
+				}
+				// Compute scale
+				scale = BAYES_MAXIMUM / categories[bestseen].naiveBayesResult;
+				if(scale > DBL_MAX) scale = BAYES_MAXIMUM;
+
+				// Maximize values for bit conservation
+				for (cls = 0; cls < NBCategories.used; cls++)
+				{
+					categories[cls].naiveBayesResult *= scale;
+				}
+				total_processed += processed;
+				processed = 0;
+			}
+		}
+	}
+	total_processed += processed;
+//	ci_debug_printf(10, "Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
+
+/*	for(i = 0; i < NBCategories.used; i++)
+	{
+		ci_debug_printf(10, "Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
+	} */
+
+	if(total_processed && total_processed < MINIMUM_MATCHES && toClassify->used > 20)
+		correction_factor = MINIMUM_MATCHES / total_processed;
+
+	data = doBayesClassify(categories, toClassify, correction_factor);
+
+	// cleanup
+	free(categories);
+	return data;
+}
+
 static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 {
 	return header->records;
@@ -510,6 +812,10 @@ char *address;
 	munmap(address, size);
 #endif
 	close(fbc_file);
+
+#ifdef CLASSIFYWITHRADIX
+	initRadix(&NBJudgeHashList);
+#endif
 	return 1;
 }
 
@@ -719,6 +1025,9 @@ char *address;
 	munmap(address, size);
 #endif
 	close(fbc_file);
+#ifdef CLASSIFYWITHRADIX
+	initRadix(&NBJudgeHashList);
+#endif
 	return 0;
 }
 
@@ -764,261 +1073,4 @@ char *cat_name;
 
 	chdir(old_dir);
 	return 1;
-}
-
-static HTMLClassification doBayesClassify(FBCJudge *categories, HashList *unknown, double correction_factor)
-{
-double total_probability = DBL_MIN;
-double remainder = DBL_MIN;
-
-uint32_t cls;
-
-uint32_t bestseen = 0, secondbest = 1;
-
-const double DBL_MAX_SPEC = DBL_MAX / (MINIMUM_MATCHES + 1);
-
-HTMLClassification myReply = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
-
-	// Re-normalize Result to probability
-	do {
-		if(total_probability > DBL_MAX_SPEC) // reset total_probability so that we are not overflowing
-		{
-			total_probability = DBL_MIN;
-			for (cls = 0; cls < NBCategories.used; cls++)
-			{
-				categories[cls].naiveBayesResult /= 100;
-			}
-		}
-
-		for (cls = 0; cls < NBCategories.used; cls++)
-		{
-			// Avoid divide by zero and keep value small, for log10(remainder) below
-			if (categories[cls].naiveBayesResult > DBL_MAX)
-				categories[cls].naiveBayesResult = DBL_MAX;
-			else if (categories[cls].naiveBayesResult < DBL_MIN)
-				categories[cls].naiveBayesResult = DBL_MIN;
-			total_probability += categories[cls].naiveBayesResult;
-		}
-	} while (total_probability > DBL_MAX_SPEC); // Do until we are a valid double number
-
-	if(correction_factor > 1.0f)
-		total_probability *= correction_factor;
-
-	// Find the best and second best categories
-	for (cls = 0; cls < NBCategories.used; cls++) // Order of instructions in this loop matters!
-	{
-		categories[cls].naiveBayesResult = categories[cls].naiveBayesResult / total_probability; // fix-up probability
-		if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
-		{
-			secondbest = bestseen;
-			bestseen = cls; // are we the best
-		}
-		else if (cls != bestseen && categories[cls].naiveBayesResult > categories[secondbest].naiveBayesResult) secondbest = cls;
-		remainder += categories[cls].naiveBayesResult; // add up remainder
-	}
-
-	remainder -= categories[bestseen].naiveBayesResult; // fix-up remainder
-	if(remainder < DBL_MIN) remainder = DBL_MIN;
-
-	// Setup data for second best category, if applicable
-	for(int i = 0; i < number_secondaries; i++)
-	{
-		if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH)
-		{
-			remainder -= categories[secondbest].naiveBayesResult;
-			if(remainder < DBL_MIN) remainder = DBL_MIN;
-			myReply.secondary_probability = categories[secondbest].naiveBayesResult;
-			myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
-			myReply.secondary_name = NBCategories.categories[secondbest].name;
-			i = number_secondaries;
-		}
-		else if(secondary_compares[i].bidirectional == 1)
-		{
-			if(tre_regexec(&secondary_compares[i].primary_regex, NBCategories.categories[secondbest].name, 0, NULL, 0) != REG_NOMATCH && tre_regexec(&secondary_compares[i].secondary_regex, NBCategories.categories[bestseen].name, 0, NULL, 0) != REG_NOMATCH)
-			{
-				remainder -= categories[secondbest].naiveBayesResult;
-				if(remainder < DBL_MIN) remainder = DBL_MIN;
-				myReply.secondary_probability = categories[secondbest].naiveBayesResult;
-				myReply.secondary_probScaled = 10 * (log10(categories[secondbest].naiveBayesResult) - log10(remainder));
-				myReply.secondary_name = NBCategories.categories[secondbest].name;
-				i = number_secondaries;
-			}
-		}
-	}
-
-/*	for (cls = 0; cls < NBCategories.used; cls++)
-	{
-		ci_debug_printf(10, "Category %s Result %G\n", NBCategories.categories[cls].name, categories[cls].naiveBayesResult);
-	}*/
-
-	myReply.primary_probability = categories[bestseen].naiveBayesResult;
-	myReply.primary_probScaled = 10 * (log10(categories[bestseen].naiveBayesResult) - log10(remainder));
-	myReply.primary_name = NBCategories.categories[bestseen].name;
-
-return myReply;
-}
-
-HTMLClassification doBayesPrepandClassify(HashList *toClassify)
-{
-uint32_t i, j, processed = 0, total_processed = 0;
-uint16_t missing, nextReal;
-FBCJudge *categories = NULL;
-int64_t BSRet = -1;
-HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
-uint64_t total;
-double local_probability;
-// Variables for scaling
-uint32_t cls, bestseen = 0;
-double scale = 0;
-double correction_factor = 1;
-const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum, but try to avoid overflow
-
-	if(NBCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
-	else categories = malloc(NBCategories.used * sizeof(FBCJudge));
-
-	// Set result to 1 so we don't have 0's as all answers
-	for(i = 0; i < NBCategories.used; i++)
-	{
-		categories[i].naiveBayesResult = BAYES_MAXIMUM;
-	}
-
-	// do bayes multiplication
-	for(i = 0; i < toClassify->used; i++)
-	{
-		if((BSRet=FBCBinarySearch(&NBJudgeHashList, 0, NBJudgeHashList.used-1, toClassify->hashes[i])) >= 0)
-		{
-//			ci_debug_printf(10, "Found %"PRIX64"\n", toClassify->hashes[i]);
-			if(NBJudgeHashList.FBC_LOCKED)
-			{
-				for(j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
-				{
-					/*BAYES*/
-					if(j == 0) // Catch missing at the beginning
-					{
-						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
-						for(missing = 0; missing < nextReal; missing++)
-						{
-//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
-							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
-						}
-					}
-
-//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used - 1);
-
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= NBJudgeHashList.hashes[BSRet].users[j].data.probability;
-
-					// Catch missing at the end or in between
-					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
-					{
-						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
-					}
-					else nextReal = NBCategories.used;
-					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
-					{
-//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
-						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
-					}
-				}
-			}
-			else
-			{
-				/*BAYES*/
-				total = MARKOV_C2 + 1;
-				for(uint_least16_t k = 0; k < NBJudgeHashList.hashes[BSRet].used; k++)
-				{
-					total += NBJudgeHashList.hashes[BSRet].users[k].data.count;
-				}
-
-				for(uint_least16_t j = 0; j < NBJudgeHashList.hashes[BSRet].used; j++)
-				{
-					if(j == 0) // Catch missing at the beginning
-					{
-						nextReal = NBJudgeHashList.hashes[BSRet].users[j].category;
-						for(missing = 0; missing < nextReal; missing++)
-						{
-//							ci_debug_printf(10, "Last: (empty) Next: %"PRIu16" Missing: %"PRIu16"\n", nextReal, missing);
-							categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
-						}
-					}
-
-//					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
-
-					local_probability =  ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
-					local_probability /= ((double) (total - NBJudgeHashList.hashes[BSRet].users[j].data.count) / (double) (total)); // compute and divide by P(w|not C)
-					if(local_probability < MAGIC_MINIMUM) local_probability = MAGIC_MINIMUM;
-					else if(local_probability > 1) local_probability = 1;
-					local_probability += MAGIC_CONSERVE_OFFSET; // Not strictly mathematically accurate, but it conserves bits
-
-					categories[NBJudgeHashList.hashes[BSRet].users[j].category].naiveBayesResult *= local_probability;
-
-					// Catch missing at the end or in between
-					if(j + 1 < NBJudgeHashList.hashes[BSRet].used)
-					{
-						nextReal = NBJudgeHashList.hashes[BSRet].users[j + 1].category;
-					}
-					else nextReal = NBCategories.used;
-					for(missing = NBJudgeHashList.hashes[BSRet].users[j].category + 1; missing < nextReal; missing++)
-					{
-//						ci_debug_printf(10, "Last: %"PRIu16" Next: %"PRIu16" Missing: %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, nextReal, missing);
-						categories[missing].naiveBayesResult *= MAGIC_MINIMUM;
-					}
-				}
-			}
-			processed++;
-			// Do bit conservation by occasionally maximizing values
-			if(processed == KEYS_PROCESS_BEFORE_RESCALE)
-			// This used to be if(processed % KEYS_PROCESS_BEFORE_RESCALE == 0)
-			// It has been changed to do a simple compare instead of a division and compare.
-			{
-				// Find class with highest naiveBayesResult
-				for (cls = 0; cls < NBCategories.used; cls++)
-				{
-					// If we are over DBL_MAX reset to DBL_MAX.
-					// Doing this only every so many processed keys
-					// makes this not be perfectly accurate, but it is worth
-					// the saved cycles.
-					// If this turns out not to be enough, we only need to check
-					// this above when we actually find a key in the category in question.
-					// Missing values will always shrink the value, not grow it.
-					if (categories[cls].naiveBayesResult > DBL_MAX)
-					{
-						categories[cls].naiveBayesResult = DBL_MAX;
-						bestseen = cls;
-					}
-					// If we are the bestseen, record it.
-					else if (categories[cls].naiveBayesResult > categories[bestseen].naiveBayesResult)
-					{
-						bestseen = cls; // are we the best
-					}
-				}
-				// Compute scale
-				scale = BAYES_MAXIMUM / categories[bestseen].naiveBayesResult;
-				if(scale > DBL_MAX) scale = BAYES_MAXIMUM;
-
-				// Maximize values for bit conservation
-				for (cls = 0; cls < NBCategories.used; cls++)
-				{
-					categories[cls].naiveBayesResult *= scale;
-				}
-				total_processed += processed;
-				processed = 0;
-			}
-		}
-	}
-	total_processed += processed;
-//	ci_debug_printf(10, "Found %"PRIu16" out of %"PRIu16" items\n", z, toClassify->used);
-
-/*	for(i = 0; i < NBCategories.used; i++)
-	{
-		ci_debug_printf(10, "Here Category %s Result %G\n", NBCategories.categories[i].name, categories[i].naiveBayesResult);
-	} */
-
-	if(total_processed && total_processed < MINIMUM_MATCHES && toClassify->used > 20)
-		correction_factor = MINIMUM_MATCHES / total_processed;
-
-	data = doBayesClassify(categories, toClassify, correction_factor);
-
-	// cleanup
-	free(categories);
-	return data;
 }

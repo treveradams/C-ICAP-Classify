@@ -385,6 +385,7 @@ process_entry *temp;
 		handle_error("calloc");
 
 	loadMassBayesCategories(fnb_dir);
+	optimizeFBC(&NBJudgeHashList);
 
 	for(i = 0; i < FILES_PER_NEED; i++)
 	{
