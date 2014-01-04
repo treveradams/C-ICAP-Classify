@@ -984,7 +984,7 @@ int wait_status;
 	if(classification_type == EXTERNAL_TEXT_PIPE)
 	{
 		maxwrite = CI_MAX_PATH;
-		strncat(CALL_OUT, externalclassifytypes[data->file_type].text_program, maxwrite);
+		strncpy(CALL_OUT, externalclassifytypes[data->file_type].text_program, maxwrite);
 		CALL_OUT[CI_MAX_PATH] = '\0';
 		maxwrite -= strlen(CALL_OUT);
 		while(externalclassifytypes[data->file_type].text_args[i] != NULL)
@@ -1039,6 +1039,7 @@ int wait_status;
 			localargs[i + 1] = NULL;
 			localargs[0] = myStrDup(externalclassifytypes[data->file_type].text_program);
 			ret = execv(externalclassifytypes[data->file_type].text_program, localargs);
+			free(localargs);
 		}
 		else if(child_pid < 0)
 		{

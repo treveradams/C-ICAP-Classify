@@ -493,7 +493,7 @@ char imageFILENAME[CI_MAX_PATH + 1];
 	data->disk_body->readpos = 0;
 	close(data->disk_body->fd);
 	unlink(data->disk_body->filename);
-	if(strstr(imageFILENAME, "JPEG"))
+	if(strstr(ci_http_response_get_header(mySession->req, "Content-Type"), "jpeg"))
 	{
 		snprintf(imageFILENAME, CI_MAX_PATH, "%s.jpg", data->disk_body->filename);
 		imageFILENAME[CI_MAX_PATH] = '\0';
@@ -730,7 +730,6 @@ uint16_t current_category;
 	mySession->detected = NULL;
 	mySession->rightImage = NULL;
 	mySession->featuresDetected = 0;
-	mySession->detected = NULL;
 	mySession->lstorage = NULL;
 	mySession->dstorage = NULL;
 
@@ -947,8 +946,6 @@ uint16_t current_category;
 
 	mySession.origImage = NULL;
 
-	data = ci_service_data(req);
-
 	snprintf(CALL_OUT, CI_MAX_PATH, "%s/EXT_IMAGE-XXXXXX", CLASSIFY_TMP_DIR);
 	data->external_body = malloc(sizeof(ci_simple_file_t));
 	strncpy(data->external_body->filename, mkdtemp(CALL_OUT), CI_MAX_PATH);
@@ -971,6 +968,7 @@ uint16_t current_category;
 		localargs[i + 1] = NULL;
 		localargs[0] = myStrDup(externalclassifytypes[data->file_type].image_program);
 		ret = execv(externalclassifytypes[data->file_type].image_program, localargs);
+		free(localargs);
 	}
 	else if(child_pid < 0)
 	{
@@ -997,6 +995,7 @@ uint16_t current_category;
 			deinitImageSession(&mySession);
 			unlink_directory(data->external_body->filename);
 			free(data->external_body);
+			closedir(dirp);
 			return -1;
 		}
 

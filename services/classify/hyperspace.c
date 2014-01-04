@@ -761,11 +761,12 @@ return myReply;
 HTMLClassification doHSPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
-uint32_t **categories = malloc(HSCategories.used * sizeof(uint32_t *));
+uint32_t **categories = NULL;
 int64_t BSRet = -1;
 HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
 
 	if(HSCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run
+	else categories = malloc(HSCategories.used * sizeof(uint32_t *));
 
 	// alloc data for document hash match stats
 	for(i = 0; i < HSCategories.used; i++)

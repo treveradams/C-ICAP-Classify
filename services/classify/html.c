@@ -527,7 +527,6 @@ regmatch_t currencyMatch[5];
 myRegmatch_t *current = myHead->head;
 int len;
 
-	current = myHead->head;
 	while(current != NULL)
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
@@ -586,7 +585,6 @@ int xi = 0;
 uint32_t tempUTF32CHAR;
 #endif
 
-	current = myHead->head;
 	while(current != NULL) // kill scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
 	{
 		myData= (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
@@ -902,7 +900,6 @@ UBreakIterator *bi = NULL;
 uint32_t wordboundary;
 int ubp_only = 0; // Input has no UNICODE supplemental characters
 
-	current = myHead->head;
 	if(current->rm_eo < 2)
 	{
 		ci_debug_printf(3, "computeOSBHashes: text is too small to bother with (%d)\n", current->rm_eo);
@@ -960,7 +957,7 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 #ifdef TRAINER
 	while(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0) pos++;
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
-	ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
+	ci_debug_printf(10, "Skipping hashing of DONTTRAINME with \"%.*ls\"\n", matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so);
 #endif
 #endif
 	lookup3_hashfunction((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
