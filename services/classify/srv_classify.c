@@ -522,7 +522,7 @@ void *srvclassify_init_request_data(ci_request_t * req)
 
      preview_size = ci_req_preview_size(req);
 
-     if (req->args) {
+     if (strlen(req->args) > 0) {
           ci_debug_printf(5, "service arguments:%s\n", req->args);
      }
      if (ci_req_hasbody(req)) {
@@ -546,7 +546,7 @@ void *srvclassify_init_request_data(ci_request_t * req)
           data->args.sizelimit = 1;
           data->args.mode = 0;
 
-          if (req->args) {
+          if (strlen(req->args) > 0) {
                ci_debug_printf(5, "service arguments:%s\n", req->args);
                srvclassify_parse_args(data, req->args);
           }
@@ -700,7 +700,7 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
                memBodyToDiskBody(req);
                return ci_simple_file_write(data->disk_body, buf, len, iseof);
           }
-          else return ci_membuf_write(data->mem_body, buf, len, iseof);
+          return ci_membuf_write(data->mem_body, buf, len, iseof);
       }
       else {
           /* FIXME the following should just process what is had at the moment... possible? */
@@ -718,7 +718,7 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
                }
           }
           /* anything where we are not in over max object size, simply write and exit */
-          else return ci_simple_file_write(data->disk_body, buf, len, iseof);
+          return ci_simple_file_write(data->disk_body, buf, len, iseof);
      }
 }
 
@@ -1003,6 +1003,8 @@ int wait_status;
 		if (!(conversion_in = popen(CALL_OUT, "r"))) {
 			// Do error handling
 			ci_debug_printf(3, "categorize_external_text: failed to popen\n");
+			ci_membuf_free(tempbody);
+			return -1;
 		}
 
 		/* read the output of of conversion, one line at a time */
@@ -1048,12 +1050,16 @@ int wait_status;
 		}
 		else { // We are the original
 			waitpid(child_pid, &wait_status, 0);
-			data->external_body->fd = open(data->external_body->filename, O_RDWR | O_EXCL, F_PERM);
-			fstat(data->external_body->fd, &stat_buf);
-			data->external_body->endpos = stat_buf.st_size;
-			while((ret = read(data->external_body->fd, buff, 512)) > 0)
+			if((data->external_body->fd = open(data->external_body->filename, O_RDWR | O_EXCL, F_PERM)))
 			{
-				ci_membuf_write(tempbody, buff, ret, 0);
+				if(fstat(data->external_body->fd, &stat_buf) == 0)
+				{
+					data->external_body->endpos = stat_buf.st_size;
+					while((ret = read(data->external_body->fd, buff, 512)) > 0)
+					{
+						ci_membuf_write(tempbody, buff, ret, 0);
+					}
+				}
 			}
 			ci_simple_file_destroy(data->external_body);
 		}
@@ -1715,7 +1721,7 @@ void srvclassify_parse_args(classify_req_data_t * data, char *args)
 int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
-    if (! data->disk_body->filename)
+    if (! data->disk_body || strlen(data->disk_body->filename) <= 0)
         return 0;
 
     return snprintf(buf, len, "%s", data->disk_body->filename);
@@ -1724,7 +1730,7 @@ int fmt_srv_classify_source(ci_request_t *req, char *buf, int len, const char *p
 int fmt_srv_classify_destination(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
-    if (! data->external_body->filename)
+    if (! data->external_body || strlen(data->external_body->filename) <= 0)
         return 0;
 
     return snprintf(buf, len, "%s", data->external_body->filename);
@@ -1810,6 +1816,7 @@ int cfg_TmpDir(const char *directive, const char **argv, void *setdata)
 
 int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata)
 {
+int ret = 0;
      if (argv == NULL || argv[0] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
           ci_debug_printf(1, "Format: %s LOCATION_OF_FHS_PRELOAD_FILE\n", directive);
@@ -1818,11 +1825,11 @@ int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata)
      ci_debug_printf(1, "BE PATIENT -- Preloading Text Classification File: %s\n", argv[0]);
      ci_thread_rwlock_wrlock(&textclassify_rwlock);
      if(isHyperSpace(argv[0]))
-          preLoadHyperSpace(argv[0]);
+          ret = preLoadHyperSpace(argv[0]);
      else if(isBayes(argv[0]))
-          preLoadBayes(argv[0]);
+          ret = preLoadBayes(argv[0]);
      ci_thread_rwlock_unlock(&textclassify_rwlock);
-     return 1;
+     return ret;
 }
 
 int cfg_AddTextCategory(const char *directive, const char **argv, void *setdata)

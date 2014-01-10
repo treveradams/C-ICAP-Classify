@@ -55,25 +55,32 @@ wchar_t *makeData(char *input_file)
 {
 int data=0;
 struct stat stat_buf;
-char *tempData=NULL;
-wchar_t *myData=NULL;
+char *tempData = NULL;
+wchar_t *myData = NULL;
 int32_t realLen;
 int32_t status;
-	data = open(input_file, O_RDONLY);
-	fstat(data, &stat_buf);
-	tempData = malloc(stat_buf.st_size + 1);
-	if(tempData == NULL) exit(-1);
-	do {
-		status = read(data, tempData, stat_buf.st_size);
-                if(status < stat_buf.st_size) lseek64(data, -status, SEEK_CUR);
-	} while (status >=0 && status < stat_buf.st_size);
-	close(data);
-	tempData[stat_buf.st_size] = '\0';
-	myData = malloc((stat_buf.st_size + 1) * UTF32_CHAR_SIZE);
-	realLen = mbstowcs(myData, tempData, stat_buf.st_size);
-	if(realLen!=-1) myData[realLen] = L'\0';
-	else ci_debug_printf(1, "*** Bad character data in %s\n", input_file);
-	free(tempData);
+	if((data = open(input_file, O_RDONLY)) >= 0)
+	{
+		if(fstat(data, &stat_buf) == 0)
+		{
+			tempData = malloc(stat_buf.st_size + 1);
+			if(tempData == NULL) exit(-1);
+			do {
+				status = read(data, tempData, stat_buf.st_size);
+				if(status < stat_buf.st_size) lseek64(data, -status, SEEK_CUR);
+			} while (status >=0 && status < stat_buf.st_size);
+			close(data);
+			tempData[stat_buf.st_size] = '\0';
+			myData = malloc((stat_buf.st_size + 1) * UTF32_CHAR_SIZE);
+			realLen = mbstowcs(myData, tempData, stat_buf.st_size);
+			if(realLen!=-1) myData[realLen] = L'\0';
+			else {
+				ci_debug_printf(1, "*** Bad character data in %s, ignoring file\n", input_file);
+				myData[0] = L'\0';
+			}
+			free(tempData);
+		}
+	}
 	return myData;
 }
 

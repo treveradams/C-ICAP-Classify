@@ -273,8 +273,8 @@ int i;
 
 int openFBC(const char *filename, FBC_HEADERv1 *header, int forWriting)
 {
-int file=0;
-	file=open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
+int file = 0;
+	file = open(filename, (forWriting ? (O_CREAT | O_RDWR) : O_RDONLY), S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
 	if(verifyFBC(file, header) < 0)
 	{
 #ifdef TRAINER
@@ -284,8 +284,13 @@ int file=0;
 //			ci_debug_printf(10, "Created FastBayesClassifier file: %s\n", filename);
 		}
 		else
+		{
 #endif
+			if(file >= 0) close(file);
 			return -1;
+#ifdef TRAINER
+		}
+#endif
 	}
 	return file;
 }
@@ -296,7 +301,7 @@ FBC_HEADERv1 header;
 int file;
 
 	file = openFBC(filename, &header, 0);
-	if(file > 0)
+	if(file >= 0)
 	{
 		close(file);
 		return 1;
@@ -825,7 +830,7 @@ uint32_t i, z, shortcut = 0, offsetPos = 3, handled = 0;
 uint16_t used;
 int64_t BSRet = -1;
 int64_t offsets[3];
-FBC_HEADERv1 header;
+// FBC_HEADERv1 header; With fix below, this doesn't seem to be needed anymore. FIXME BY REMOVING
 uint32_t startHashes = NBJudgeHashList.used;
 
         if(NBJudgeHashList.FBC_LOCKED) return -1; // We cannot load if we are optimized
@@ -835,7 +840,7 @@ uint32_t startHashes = NBJudgeHashList.used;
 		NBCategories.slots += BAYES_CATEGORY_INC;
 		NBCategories.categories = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
 	}
-	NBCategories.categories[NBCategories.used].totalFeatures = header.records;
+	NBCategories.categories[NBCategories.used].totalFeatures += docHashes->used;
 
 	if(NBJudgeHashList.used + docHashes->used >= NBJudgeHashList.slots)
 	{
@@ -1028,7 +1033,7 @@ char *address;
 #ifdef CLASSIFYWITHRADIX
 	initRadix(&NBJudgeHashList);
 #endif
-	return 0;
+	return 1;
 }
 
 int loadMassBayesCategories(const char *fbc_dir)

@@ -104,6 +104,7 @@ return 0; // Equal
 static int verifyFHS(int fhs_file, FHS_HEADERv1 *header)
 {
 int offsetFixup;
+	if(fhs_file) return -999;
 	lseek64(fhs_file, 0, SEEK_SET);
 	do {
 		offsetFixup = read(fhs_file, &header->ID, 3);
@@ -209,6 +210,7 @@ int file=0;
 		}
 		else
 #endif
+			if(file >= 0) close(file);
 			return -1;
 	}
 	return file;
@@ -220,7 +222,7 @@ FHS_HEADERv1 header;
 int file;
 
 	file = openFHS(filename, &header, 0);
-	if(file > 0)
+	if(file >= 0)
 	{
 		close(file);
 		return 1;
@@ -354,9 +356,10 @@ int64_t mid=0;
 static uint32_t featuresInCategory(int fhs_file, FHS_HEADERv1 *header)
 {
 struct stat stat_buf;
-	fstat(fhs_file, &stat_buf);
-	//(stat_buf.st_size - FHS_HEADERv1_TOTAL_SIZE - (header->records * sizeof(FHS_v1_QTY_SIZE))) / FHS_v1_HASH_SIZE + 10); -- for some reason this isn't enough!
-        return stat_buf.st_size / FHS_v1_HASH_SIZE;
+	if(fstat(fhs_file, &stat_buf) == 0)
+		//(stat_buf.st_size - FHS_HEADERv1_TOTAL_SIZE - (header->records * sizeof(FHS_v1_QTY_SIZE))) / FHS_v1_HASH_SIZE + 10); -- for some reason this isn't enough!
+	        return stat_buf.st_size / FHS_v1_HASH_SIZE;
+	else return 0;
 }
 
 HTMLFeature *loadDocument(const char *fhs_name, const char *cat_name, int fhs_file, uint16_t numHashes)
@@ -558,6 +561,7 @@ uint16_t numHashes=0;
 					ci_debug_printf(1, "Key: %"PRIX64" out of order. Preload file %s is corrupted!!!\n" \
 								"Aborting preload as is.\n", docHashes[j], fhs_name);
 					closeDocument(docHashes);
+					close(fhs_file);
 					return -1;
 					break;
 			}
@@ -571,7 +575,7 @@ uint16_t numHashes=0;
 		HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
 	}
 	close(fhs_file);
-	return 0;
+	return 1;
 }
 
 int loadMassHSCategories(const char *fhs_dir)

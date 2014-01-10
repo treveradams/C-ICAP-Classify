@@ -328,24 +328,27 @@ uint16_t current_category;
 	// Loop through categories
 	for(current_category = 0; current_category < num_image_categories; current_category++) {
 		current = &mySession->detected[current_category];
-	        // Loop the number of detected objects
-	        for(i = 0; i < (current->detected ? current->detected->total : 0); i++ )
+		if(current->detected)
 		{
-			// Reset rectangles to original size
-			CvRect* r = (CvRect*)cvGetSeqElem( current->detected, i );
-			r->x = (int)(r->x * mySession->scale);
-			r->y = (int)(r->y * mySession->scale);
-			r->height = (int)(r->height * mySession->scale);
-			r->width = (int)(r->width * mySession->scale);
+			// Loop the number of detected objects
+			for(i = 0; i < current->detected->total; i++ )
+			{
+				// Reset rectangles to original size
+				CvRect* r = (CvRect*)cvGetSeqElem( current->detected, i );
+				r->x = (int)(r->x * mySession->scale);
+				r->y = (int)(r->y * mySession->scale);
+				r->height = (int)(r->height * mySession->scale);
+				r->width = (int)(r->width * mySession->scale);
+			}
+			// add each category to header
+			if(current->detected->total)
+			{
+				char *oldHeader = myStrDup(header);
+				snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (current->detected->total > 10 ? 10 : current->detected->total), rating);
+				free(oldHeader);
+			}
+			mySession->featuresDetected += current->detected->total;
 		}
-		// add each category to header
-		if(current->detected->total)
-		{
-			char *oldHeader = myStrDup(header);
-			snprintf(header, myMAX_HEADER, "%s %s(%.*s)", oldHeader, current->category->name, (current->detected->total > 10 ? 10 : current->detected->total), rating);
-			free(oldHeader);
-		}
-		mySession->featuresDetected += current->detected->total;
 	}
 	// add IMAGE-CATEGORIES header
 	header[myMAX_HEADER] = '\0';
@@ -510,8 +513,10 @@ char imageFILENAME[CI_MAX_PATH + 1];
 	snprintf(data->disk_body->filename, CI_FILENAME_LEN + 1, "%s", imageFILENAME);
 	data->disk_body->filename[CI_FILENAME_LEN] = '\0';
 	data->disk_body->fd = open(data->disk_body->filename, O_RDWR | O_EXCL, F_PERM);
-	fstat(data->disk_body->fd, &stat_buf);
-	data->disk_body->bytes_in = data->disk_body->endpos = stat_buf.st_size;
+	if(fstat(data->disk_body->fd, &stat_buf) == 0)
+		data->disk_body->bytes_in = data->disk_body->endpos = stat_buf.st_size;
+	else
+		data->disk_body->bytes_in = data->disk_body->endpos = 0;
 	// Make new content length header
 	ci_http_response_remove_header(mySession->req, "Content-Length");
 	snprintf(imageFILENAME, CI_MAX_PATH, "Content-Length: %ld", (long) data->disk_body->endpos);
@@ -641,6 +646,7 @@ int ret = 1;
 	if(new) imageCategories = new;
 	else {
 		ci_debug_printf(1, "initImageCategory: Couldn't allocate more memory for new categories\n");
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
 		return 0;
 	}
 
@@ -666,7 +672,7 @@ int ret = 1;
 			if( !imageCategories[num_image_categories].cascade_array[copies].cascade )
 			{
 				ci_debug_printf(3, "srv_classify_image: Failed to load cascade for %s\n", imageCategories[num_image_categories].name);
-				imageCategories = realloc(imageCategories, sizeof(ImageCategory) * num_image_categories);
+				imageCategories = realloc(imageCategories, sizeof(ImageCategory) * (num_image_categories + 1));
 				ret = 0;
 			}
 			else imageCategories[num_image_categories].cascade_array[copies].next = &imageCategories[num_image_categories].cascade_array[copies + 1];
@@ -737,6 +743,7 @@ uint16_t current_category;
 	if(num_image_categories == 0)
 	{
 		ci_debug_printf(3, "srv_classify_image: No categories present. I cannot initiate session.\n");
+		ci_thread_rwlock_unlock(&imageclassify_rwlock);
 		return NO_CATEGORIES;
 	}
 
@@ -850,7 +857,7 @@ CvMat myCvMat;
     }
     else {
 	mySession.origImage = cvLoadImage(data->disk_body->filename, CV_LOAD_IMAGE_COLOR);
-        ci_debug_printf(8, "Classifying IMAGE from file (size=%d)\n", data->disk_body->endpos);
+        ci_debug_printf(8, "Classifying IMAGE from file (size=%ld)\n", data->disk_body->endpos);
     }
 
     // If Image is loaded succesfully, then:
@@ -1006,6 +1013,7 @@ uint16_t current_category;
 		if((count = ci_object_pool_alloc(IMAGEDETECTEDCOUNT_POOL)) == NULL)
 		{
 			ci_debug_printf(1, "srv_classify_image: categorize_external_image: couldn't allocate memory");
+			closedir(dirp);
 			return NO_MEMORY;
 		}		
 		for(current_category = 0; current_category < num_image_categories; current_category++)
@@ -1100,7 +1108,7 @@ uint16_t current_category;
 int fmt_srv_classify_image_source(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
-    if (! data->disk_body->filename)
+    if (! data->disk_body || strlen(data->disk_body->filename) <= 0)
         return 0;
 
     return snprintf(buf, len, "%s", data->disk_body->filename);
@@ -1109,7 +1117,7 @@ int fmt_srv_classify_image_source(ci_request_t *req, char *buf, int len, const c
 int fmt_srv_classify_image_destination_directory(ci_request_t *req, char *buf, int len, const char *param)
 {
     classify_req_data_t *data = ci_service_data(req);
-    if (! data->external_body->filename)
+    if (! data->external_body || strlen(data->external_body->filename) <= 0)
         return 0;
 
     return snprintf(buf, len, "%s/", data->external_body->filename);

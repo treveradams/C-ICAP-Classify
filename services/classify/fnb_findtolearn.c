@@ -165,7 +165,7 @@ int prehash_data_file = 0;
 	if(myHashes.used < 5)
 	{
 		prehash_data_file = 0;
-		free(myHashes.hashes);
+		if(myHashes.hashes) free(myHashes.hashes);
 	}
 #endif
 	if(prehash_data_file <= 0)
@@ -199,7 +199,7 @@ int prehash_data_file = 0;
 	}
 	free(prehash_file);
 #endif
-	free(myHashes.hashes);
+	if(myHashes.hashes) free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 	return classification;
 }
@@ -294,7 +294,7 @@ and return upper-cased copy of argv_string */
 
 static void *thread_start(void *arg)
 {
-struct thread_info *tinfo = (struct thread_info *) arg;
+//struct thread_info *tinfo = (struct thread_info *) arg;
 HTMLClassification this;
 process_entry entry;
 int new_category_correct, lowest_category_correct;

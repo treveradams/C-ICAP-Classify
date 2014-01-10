@@ -55,6 +55,13 @@ int readPREHASHES(int file, HashList *hashes_list)
 uint_least32_t qty = 0;
 int readcheck;
 
+	if(file < 0)
+	{
+		hashes_list->used = 0;
+		hashes_list->hashes = NULL;
+		hashes_list->slots = 0;
+		return -999;
+	}
 	do {
 		readcheck = read(file, &qty, PREHASH_COUNT_SIZE);
 		if(readcheck < PREHASH_COUNT_SIZE) lseek64(file, -readcheck, SEEK_CUR);

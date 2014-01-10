@@ -230,7 +230,7 @@ struct dirent *dp;
 		(void) closedir(dirp);
 #else
 struct dirent **namelist;
-uint32_t n;
+int32_t n;
 
 	n = scandir(directory, &namelist, 0, alphasort);
 	if (n < 0)
@@ -297,7 +297,7 @@ and return upper-cased copy of argv_string */
 
 static void *thread_start(void *arg)
 {
-struct thread_info *tinfo = (struct thread_info *) arg;
+//struct thread_info *tinfo = (struct thread_info *) arg;
 process_entry entry;
 
 	while(!shutdown || file_available)
@@ -377,7 +377,7 @@ process_entry *temp;
 
 	fbc_file = openFBC(fbc_out_file, &header, 1);
 	if(writeFBCHashes(fbc_file, &header, &NBJudgeHashList, 0, zero_point) == -1)
-		printf("MAJOR PROBLEM: Input file: %s had no hashed data!\n", learn_in_file);
+		ci_debug_printf(1, "MAJOR PROBLEM: Input file: %s had no hashed data!\n", learn_in_file);
 	close(fbc_file);
 
 	if(learn_in_file) free(learn_in_file);

@@ -68,7 +68,7 @@ process_entry *file_names = NULL;
 process_entry *busy_file_names = NULL;
 
 HTMLClassification lowest = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
-char lowest_file[PATH_MAX] = "\0";
+char lowest_file[PATH_MAX + 1] = "\0";
 
 int readArguments(int argc, char *argv[])
 {
@@ -165,7 +165,7 @@ int prehash_data_file = 0;
 	if(myHashes.used < 5)
 	{
 		prehash_data_file = 0;
-		free(myHashes.hashes);
+		if(myHashes.hashes) free(myHashes.hashes);
 	}
 #endif
 	if(prehash_data_file <= 0)
@@ -199,7 +199,7 @@ int prehash_data_file = 0;
 	}
 	free(prehash_file);
 #endif
-	free(myHashes.hashes);
+	if(myHashes.hashes) free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 	return classification;
 }
@@ -294,7 +294,7 @@ and return upper-cased copy of argv_string */
 
 static void *thread_start(void *arg)
 {
-struct thread_info *tinfo = (struct thread_info *) arg;
+//struct thread_info *tinfo = (struct thread_info *) arg;
 HTMLClassification this;
 process_entry entry;
 int new_category_correct, lowest_category_correct;
@@ -336,14 +336,14 @@ int new_category_correct, lowest_category_correct;
 				// this is NOT the correct category
 				if(!new_category_correct)
 				{
-					strcpy(lowest_file, entry.file_name);
+					strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
 					lowest = this;
 //					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 				}
 				// this is the correct category, but a lower score
 				else if(lowest.primary_probScaled > this.primary_probScaled)
 				{
-					strcpy(lowest_file, entry.file_name);
+					strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
 					lowest = this;
 //					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 				}
@@ -352,7 +352,7 @@ int new_category_correct, lowest_category_correct;
 				// this is NOT the correct category and has a higher score (which is further from the right category)
 				if(!new_category_correct && lowest.primary_probScaled < this.primary_probScaled)
 				{
-					strcpy(lowest_file, entry.file_name);
+					strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
 					lowest = this;
 //					ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
 				}

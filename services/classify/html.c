@@ -563,10 +563,9 @@ int ret;
 	ret = wcsncmp(htmlentities[mid].name, key, len);
 	if(ret == 0 && wcslen(htmlentities[mid].name) > len) ret = 1;
 	if(ret > 0) return findEntityBS(start, mid-1, key, len);
-	if(ret < 0) return findEntityBS(mid+1, end, key, len);
-	if(ret == 0) return mid;
-
-	return -1; // This should never be reached
+	else if(ret < 0) return findEntityBS(mid+1, end, key, len);
+	/*else if(ret == 0)*/
+	else return mid;
 }
 
 
