@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2012 Trever L. Adams
+ *  Copyright (C) 2008-2014 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -63,7 +63,7 @@
 const uint32_t LEAD_OFFSET = 0xD800 - (0x10000 >> 10); // For decimal and hexadecimal entity conversion to wchar_t
 #endif
 
-regex_t htmlFinder, superFinder, commentFinder, imageFinder, title1, title2, alt1, alt2;
+regex_t htmlFinder, superFinder, commentFinder, imageFinder, title1, alt1;
 regex_t metaFinder, metaDescription, metaKeyword, metaContent, currencyFinder;
 regex_t headFinder, charsetFinder;
 regex_t entityFinder, numericentityFinder;
@@ -71,6 +71,8 @@ regex_t insaneFinder;
 
 secondaries_t *secondary_compares = NULL;
 int number_secondaries = 0;
+
+UErrorCode UError;
 
 static int entity_compare(void const *a, void const *b)
 {
@@ -122,7 +124,6 @@ uint32_t i = 1, j = 0;
 
 void initHTML(void)
 {
-UErrorCode UError;
 	compileRegexes();
 	qsort(htmlentities, sizeof(htmlentities) / sizeof(htmlentities[0]) - 1, sizeof(_htmlentity), &entity_compare );
 	u_init(&UError);
@@ -152,25 +153,18 @@ wchar_t myRegex[PATH_MAX+1] = L"\0";
 	myRegex[PATH_MAX] = L'\0';
 	tre_regwcomp(&currencyFinder, myRegex, REG_EXTENDED);
 
-//	tre_regwcomp(&htmlFinder, L"(<[^>]*>([[:space:]]*))+", REG_EXTENDED);
-	tre_regwcomp(&htmlFinder, L"((/?<P[^>]*>[[:space:]]*)|(</?BR[^>]*>[[:space:]]*))|((<[^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)((</?P[^>]*>)|(</?BR[^>]*>)|[[:space:]]*))", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&htmlFinder, L"((/?<P[^>]*>[[:space:]]*)|(</?BR[^>]*>[[:space:]]*))|((<[^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)((</?P[^>]*>)|(</?BR[^>]*>)|[[:space:]]*))", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&htmlFinder, L"(</?(P|(BR))[^>]*>[[:space:]]*)|(</?!?\\w+((\\s+\\w+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)((</?(P|(BR))[^>]*>)*[[:space:]]*))*", REG_EXTENDED | REG_ICASE); // Replaced with the SLOWER one below due to nonstandard use of : and - in some element and tag names in some sites
+	tre_regwcomp(&htmlFinder, L"(</?(P|(BR))[^>]*/?>[[:space:]]*)+|(</?!?[[:alnum:]_:-]+((\\s+[[:alnum:]_:-]+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)([[:space:]]*)", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&insaneFinder, L"[^[:graph:][:space:]]+", REG_EXTENDED);
 	tre_regwcomp(&entityFinder, L"&(#?[[:alnum:]]+);", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&numericentityFinder, L"^#x?([[:xdigit:]]+$)", REG_EXTENDED | REG_ICASE);
-	// The following two commented were replaced by superFinder
-	//    <[[:space:]]*script[^>]*>.*?<[[:space:]]*/script[^>]*>
-	//    <[[:space:]]*style[^>]*>.*?<[[:space:]]*/style[^>]*>
-	tre_regwcomp(&superFinder, L"<(([[:space:]]*script[^>]*>.*?<[[:space:]]*/script[^>]*)|([[:space:]]*style[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
+	tre_regwcomp(&superFinder, L"<s(([[:space:]]*cript[^>]*>.*?<[[:space:]]*/script[^>]*)|([[:space:]]*tyle[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&commentFinder, L"<!--.*?-->", REG_EXTENDED);
-//	tre_regwcomp(&imageFinder, L"<[[:space:]]*img ([^>]*)>", REG_EXTENDED | REG_ICASE); // [^>]*(\"(<[^>]*>)*\")*|('(<[^>]*>)*')*|
 	tre_regwcomp(&imageFinder, L"<[[:space:]]*img[[:space:]]*([^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)", REG_EXTENDED | REG_ICASE);
-//	tre_regwcomp(&title1, L"title=\"([^\"]*)\"", REG_EXTENDED | REG_ICASE);
-	tre_regwcomp(&title1, L"title=((\"[^\"]+\")|('[^']+'))", REG_EXTENDED | REG_ICASE);
-	tre_regwcomp(&title2, L"title=([[:graph:]]*)", REG_EXTENDED | REG_ICASE);
-//	tre_regwcomp(&title3, L"title='([^']*)'", REG_EXTENDED | REG_ICASE);
-	tre_regwcomp(&alt1, L"alt=((\"[^\"]+\")|('[^']+'))", REG_EXTENDED | REG_ICASE);
-	tre_regwcomp(&alt2, L"alt=([[:graph:]]*)", REG_EXTENDED | REG_ICASE);
-//	tre_regwcomp(&alt3, L"alt='([^']*)'", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&title1, L"title=((\"[^\"]+\")|('[^']+'))", REG_EXTENDED | REG_ICASE);
+        tre_regwcomp(&title1, L" title=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
+        tre_regwcomp(&alt1, L" alt=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&metaFinder, L"<[[:space:]]*meta ([^>]*)>", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&metaDescription, L"description\"?(.*)", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&metaKeyword, L"keywords\"?(.*)", REG_EXTENDED | REG_ICASE);
@@ -195,9 +189,7 @@ static void freeRegexes(void)
 	tre_regfree(&commentFinder);
 	tre_regfree(&imageFinder);
 	tre_regfree(&title1);
-	tre_regfree(&title2);
 	tre_regfree(&alt1);
-	tre_regfree(&alt2);
 	tre_regfree(&metaFinder);
 	tre_regfree(&metaDescription);
 	tre_regfree(&metaKeyword);
@@ -267,7 +259,7 @@ myRegmatch_t *current = myHead->head, *newmatch;
 //					ci_debug_printf(10, "After Head Remove Next Block (max 10): %.*ls\n", newmatch->rm_eo - newmatch->rm_so > 20 ? 20: newmatch->rm_eo - newmatch->rm_so, &myHead->main_memory[newmatch->rm_so]);
 					return;
 				}
-				else ci_debug_printf(5, "regexRemove: (To remove: %d - %d, Current: %d - %d,\n", to_remove->rm_so, to_remove->rm_eo, current->rm_so, current->rm_eo);
+//				else ci_debug_printf(5, "regexRemove: (To remove: %d - %d, Current: %d - %d,\n", to_remove->rm_so, to_remove->rm_eo, current->rm_so, current->rm_eo);
 			}
 			else if(current->data != NULL) // we process private memory blocks here.
 			{
@@ -407,7 +399,7 @@ uint32_t offset;
 		newdata->data[offset] = L' ';
 		memcpy(newdata->data + offset + 1, appendMe, len * sizeof(wchar_t));
 		newdata->rm_eo = newdata->rm_eo + len + 1; // offset was newdata->rm_eo
-//		ci_debug_printf(10, "regexAppend: Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo + 1, newdata->data);
+//		ci_debug_printf(10, "regexAppend: Old Appending: %.*ls now: %.*ls\n", len, appendMe, newdata->rm_eo, newdata->data);
 	}
 	else {
 		newdata = getEmptyRegexBlock(myHead);
@@ -424,6 +416,7 @@ uint32_t offset;
 //		ci_debug_printf(10, "regexAppend: New Appending: %.*ls\n", len, appendMe);
 		newdata->rm_so = 0;
 		newdata->owns_memory = 1;
+		// This seems wrong, but it is quite correct
 		myHead->tail->next = newdata;
 		myHead->tail = newdata;
 	}
@@ -681,39 +674,37 @@ uint32_t tempUTF32CHAR;
 			singleMatch[0].rm_eo += currentOffset;
 			singleMatch[1].rm_so += currentOffset;
 			singleMatch[1].rm_eo += currentOffset;
-			if (tre_regwnexec(&title1, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
+			if(tre_regwnexec(&title1, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
 			{
-				doubleMatch[0].rm_so += singleMatch[1].rm_so;
-				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				ci_debug_printf(10, "Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
+				if(doubleMatch[2].rm_so != -1)
+				{
+					doubleMatch[2].rm_so += singleMatch[1].rm_so;
+					doubleMatch[2].rm_eo += singleMatch[1].rm_so;
+//					ci_debug_printf(10, "Image Title type 1 found: %.*ls\n", doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2, myData + doubleMatch[2].rm_so + 1);
+					regexAppend(myHead, myData + doubleMatch[2].rm_so + 1, doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2);
+				}
+				else {
+//					ci_debug_printf(10, "Image Title type 2 found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[0].rm_so);
+					regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
+				}
 			}
-			else if (tre_regwnexec(&title2, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, doubleMatch, 0) != REG_NOMATCH)
+			if(tre_regwnexec(&alt1, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
 			{
-				doubleMatch[0].rm_so += singleMatch[1].rm_so;
-				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
-			}
-			if (tre_regwnexec(&alt1, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 3, doubleMatch, 0) != REG_NOMATCH)
-			{
-				doubleMatch[0].rm_so += singleMatch[1].rm_so;
-				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
-				doubleMatch[1].rm_so += singleMatch[1].rm_so;
-				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				ci_debug_printf(10, "Alt found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
-			}
-			else if	(tre_regwnexec(&alt2, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, doubleMatch, 0) != REG_NOMATCH)
-			{
-				doubleMatch[0].rm_so += singleMatch[1].rm_so;
-				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
-				doubleMatch[1].rm_so += singleMatch[1].rm_so;
-				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
+				if(doubleMatch[2].rm_so != -1)
+				{
+					doubleMatch[2].rm_so += singleMatch[1].rm_so;
+					doubleMatch[2].rm_eo += singleMatch[1].rm_so;
+//					ci_debug_printf(10, "Alt type 1 found: %.*ls\n", doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2, myData + doubleMatch[2].rm_so + 1);
+					regexAppend(myHead, myData + doubleMatch[2].rm_so + 1, doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2);
+				}
+				else {
+//					ci_debug_printf(10, "Alt type 2 found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
+					regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
+				}
 			}
 //			ci_debug_printf(10, "Killing Image Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
 //			ci_debug_printf(10, "Image Data: %.*ls\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
@@ -735,25 +726,32 @@ uint32_t tempUTF32CHAR;
 //			ci_debug_printf(10, "Killing Uncared Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
 			if(tre_regwnexec(&title1, myData + singleMatch[0].rm_so, singleMatch[0].rm_eo - singleMatch[0].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
 			{
-				doubleMatch[0].rm_so += singleMatch[0].rm_so;
-				doubleMatch[0].rm_eo += singleMatch[0].rm_so;
 				doubleMatch[1].rm_so += singleMatch[0].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[0].rm_so;
-				regexAppend(myHead, myData + doubleMatch[1].rm_so + 1, doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2);
-//				ci_debug_printf(10, "Title found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so - 2, myData + doubleMatch[1].rm_so + 1);
+				if(doubleMatch[2].rm_so != -1)
+				{
+					doubleMatch[2].rm_so += singleMatch[0].rm_so;
+					doubleMatch[2].rm_eo += singleMatch[0].rm_so;
+//					ci_debug_printf(10, "Title type 1 found: %.*ls\n", doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2, myData + doubleMatch[2].rm_so + 1);
+					regexAppend(myHead, myData + doubleMatch[2].rm_so + 1, doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2);
+				}
+				else {
+//					ci_debug_printf(10, "Title type 2 found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
+					regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
+				}
 			}
 			if(singleMatch[1].rm_so != -1 && singleMatch[1].rm_eo - singleMatch[1].rm_so > 0)
 			{
 				singleMatch[1].rm_so += currentOffset;
 				singleMatch[1].rm_eo += currentOffset;
-//				ci_debug_printf(10, "Space was: '%.*ls'\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
+//				ci_debug_printf(10, "Space type 1 was: '%.*ls'\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
 				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
 			}
-			else if(singleMatch[10].rm_so != -1 && singleMatch[10].rm_eo - singleMatch[10].rm_so > 0)
+			else if(singleMatch[8].rm_so != -1 && singleMatch[8].rm_eo - singleMatch[8].rm_so > 0)
 			{
-				singleMatch[10].rm_so += currentOffset;
-				singleMatch[10].rm_eo += currentOffset;
-//				ci_debug_printf(10, "Space was: '%.*ls'\n", singleMatch[10].rm_eo - singleMatch[10].rm_so, myData + singleMatch[10].rm_so);
+				singleMatch[8].rm_so += currentOffset;
+				singleMatch[8].rm_eo += currentOffset;
+//				ci_debug_printf(8, "Space type 2 was: '%.*ls'\n", singleMatch[8].rm_eo - singleMatch[8].rm_so, myData + singleMatch[8].rm_so);
 				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
 			}
 			else regexRemove(myHead, current, &singleMatch[0]);

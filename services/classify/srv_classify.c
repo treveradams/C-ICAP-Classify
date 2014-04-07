@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2012 Trever L. Adams
+ *  Copyright (C) 2008-2014 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -522,7 +522,7 @@ void *srvclassify_init_request_data(ci_request_t * req)
 
      preview_size = ci_req_preview_size(req);
 
-     if (strlen(req->args) > 0) {
+     if (req->args[0] != '\0') {
           ci_debug_printf(5, "service arguments:%s\n", req->args);
      }
      if (ci_req_hasbody(req)) {
@@ -546,7 +546,7 @@ void *srvclassify_init_request_data(ci_request_t * req)
           data->args.sizelimit = 1;
           data->args.mode = 0;
 
-          if (strlen(req->args) > 0) {
+          if (req->args[0] != '\0') {
                ci_debug_printf(5, "service arguments:%s\n", req->args);
                srvclassify_parse_args(data, req->args);
           }

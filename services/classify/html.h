@@ -20,7 +20,7 @@
 
 #include <tre/tre.h>
 
-#define regexEDITS 250
+#define regexEDITS 375
 #define regexAPPENDSIZE 512
 
 #define HTML_MAX_FEATURE_COUNT 500000
