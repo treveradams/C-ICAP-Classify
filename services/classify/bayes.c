@@ -395,9 +395,9 @@ int writecheck;
 }
 #endif
 
-static int64_t FBCBinarySearch(FBCHashList *hashes_list, int64_t start, int64_t end, uint64_t key)
+static int32_t FBCBinarySearch(FBCHashList *hashes_list, int32_t start, int32_t end, uint64_t key)
 {
-int64_t mid=0;
+int32_t mid=0;
 	if(start > end)
 		return -1;
 	mid = start + ((end - start) / 2);
@@ -409,11 +409,11 @@ int64_t mid=0;
 		return FBCBinarySearch(hashes_list, mid+1, end, key);
 	else return mid;
 
-	return -1; // This should never be reached
+	return -1;
 }
 
 #ifdef CLASSIFYWITHRADIX
-static int64_t FBCRadixBinarySearch(FBCHashList *hashes_list, uint64_t key)
+static inline int32_t FBCRadixBinarySearch(FBCHashList *hashes_list, uint64_t key)
 {
 uint8_t radix;
 	radix = (key & 0xFF00000000000000LL) >> 56;
@@ -518,7 +518,7 @@ HTMLClassification doBayesPrepandClassify(HashList *toClassify)
 uint32_t i, j, processed = 0, total_processed = 0;
 uint16_t missing, nextReal;
 FBCJudge *categories = NULL;
-int64_t BSRet = -1;
+int32_t BSRet = -1;
 HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
 uint64_t total;
 double local_probability;
@@ -683,12 +683,12 @@ const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum,
 	return data;
 }
 
-static uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
+static inline uint32_t featuresInCategory(int fbc_file, FBC_HEADERv1 *header)
 {
 	return header->records;
 }
 
-inline void char2binary(char *source, char *destination, int16_t bytes)
+static inline void char2binary(char *source, char *destination, int16_t bytes)
 {
 	for(int i=0; i < bytes; i++) destination[i] = source[i];
 }
@@ -697,7 +697,7 @@ int loadBayesCategory(const char *fbc_name, const char *cat_name)
 {
 int fbc_file;
 uint32_t i, z, shortcut=0, offsetPos=3;
-int64_t BSRet=-1;
+int32_t BSRet=-1;
 int64_t offsets[3];
 FBC_HEADERv1 header;
 uint32_t startHashes = NBJudgeHashList.used;
@@ -828,7 +828,7 @@ int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
 {
 uint32_t i, z, shortcut = 0, offsetPos = 3, handled = 0;
 uint16_t used;
-int64_t BSRet = -1;
+int32_t BSRet = -1;
 int64_t offsets[3];
 // FBC_HEADERv1 header; With fix below, this doesn't seem to be needed anymore. FIXME BY REMOVING
 uint32_t startHashes = NBJudgeHashList.used;

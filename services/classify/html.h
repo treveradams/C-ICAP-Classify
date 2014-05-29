@@ -94,6 +94,30 @@ void regexMakeSingleBlock(regexHead *myHead);
 void freeRegexHead(regexHead *myHead);
 static void compileRegexes(void);
 static void freeRegexes(void);
+
+typedef uint64_t PTKey;
+typedef uint64_t PTItem;
+
+typedef struct _PTnode
+{
+	char bit;
+	PTKey item;
+        struct _PTnode *l, *r;
+} PTnode;
+
+typedef PTnode* PTlink;
+
+typedef struct {
+	PTlink head;
+
+	PTnode **nodes;
+	int32_t number_of_node_heads;
+	int32_t number_of_nodes;
+	int32_t last_used_node;
+	char zero_found;
+	HashList *hashes_list;
+} PTsession;
+
 #else
 extern void normalizeCurrency(regexHead *myHead);
 extern void removeHTML(regexHead *myHead);

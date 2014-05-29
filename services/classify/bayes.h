@@ -69,7 +69,7 @@ typedef struct {
 
 typedef struct {
 	char *name;
-	uint32_t totalFeatures;
+	int32_t totalFeatures;
 } FBCTextCategory;
 
 typedef struct {
@@ -94,8 +94,8 @@ typedef struct __attribute__ ((__packed__)) {
 
 typedef struct  {
 	FBCFeatureExt *hashes;
-	uint32_t used;
-	uint32_t slots;
+	int32_t used;
+	int32_t slots;
 	int FBC_LOCKED; // FBC_LOCKED is used to keep from loading more data or writing data if we are in an optimized state.
 } FBCHashList;
 

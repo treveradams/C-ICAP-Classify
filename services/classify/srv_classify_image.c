@@ -853,7 +853,7 @@ CvMat myCvMat;
     {
         myCvMat = cvMat(1, data->mem_body->endpos, CV_8UC3, data->mem_body->buf);
         mySession.origImage = cvDecodeImage(&myCvMat, CV_LOAD_IMAGE_COLOR);
-        ci_debug_printf(8, "Classifying IMAGE from memory (size=%ld)\n", data->mem_body->endpos);
+        ci_debug_printf(8, "Classifying IMAGE from memory (size=%d)\n", data->mem_body->endpos);
     }
     else {
 	mySession.origImage = cvLoadImage(data->disk_body->filename, CV_LOAD_IMAGE_COLOR);

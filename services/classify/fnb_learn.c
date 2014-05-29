@@ -127,6 +127,11 @@ int i;
 		}
 	}
 	if(fbc_out_file == NULL) goto HELP;
+	if(do_directory_learn == 1)
+	{
+		preLoadBayes(fbc_out_file);
+		unlink(fbc_out_file);
+	}
 	if(argc == 5 && (zero_point < 1 || fbc_out_file == NULL))
 	{
 		goto HELP;
@@ -343,7 +348,7 @@ process_entry *temp;
 	initHTML();
 	initBayesClassifier();
 
-        if(loadBayesCategory(fbc_out_file, "LEARNING") == -1)
+        if(loadBayesCategory(fbc_out_file, "LEARNING") == -1 && do_directory_learn != 1)
 		printf("Unable to open %s\n", fbc_out_file);
 
 	if(learning)

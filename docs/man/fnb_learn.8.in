@@ -48,13 +48,19 @@ classifiers. fnb stands for Fast Naive Bayes.
 .PP
    This is the file name for the category. Generally it should
    be CATEGORY_NAME.fnb. It should be stored in a directory
-   where only other fnb files are stored.
+   where only other fnb files are stored. It used to be that you
+   should remove this file before calling with -d. This file is now
+   used as a preload when -d option is used, so do not remove it,
+   except if desiring to start from scratch.
 .PP
 .BR ZERO
 .PP
    \fBZERO\fR specifies the zero point, an integer. This is the
    number of times that a hash feature must appear in the data
-   before it can be stored.
+   before it can be stored. This option should only be used alone
+   after all input data has been trained, as part of the training
+   command for the last file to be learned, or with -d. All other
+   uses will give undesirable results!
 .PP
 .BR NUMBER_OF_THREADS_TO_USE
    This is the number of threads to use when doing training.
@@ -72,7 +78,7 @@ share the same hash seeds.
 .I -d\fR and \fI-i\fR are mutually exclusive. You can learn a single file or
 you can learn a directory. You cannot do both.
 .PP
-.I -o\fR and \fI-z\fR can be used alone to simply executing zero point setting. In all other cases, -z is optional!
+.I -o\fR and \fI-z\fR can be used alone to simply execute zero point setting. In all other cases, -z is optional!
 .PP
 .SH "FILES"
 .nf

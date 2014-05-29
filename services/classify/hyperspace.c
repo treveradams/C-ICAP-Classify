@@ -336,9 +336,9 @@ uint16_t hash;
 }
 #endif
 
-static int64_t HSBinarySearch(HashListExt *hashes_list, int64_t start, int64_t end, uint64_t key)
+static int32_t HSBinarySearch(HashListExt *hashes_list, int32_t start, int32_t end, uint64_t key)
 {
-int64_t mid=0;
+int32_t mid=0;
 	if(start > end)
 		return -1;
 	mid = start + ((end - start) / 2);
@@ -395,7 +395,7 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
 {
 int fhs_file;
 uint16_t i, j, z, shortcut=0, offsetPos=2;
-int64_t BSRet=-1;
+int32_t BSRet=-1;
 int64_t offsets[HS_OFFSET_MAX+1];
 HTMLFeature *docHashes;
 FHS_HEADERv1 header;
@@ -766,7 +766,7 @@ HTMLClassification doHSPrepandClassify(HashList *toClassify)
 {
 uint32_t i, j;
 uint32_t **categories = NULL;
-int64_t BSRet = -1;
+int32_t BSRet = -1;
 HTMLClassification data = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };;
 
 	if(HSCategories.used < 2) return data; // We must have at least two categories loaded or it is pointless to run

@@ -17,6 +17,7 @@
  *  along with Foobar.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#define HASH_USE_PATRICIA
 
 #ifndef _GNU_SOURCE
 #define _GNU_SOURCE
@@ -59,6 +60,12 @@
 #include "htmlentities.h"
 #include "hash.h"
 
+#ifdef HASH_USE_PATRICIA
+const int bitsword = 64;
+const int R = 1;
+int32_t pt_increment_nodes_size = 50000;
+#endif
+
 #if SIZEOFWCHAR == 2
 const uint32_t LEAD_OFFSET = 0xD800 - (0x10000 >> 10); // For decimal and hexadecimal entity conversion to wchar_t
 #endif
@@ -90,42 +97,10 @@ int ret;
 return 0; // Equal
 }
 
-int HTMLhash_compare(void const *a, void const *b)
-{
-HTMLFeature *ha, *hb;
-
-	ha = (HTMLFeature *) a;
-	hb = (HTMLFeature *) b;
-	if(*ha < *hb)
-		return -1;
-	if(*ha > *hb)
-		return 1;
-
-return 0;
-}
-
-void makeSortedUniqueHashes(HashList *hashes_list)
-{
-uint32_t i = 1, j = 0;
-	qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare );
-//	ci_debug_printf(10, "\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
-	for(i = 1; i < hashes_list->used; i++)
-	{
-		if(hashes_list->hashes[i] != hashes_list->hashes[j])
-		{
-			hashes_list->hashes[j+1] = hashes_list->hashes[i];
-			j++;
-		}
-	}
-	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
-//	for(i=0; i<hashes_list->used; i++) ci_debug_printf(10, "Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
-//	ci_debug_printf(10, "Total unique features: %"PRIu32"\n", hashes_list->used);
-}
-
 void initHTML(void)
 {
+	qsort(htmlentities, sizeof(htmlentities) / sizeof(htmlentities[0]) - 1, sizeof(_htmlentity), &entity_compare);
 	compileRegexes();
-	qsort(htmlentities, sizeof(htmlentities) / sizeof(htmlentities[0]) - 1, sizeof(_htmlentity), &entity_compare );
 	u_init(&UError);
 }
 
@@ -155,13 +130,19 @@ wchar_t myRegex[PATH_MAX+1] = L"\0";
 
 //	tre_regwcomp(&htmlFinder, L"((/?<P[^>]*>[[:space:]]*)|(</?BR[^>]*>[[:space:]]*))|((<[^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)((</?P[^>]*>)|(</?BR[^>]*>)|[[:space:]]*))", REG_EXTENDED | REG_ICASE);
 //	tre_regwcomp(&htmlFinder, L"(</?(P|(BR))[^>]*>[[:space:]]*)|(</?!?\\w+((\\s+\\w+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)((</?(P|(BR))[^>]*>)*[[:space:]]*))*", REG_EXTENDED | REG_ICASE); // Replaced with the SLOWER one below due to nonstandard use of : and - in some element and tag names in some sites
-	tre_regwcomp(&htmlFinder, L"(</?(P|(BR))[^>]*/?>[[:space:]]*)+|(</?!?[[:alnum:]_:-]+((\\s+[[:alnum:]_:-]+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)([[:space:]]*)", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&htmlFinder, L"(</?(P|(BR))[^>]*/?>[[:space:]]*)+|(</?!?[[:alnum:]_:-]+((\\s+[[:alnum:]_:-]+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)([[:space:]]*)", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+	tre_regwcomp(&htmlFinder, L"(</?([pP]|([bB][rR]))[^>]*/?>[[:space:]]*)+|(</?!?[[:alnum:]_:-]+((\\s+[[:alnum:]_:-]+(\\s*=\\s*(?:\".*?\"|\'.*?\'|[^'\">\\s]+))?)+\\s*|\\s*)/?>)([[:space:]]*)", REG_EXTENDED);
 	tre_regwcomp(&insaneFinder, L"[^[:graph:][:space:]]+", REG_EXTENDED);
-	tre_regwcomp(&entityFinder, L"&(#?[[:alnum:]]+);", REG_EXTENDED | REG_ICASE);
+	tre_regwcomp(&entityFinder, L"&(#?[[:alnum:]]+);", REG_EXTENDED); // | REG_ICASE
 	tre_regwcomp(&numericentityFinder, L"^#x?([[:xdigit:]]+$)", REG_EXTENDED | REG_ICASE);
-	tre_regwcomp(&superFinder, L"<s(([[:space:]]*cript[^>]*>.*?<[[:space:]]*/script[^>]*)|([[:space:]]*tyle[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&superFinder, L"<[[:space:]]*s((cript[^>]*>.*?<[[:space:]]*/script[^>]*)|(tyle[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+	tre_regwcomp(&superFinder, L"<[[:space:]]*[sS](([cC][rR][iI][pP][tT][^>]*>.*?<[[:space:]]*/[sS][cC][rR][iI][pP][tT][^>]*)|([tT][yY][lL][eE][^>]*.*?<[[:space:]]*/[sS][tT][yY][lL][eE][^>]*))>", REG_EXTENDED);
 	tre_regwcomp(&commentFinder, L"<!--.*?-->", REG_EXTENDED);
-	tre_regwcomp(&imageFinder, L"<[[:space:]]*img[[:space:]]*([^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)", REG_EXTENDED | REG_ICASE);
+//	tre_regwcomp(&imageFinder, L"<[[:space:]]*img[[:space:]]*([^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity! This one isn't as big as a win for whatever reason.
+	tre_regwcomp(&imageFinder, L"<[[:space:]]*[iI][mM][gG][[:space:]]*([^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)", REG_EXTENDED);
 //	tre_regwcomp(&title1, L"title=((\"[^\"]+\")|('[^']+'))", REG_EXTENDED | REG_ICASE);
         tre_regwcomp(&title1, L" title=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
         tre_regwcomp(&alt1, L" alt=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
@@ -234,6 +215,93 @@ myRegmatch_t *data;
 	head->head = data; // assign data in
 	head->tail = data;
 	head->head_cicap_membuf = is_cicap_membuf;
+}
+
+static void freeRegmatchArrays(myRegmatchArray *to_free)
+{
+	if(to_free == NULL) return;
+	freeRegmatchArrays(to_free->next);
+	free(to_free);
+}
+
+void freeRegexHead(regexHead *myHead)
+{
+myRegmatch_t *current = myHead->head;
+
+	while(current != NULL)
+	{
+		if(current->data && current->owns_memory) free(current->data);
+		current = current->next;
+	}
+	if(myHead->arrays) freeRegmatchArrays(myHead->arrays);
+	// We can no longer directly free membufs on newer icap
+	if(myHead->main_memory)
+	{
+#ifndef NOT_CICAP
+		if(myHead->head_cicap_membuf)
+		{
+			ci_buffer_free(myHead->main_memory);
+		}
+		else {
+#endif
+			free(myHead->main_memory);
+#ifndef NOT_CICAP
+		}
+#endif
+	}
+}
+
+void regexMakeSingleBlock(regexHead *myHead)
+{
+myRegmatch_t *current = myHead->head;
+wchar_t *old_main = myHead->main_memory;
+unsigned long offset = 0;
+unsigned long total = 0;
+
+	if(!myHead->dirty) return;
+	while(current != NULL)
+	{
+		total += current->rm_eo - current->rm_so;
+		current = current->next;
+	}
+
+	myHead->main_memory = malloc((total + 1) * sizeof(wchar_t));
+	current = myHead->head;
+	while(current != NULL) // Copy memory - Free memory next
+	{
+		memcpy(myHead->main_memory + offset, (current->data == NULL ? old_main : current->data) + current->rm_so, (current->rm_eo - current->rm_so) * sizeof(wchar_t));
+		offset += current->rm_eo - current->rm_so;
+		current = current->next;
+	}
+	// We can no longer directly free membufs on newer icap
+#ifndef NOT_CICAP
+	if(myHead->head_cicap_membuf)
+	{
+		ci_buffer_free(old_main);
+		myHead->head_cicap_membuf = 0;
+	}
+	else {
+#endif
+		free(old_main);
+#ifndef NOT_CICAP
+	}
+#endif
+	current = myHead->head;
+	while(current != NULL) // Free memory - Must be done separately as we now have multiple users of each private area
+	{
+		if(current->data && current->owns_memory) free(current->data);
+		current = current->next;
+	}
+
+	freeRegmatchArrays(myHead->arrays);
+
+	myHead->arrays = calloc(1, sizeof(myRegmatchArray));
+	myHead->lastarray = myHead->arrays;
+	myHead->head = getEmptyRegexBlock(myHead);
+	myHead->head->rm_eo = offset;
+	myHead->head->rm_so = 0;
+	myHead->dirty = 0;
+	myHead->tail = myHead->head;
 }
 
 static void regexRemove(regexHead *myHead, myRegmatch_t *startblock, regmatch_t *to_remove)
@@ -423,93 +491,6 @@ uint32_t offset;
 	myHead->dirty = 1;
 }
 
-static void freeRegmatchArrays(myRegmatchArray *to_free)
-{
-	if(to_free == NULL) return;
-	freeRegmatchArrays(to_free->next);
-	free(to_free);
-}
-
-void regexMakeSingleBlock(regexHead *myHead)
-{
-myRegmatch_t *current = myHead->head;
-wchar_t *old_main = myHead->main_memory;
-unsigned long offset = 0;
-unsigned long total = 0;
-
-	if(!myHead->dirty) return;
-	while(current != NULL)
-	{
-		total += current->rm_eo - current->rm_so;
-		current = current->next;
-	}
-
-	myHead->main_memory = malloc((total + 1) * sizeof(wchar_t));
-	current = myHead->head;
-	while(current != NULL) // Copy memory - Free memory next
-	{
-		memcpy(myHead->main_memory + offset, (current->data == NULL ? old_main : current->data) + current->rm_so, (current->rm_eo - current->rm_so) * sizeof(wchar_t));
-		offset += current->rm_eo - current->rm_so;
-		current = current->next;
-	}
-	// We can no longer directly free membufs on newer icap
-#ifndef NOT_CICAP
-	if(myHead->head_cicap_membuf)
-	{
-		ci_buffer_free(old_main);
-		myHead->head_cicap_membuf = 0;
-	}
-	else {
-#endif
-		free(old_main);
-#ifndef NOT_CICAP
-	}
-#endif
-	current = myHead->head;
-	while(current != NULL) // Free memory - Must be done separately as we now have multiple users of each private area
-	{
-		if(current->data && current->owns_memory) free(current->data);
-		current = current->next;
-	}
-
-	freeRegmatchArrays(myHead->arrays);
-
-	myHead->arrays = calloc(1, sizeof(myRegmatchArray));
-	myHead->lastarray = myHead->arrays;
-	myHead->head = getEmptyRegexBlock(myHead);
-	myHead->head->rm_eo = offset;
-	myHead->head->rm_so = 0;
-	myHead->dirty = 0;
-	myHead->tail = myHead->head;
-}
-
-void freeRegexHead(regexHead *myHead)
-{
-myRegmatch_t *current = myHead->head;
-
-	while(current != NULL)
-	{
-		if(current->data && current->owns_memory) free(current->data);
-		current = current->next;
-	}
-	if(myHead->arrays) freeRegmatchArrays(myHead->arrays);
-	// We can no longer directly free membufs on newer icap
-	if(myHead->main_memory)
-	{
-#ifndef NOT_CICAP
-		if(myHead->head_cicap_membuf)
-		{
-			ci_buffer_free(myHead->main_memory);
-		}
-		else {
-#endif
-			free(myHead->main_memory);
-#ifndef NOT_CICAP
-		}
-#endif
-	}
-}
-
 void normalizeCurrency(regexHead *myHead)
 {
 wchar_t *XS = L"XXXXXXXXXXXXXXXXXXXX";
@@ -581,6 +562,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData= (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
+		while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&superFinder, myData + currentOffset, current->rm_eo - currentOffset, 1, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -597,6 +579,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
+		while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&commentFinder, myData + currentOffset, current->rm_eo - currentOffset, 1, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -613,6 +596,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData = (wchar_t *)(current->data==NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
+		while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&metaFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -668,6 +652,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
+		while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&imageFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -719,6 +704,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset = current->rm_so;
+		while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&htmlFinder, myData + currentOffset, current->rm_eo-currentOffset, 11, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -767,6 +753,7 @@ uint32_t tempUTF32CHAR;
 	{
 		myData=(wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
 		currentOffset=current->rm_so;
+		while(myData[currentOffset] != L'&' && current->rm_eo > currentOffset) currentOffset++;
 		while(current->rm_eo > currentOffset && tre_regwnexec(&entityFinder, myData + currentOffset, current->rm_eo - currentOffset, 2, singleMatch, 0) != REG_NOMATCH)
 		{
 			singleMatch[0].rm_so += currentOffset;
@@ -865,21 +852,172 @@ uint32_t tempUTF32CHAR;
 		for(; currentOffset < current->rm_eo; currentOffset++)
 		{
 /*			if(iswupper(myData[currentOffset]))
-			{
-				ci_debug_printf(10, "Changing %lc", myData[currentOffset]);*/
+			{*/
+//				ci_debug_printf(10, "Changing %lc", myData[currentOffset]);
 			myData[currentOffset] = towlower(myData[currentOffset]);
-/*				ci_debug_printf(10, " to %lc\n", myData[currentOffset]);
-			}*/
+//				ci_debug_printf(10, " to %lc\n", myData[currentOffset]);
+//			}
 		}
 		current=current->next;
 	}
 }
 
-inline uint32_t u16Otou32O(int ubp_only, UChar *string, uint32_t u16_offset)
+static inline uint32_t u16Otou32O(int ubp_only, UChar *string, uint32_t u16_offset)
 {
 	if(ubp_only) return u16_offset;
 	else return u_countChar32(string, u16_offset);
 }
+
+#ifndef HASH_USE_PATRICIA
+static int HTMLhash_compare(void const *a, void const *b)
+{
+HTMLFeature *ha, *hb;
+
+	ha = (HTMLFeature *) a;
+	hb = (HTMLFeature *) b;
+	if(*ha < *hb)
+		return -1;
+	if(*ha > *hb)
+		return 1;
+
+return 0;
+}
+
+void makeSortedUniqueHashes(HashList *hashes_list)
+{
+uint32_t i = 1, j = 0;
+	qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare );
+//	ci_debug_printf(10, "\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
+	for(i = 1; i < hashes_list->used; i++)
+	{
+		if(hashes_list->hashes[i] != hashes_list->hashes[j])
+		{
+			hashes_list->hashes[j+1] = hashes_list->hashes[i];
+			j++;
+		}
+	}
+	hashes_list->used = j + 1; // j is last slot actually filled. hashes_list->used is next to be used or count of those used (same number)
+//	for(i=0; i<hashes_list->used; i++) ci_debug_printf(10, "Hashed: %"PRIX64"\n", hashes_list->hashes[i]);
+//	ci_debug_printf(10, "Total unique features: %"PRIu32"\n", hashes_list->used);
+}
+
+#else
+
+// PTget_bit
+// Purpose: Select only the bit we want
+// Preconditons: A, the integer to select the bit from, and B which bit to return
+// Postconditions: returned value is the given bit
+inline static int PTget_bit(PTKey A, int B)
+{
+//	printf("%"PRIX64" at %d is %d\n", A, B, (A >> (bitsword-B)) & R);
+	return (A >> (bitsword-B)) & R;
+}
+
+inline static PTItem PTsearchR(PTlink h, PTKey v, int bit)
+{
+	if (h->bit <= bit) return h->item;
+	if (PTget_bit(v, h->bit) == 0)
+		return PTsearchR(h->l, v, h->bit);
+	else return PTsearchR(h->r, v, h->bit);
+}
+
+inline static PTItem PTsearch(PTsession *session, PTKey v)
+{
+	PTItem t = PTsearchR(session->head, v, -1);
+	return (v == t) ? t : 0;
+}
+
+inline static PTlink PTinsertR(PTsession *session, PTlink h, PTKey x, int bit, PTlink p)
+{
+char interesting_bit;
+	if ((h->bit >= bit) || (h->bit <= p->bit))
+	{
+		PTlink t;
+		session->last_used_node++;
+		if(session->last_used_node >= session->number_of_nodes)
+		{
+			PTlink *test = realloc(session->nodes, (++session->number_of_node_heads + 1) * sizeof(PTnode *));
+			if(test != NULL)
+			{
+				session->last_used_node=0;
+				session->nodes = test;
+				session->head = &session->nodes[0][0];
+				session->number_of_nodes = pt_increment_nodes_size;
+				session->nodes[session->number_of_node_heads] = malloc(pt_increment_nodes_size * sizeof(PTnode));
+			}
+		}
+		t = &session->nodes[session->number_of_node_heads][session->last_used_node];
+		t->item = x;
+		t->bit = bit;
+		interesting_bit = PTget_bit(x, t->bit);
+		t->l = (interesting_bit ? h : t);
+		t->r = (interesting_bit ? t : h);
+		session->hashes_list->used++;
+		return t;
+	}
+	if (PTget_bit(x, h->bit) == 0)
+		h->l = PTinsertR(session, h->l, x, bit, h);
+	else h->r =  PTinsertR(session, h->r, x, bit, h);
+	return h;
+}
+
+static void PTinsert(PTsession *session, PTKey x)
+{
+	int i;
+	if(x == 0) session->zero_found = 1;
+	PTKey w = PTsearchR(session->head->l, x, -1);
+	if(x == w) return;
+	for (i = 0; PTget_bit(x, i) == PTget_bit(w, i); i++) ;
+	session->head->l = PTinsertR(session, session->head->l, x, i, session->head);
+}
+
+static void PTinit_session(PTsession *session, HashList *hashes_list)
+{
+	session->number_of_node_heads = 0;
+	session->number_of_nodes = HTML_MAX_FEATURE_COUNT;
+	session->last_used_node = 0;
+	session->nodes = malloc((session->number_of_node_heads + 1) * sizeof(PTnode));
+	session->nodes[0] = malloc(HTML_MAX_FEATURE_COUNT * sizeof(PTnode));
+	session->head = &session->nodes[session->number_of_node_heads][session->last_used_node];
+	session->head->bit = 0;
+	session->head->item = 0;
+	session->head->l = session->head;
+	session->head->r = session->head;
+	session->zero_found = 0;
+	session->hashes_list = hashes_list;
+}
+
+static void PTfree_session(PTsession *session)
+{
+	for(uint32_t i = 0; i <= session->number_of_node_heads; i++)
+		free(session->nodes[i]);
+	free(session->nodes);
+}
+
+static inline void showR(PTsession *session, PTlink h, int bit)
+{
+	if(session->hashes_list->slots == session->hashes_list->used)
+	{
+		ci_debug_printf(5, "This file creates too many hashes\n");
+		return;
+	}
+	if(h == session->head && !session->zero_found) return;
+	if(h->bit <= bit) {
+//		printf("%"PRIX64"\n", h->item);
+		session->hashes_list->hashes[session->hashes_list->used] = h->item;
+		session->hashes_list->used++;
+		return;
+	}
+	showR(session, h->l, h->bit);
+	showR(session, h->r, h->bit);
+}
+
+static void PTshow(PTsession *session, HashList *hashes_list)
+{
+	hashes_list->used=0;
+	showR(session, session->head->l, -1);
+}
+#endif
 
 void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondaryseed, HashList *hashes_list)
 {
@@ -896,6 +1034,10 @@ int32_t u16_length;
 UBreakIterator *bi = NULL;
 uint32_t wordboundary;
 int ubp_only = 0; // Input has no UNICODE supplemental characters
+#ifdef HASH_USE_PATRICIA
+PTsession pt_session;
+HTMLFeature current_hash;
+#endif
 
 	if(current->rm_eo < 2)
 	{
@@ -912,6 +1054,10 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			return;
 		}
 	}
+
+#ifdef HASH_USE_PATRICIA
+	PTinit_session(&pt_session, hashes_list);
+#endif
 
 	u_strFromUTF32(myHead_u16,
 		(current->rm_eo + 1) * 2 * sizeof(UChar),
@@ -979,8 +1125,14 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			if(i > 1) lookup3_hashfunction((uint32_t *) placeHolder, i - 1, &finalA, &finalB);
 			modPos = (pos + i) % 5;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
+#ifndef HASH_USE_PATRICIA
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
+#else
+			current_hash = (uint_least64_t) finalA << 32;
+			current_hash |= (uint_least64_t) (finalB & 0xFFFFFFFF);
+			PTinsert(&pt_session, current_hash);
+#endif
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
 			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
@@ -992,7 +1144,9 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			{
 #endif
 
+#ifndef HASH_USE_PATRICIA
 			hashes_list->used++;
+#endif
 #ifdef TRAINER
 			}
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
@@ -1016,12 +1170,16 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			if(pos > 4) pos=0;
 			if(hashes_list->used + 4 >= hashes_list->slots)
 			{
+#ifndef HASH_USE_PATRICIA
 				makeSortedUniqueHashes(hashes_list); // Attempt to make more room by removing duplicates
 				if(hashes_list->used + 4 >= hashes_list->slots) // If this is still the condition, we cannot handle more hashes
 				{
 					ci_debug_printf(5, "This file creates too many hashes\n");
-					return;
+					goto hash_terminate;
 				}
+#else
+				goto hash_terminate;
+#endif
 			}
 			lookup3_hashfunction((uint32_t *) myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so, &prime1, &prime2);
 		}
@@ -1032,10 +1190,15 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 	{
 		pos++;
 		if(pos > 4) pos = 0;
+
 		if(hashes_list->used == hashes_list->slots)
 		{
+#ifndef HASH_USE_PATRICIA
 			makeSortedUniqueHashes(hashes_list);
-			if(hashes_list->used == hashes_list->slots) return;
+			if(hashes_list->used == hashes_list->slots) goto hash_terminate;
+#else
+			goto hash_terminate;
+#endif
 		}
 #ifdef TRAINER
 		if(wcsncmp(L"donttrainme",  myData+matches[pos].rm_so, matches[pos].rm_eo - matches[pos].rm_so) == 0 || (matches[pos].rm_eo - matches[pos].rm_so == 1 && iswpunct(myData[matches[pos].rm_so])))
@@ -1056,8 +1219,14 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			if(i > 1) lookup3_hashfunction((uint32_t *) placeHolder, i - 1, &finalA, &finalB);
 			modPos = (pos + i) % 5;
 			lookup3_hashfunction((uint32_t *) myData+matches[modPos].rm_so, matches[modPos].rm_eo - matches[modPos].rm_so, &finalA, &finalB);
+#ifndef HASH_USE_PATRICIA
 			hashes_list->hashes[hashes_list->used] = (uint_least64_t) finalA << 32;
 			hashes_list->hashes[hashes_list->used] |= (uint_least64_t) (finalB & 0xFFFFFFFF);
+#else
+			current_hash = (uint_least64_t) finalA << 32;
+			current_hash |= (uint_least64_t) (finalB & 0xFFFFFFFF);
+			PTinsert(&pt_session, current_hash);
+#endif
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
 			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
@@ -1069,7 +1238,9 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 			{
 #endif
 
+#ifndef HASH_USE_PATRICIA
 			hashes_list->used++;
+#endif
 #ifdef TRAINER
 			}
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
@@ -1078,7 +1249,13 @@ int ubp_only = 0; // Input has no UNICODE supplemental characters
 #endif
 		}
 	}
+hash_terminate:
 	if(myHead_u16) free(myHead_u16);
 	if(bi) ubrk_close(bi);
+#ifndef HASH_USE_PATRICIA
 	makeSortedUniqueHashes(hashes_list);
+#else
+	PTshow(&pt_session, hashes_list);
+	PTfree_session(&pt_session);
+#endif
 }

@@ -62,7 +62,7 @@ typedef struct {
 typedef struct {
 	char *name;
 	uint16_t totalDocuments;
-	uint32_t totalFeatures;
+	int32_t totalFeatures;
 	uint16_t *documentKnownHashes; // documents[TextCategory.totalDocuments] with the value being the number of known hashes
 } FHSTextCategory;
 
@@ -88,8 +88,8 @@ typedef struct __attribute__ ((__packed__)) {
 
 typedef struct  {
 	hyperspaceFeatureExt *hashes;
-	uint32_t used;
-	uint32_t slots;
+	int32_t used;
+	int32_t slots;
 } HashListExt;
 
 #ifdef IN_HYPSERSPACE
