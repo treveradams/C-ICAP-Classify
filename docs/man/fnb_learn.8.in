@@ -50,8 +50,9 @@ classifiers. fnb stands for Fast Naive Bayes.
    be CATEGORY_NAME.fnb. It should be stored in a directory
    where only other fnb files are stored. It used to be that you
    should remove this file before calling with -d. This file is now
-   used as a preload when -d option is used, so do not remove it,
-   except if desiring to start from scratch.
+   used as a preload when -d option is used. You must decide if it
+   is faster this way or not. If not, remove it before calling the
+   program. Results to vary.
 .PP
 .BR ZERO
 .PP
@@ -77,6 +78,11 @@ share the same hash seeds.
 .PP
 .I -d\fR and \fI-i\fR are mutually exclusive. You can learn a single file or
 you can learn a directory. You cannot do both.
+.PP
+This program creates ".pre-hash-*" files in the category directory. These
+must be manually removed. Any time there is a change to any of the C-ICAP
+Classify programs, these should be removed before any mass train, smart train
+or restage.
 .PP
 .I -o\fR and \fI-z\fR can be used alone to simply execute zero point setting. In all other cases, -z is optional!
 .PP

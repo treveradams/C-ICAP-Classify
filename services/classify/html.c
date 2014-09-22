@@ -136,6 +136,8 @@ wchar_t myRegex[PATH_MAX+1] = L"\0";
 	tre_regwcomp(&insaneFinder, L"[^[:graph:][:space:]]+", REG_EXTENDED);
 	tre_regwcomp(&entityFinder, L"&(#?[[:alnum:]]+);", REG_EXTENDED); // | REG_ICASE
 	tre_regwcomp(&numericentityFinder, L"^#x?([[:xdigit:]]+$)", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+//	tre_regwcomp(&numericentityFinder, L"^#[xX]?([[:xdigit:]]+$)", REG_EXTENDED);
 //	tre_regwcomp(&superFinder, L"<[[:space:]]*s((cript[^>]*>.*?<[[:space:]]*/script[^>]*)|(tyle[^>]*.*?<[[:space:]]*/style[^>]*))>", REG_EXTENDED | REG_ICASE);
 	// Same as above, but faster to do our own case insensitivity!
 	tre_regwcomp(&superFinder, L"<[[:space:]]*[sS](([cC][rR][iI][pP][tT][^>]*>.*?<[[:space:]]*/[sS][cC][rR][iI][pP][tT][^>]*)|([tT][yY][lL][eE][^>]*.*?<[[:space:]]*/[sS][tT][yY][lL][eE][^>]*))>", REG_EXTENDED);
@@ -144,9 +146,15 @@ wchar_t myRegex[PATH_MAX+1] = L"\0";
 	// Same as above, but faster to do our own case insensitivity! This one isn't as big as a win for whatever reason.
 	tre_regwcomp(&imageFinder, L"<[[:space:]]*[iI][mM][gG][[:space:]]*([^=>]*([^=>]*=(('[^']*')|(\"[^\"]*\")))*[^>]*>)", REG_EXTENDED);
 //	tre_regwcomp(&title1, L"title=((\"[^\"]+\")|('[^']+'))", REG_EXTENDED | REG_ICASE);
-        tre_regwcomp(&title1, L" title=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
-        tre_regwcomp(&alt1, L" alt=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
+	tre_regwcomp(&title1, L" title=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+//	tre_regwcomp(&title1, L" [tT][iI][tT][lL][eE]=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED);
+	tre_regwcomp(&alt1, L" alt=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+//	tre_regwcomp(&alt1, L" [aA][lL][tT]=\\s*((\".*?\"|\'.*?\')|[^\'\">\\s]+)", REG_EXTENDED);
 	tre_regwcomp(&metaFinder, L"<[[:space:]]*meta ([^>]*)>", REG_EXTENDED | REG_ICASE);
+	// Same as above, but faster to do our own case insensitivity!
+//	tre_regwcomp(&metaFinder, L"<[[:space:]]*[mM][eE][tT][aA] ([^>]*)>", REG_EXTENDED);
 	tre_regwcomp(&metaDescription, L"description\"?(.*)", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&metaKeyword, L"keywords\"?(.*)", REG_EXTENDED | REG_ICASE);
 	tre_regwcomp(&metaContent, L"content=\"?([^\"]*)\"?", REG_EXTENDED | REG_ICASE);
@@ -354,7 +362,7 @@ myRegmatch_t *current = myHead->head, *newmatch;
 	if(to_remove->rm_eo - to_remove->rm_so == 1) printf("Character in unhandled regexRemove %"PRIX32"\n", *(myHead->main_memory + to_remove->rm_so));
 }
 
-static void regexReplace(regexHead *myHead, myRegmatch_t *startblock, regmatch_t *to_remove, wchar_t *replaceMe, int len, int pad)
+static void regexReplace(regexHead *myHead, myRegmatch_t *startblock, regmatch_t *to_remove, wchar_t *newText, int len, int pad)
 {
 myRegmatch_t *current = myHead->head, *newmatch, *newdata;
 uint32_t myLen = 0;
@@ -373,15 +381,15 @@ uint32_t myLen = 0;
 					if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
 					{
 						// The following line is replaced with several memmoves to avoid overlapping problems
-						// myLen = swprintf(myHead->main_memory + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						// myLen = swprintf(myHead->main_memory + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, newText, pad ? L" " : L"");
 						if(pad) {
-							memmove(myHead->main_memory + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
+							wmemmove(myHead->main_memory + to_remove->rm_so + 1, newText, len);
 							myHead->main_memory[to_remove->rm_so] = L' ';
 							myHead->main_memory[to_remove->rm_so + 1 + len] = L' ';
 							myLen = len + 2;
 						}
 						else {
-							memmove(myHead->main_memory + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
+							wmemmove(myHead->main_memory + to_remove->rm_so, newText, len);
 							myLen = len;
 						}
 						current->rm_eo = to_remove->rm_so + myLen;
@@ -392,7 +400,7 @@ uint32_t myLen = 0;
 					else {
 						newdata = getEmptyRegexBlock(myHead);
 						newdata->data = malloc((len + 3) * sizeof(wchar_t));
-						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, newText, pad ? L" " : L"");
 						newdata->rm_so = 0;
 						newdata->owns_memory = 1;
 						current->rm_eo = to_remove->rm_so; // the old block ends where we started
@@ -404,6 +412,7 @@ uint32_t myLen = 0;
 					if(newmatch->next == NULL) myHead->tail = newmatch;
 					myHead->dirty = 1;
 					current = NULL;
+					return;
 				}
 			}
 			else if(current->data != NULL) // we process private memory blocks here.
@@ -417,15 +426,15 @@ uint32_t myLen = 0;
 					if(len + 3 * pad < to_remove->rm_eo - to_remove->rm_so)
 					{
 						// The following line is replaced with several memmoves to avoid overlapping problems
-						// myLen = swprintf(current->data + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						// myLen = swprintf(current->data + to_remove->rm_so, len + 3, L"%ls%.*ls%ls", pad ? L" " : L"", len, newText, pad ? L" " : L"");
 						if(pad) {
-							memmove(current->data + to_remove->rm_so + 1, replaceMe, len * sizeof(wchar_t));
+							wmemmove(current->data + to_remove->rm_so + 1, newText, len);
 							current->data[to_remove->rm_so] = L' ';
 							current->data[to_remove->rm_so + 1 + len] = L' ';
 							myLen = len + 2;
 						}
 						else {
-							memmove(current->data + to_remove->rm_so, replaceMe, len * sizeof(wchar_t));
+							wmemmove(current->data + to_remove->rm_so, newText, len);
 							myLen = len;
 						}
 						current->rm_eo = to_remove->rm_so + myLen;
@@ -435,7 +444,7 @@ uint32_t myLen = 0;
 					else {
 						newdata = getEmptyRegexBlock(myHead);
 						newdata->data = malloc((len + 3) * sizeof(wchar_t));
-						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, replaceMe, pad ? L" " : L"");
+						newdata->rm_eo = swprintf(newdata->data, len+3, L"%ls%.*ls%ls", pad ? L" " : L"", len, newText, pad ? L" " : L"");
 						newdata->rm_so = 0;
 						newdata->owns_memory = 1;
 						current->rm_eo = to_remove->rm_so; // the old block ends where we started
@@ -447,6 +456,7 @@ uint32_t myLen = 0;
 					if(newmatch->next == NULL) myHead->tail = newmatch;
 					myHead->dirty = 1;
 					current = NULL;
+					return;
 				}
 			}
 		}
@@ -542,18 +552,18 @@ int ret;
 	else return mid;
 }
 
-
 void removeHTML(regexHead *myHead)
 {
 wchar_t *myData = NULL;
 regoff_t currentOffset = 0;
-regmatch_t singleMatch[11], doubleMatch[4], tripleMatch[2];
+regmatch_t singleMatch[11], doubleMatch[4], tripleMatch[2], shortcut;
 myRegmatch_t *current = myHead->head;
 wchar_t unicode_entity[4];
 int32_t entity;
 wchar_t *unicode_end;
 int metacount;
 int xi = 0;
+int has_spaces = 0;
 #if SIZEOFWCHAR < 4
 uint32_t tempUTF32CHAR;
 #endif
@@ -570,6 +580,7 @@ uint32_t tempUTF32CHAR;
 //			ci_debug_printf(10, "Killing Script/Style Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
+			while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		}
 		current=current->next;
 	}
@@ -587,6 +598,7 @@ uint32_t tempUTF32CHAR;
 //			ci_debug_printf(10, "Killing Comment Tag: %.*ls\n", singleMatch[0].rm_eo-singleMatch[0].rm_so, myData+singleMatch[0].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
+			while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		}
 		current = current->next;
 	}
@@ -610,12 +622,12 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				if (tre_regwnexec(&metaContent, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, tripleMatch, 0) != REG_NOMATCH)
+				if (tre_regwnexec(&metaContent, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so, 2, tripleMatch, 0) != REG_NOMATCH)
 				{
-					tripleMatch[0].rm_so += singleMatch[1].rm_so;
-					tripleMatch[0].rm_eo += singleMatch[1].rm_so;
-					tripleMatch[1].rm_so += singleMatch[1].rm_so;
-					tripleMatch[1].rm_eo += singleMatch[1].rm_so;
+					tripleMatch[0].rm_so += doubleMatch[1].rm_so;
+					tripleMatch[0].rm_eo += doubleMatch[1].rm_so;
+					tripleMatch[1].rm_so += doubleMatch[1].rm_so;
+					tripleMatch[1].rm_eo += doubleMatch[1].rm_so;
 //					ci_debug_printf(10, "Saving Meta Description: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
 					regexReplace(myHead, current, &singleMatch[0], myData + tripleMatch[1].rm_so, tripleMatch[1].rm_eo - tripleMatch[1].rm_so, 1);
 				}
@@ -626,12 +638,12 @@ uint32_t tempUTF32CHAR;
 				doubleMatch[0].rm_eo += singleMatch[1].rm_so;
 				doubleMatch[1].rm_so += singleMatch[1].rm_so;
 				doubleMatch[1].rm_eo += singleMatch[1].rm_so;
-				if (tre_regwnexec(&metaContent, myData + singleMatch[1].rm_so, singleMatch[1].rm_eo - singleMatch[1].rm_so, 2, tripleMatch, 0) != REG_NOMATCH)
+				if (tre_regwnexec(&metaContent, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so, 2, tripleMatch, 0) != REG_NOMATCH)
 				{
-					tripleMatch[0].rm_so += singleMatch[1].rm_so;
-					tripleMatch[0].rm_eo += singleMatch[1].rm_so;
-					tripleMatch[1].rm_so += singleMatch[1].rm_so;
-					tripleMatch[1].rm_eo += singleMatch[1].rm_so;
+					tripleMatch[0].rm_so += doubleMatch[1].rm_so;
+					tripleMatch[0].rm_eo += doubleMatch[1].rm_so;
+					tripleMatch[1].rm_so += doubleMatch[1].rm_so;
+					tripleMatch[1].rm_eo += doubleMatch[1].rm_so;
 					for(metacount = 0; metacount < tripleMatch[1].rm_eo - tripleMatch[1].rm_so; metacount++)
 						if(*(myData + tripleMatch[1].rm_so + metacount) == L',') *(myData + tripleMatch[1].rm_so + metacount) = L' ';
 //					ci_debug_printf(10, "Saving Meta Keywords: %.*ls\n", tripleMatch[1].rm_eo-tripleMatch[1].rm_so, myData+tripleMatch[1].rm_so);
@@ -643,6 +655,7 @@ uint32_t tempUTF32CHAR;
 				regexRemove(myHead, current, &singleMatch[0]);
 			}
 			currentOffset=singleMatch[0].rm_eo;
+			while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		}
 		current = current->next;
 	}
@@ -695,11 +708,14 @@ uint32_t tempUTF32CHAR;
 //			ci_debug_printf(10, "Image Data: %.*ls\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
 			regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
+			while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
 		}
 		current=current->next;
 	}
 
 	current = myHead->head;
+	shortcut.rm_eo = 0;
+	shortcut.rm_so = 0;
 	while(current != NULL) // kill all unused tags (save titles)
 	{
 		myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
@@ -709,11 +725,27 @@ uint32_t tempUTF32CHAR;
 		{
 			singleMatch[0].rm_so += currentOffset;
 			singleMatch[0].rm_eo += currentOffset;
+			if(!shortcut.rm_so) shortcut.rm_so = singleMatch[0].rm_so;
+			if(shortcut.rm_eo == singleMatch[0].rm_so)
+			{
+				shortcut.rm_eo = singleMatch[0].rm_eo;
+			}
+			else if(shortcut.rm_eo)
+			{
+				if(has_spaces)
+				{
+					regexReplace(myHead, current, &shortcut, L" ", 1, 0);
+					has_spaces = 0;
+				}
+				else regexRemove(myHead, current, &shortcut);
+				shortcut.rm_so = singleMatch[0].rm_so;
+				shortcut.rm_eo = 0;
+			}
+			else if(!shortcut.rm_eo) shortcut.rm_eo = singleMatch[0].rm_eo;
+
 //			ci_debug_printf(10, "Killing Uncared Tag: %.*ls\n", singleMatch[0].rm_eo - singleMatch[0].rm_so, myData + singleMatch[0].rm_so);
 			if(tre_regwnexec(&title1, myData + singleMatch[0].rm_so, singleMatch[0].rm_eo - singleMatch[0].rm_so, 4, doubleMatch, 0) != REG_NOMATCH)
 			{
-				doubleMatch[1].rm_so += singleMatch[0].rm_so;
-				doubleMatch[1].rm_eo += singleMatch[0].rm_so;
 				if(doubleMatch[2].rm_so != -1)
 				{
 					doubleMatch[2].rm_so += singleMatch[0].rm_so;
@@ -722,26 +754,38 @@ uint32_t tempUTF32CHAR;
 					regexAppend(myHead, myData + doubleMatch[2].rm_so + 1, doubleMatch[2].rm_eo - doubleMatch[2].rm_so - 2);
 				}
 				else {
+					doubleMatch[1].rm_so += singleMatch[0].rm_so;
+					doubleMatch[1].rm_eo += singleMatch[0].rm_so;
 //					ci_debug_printf(10, "Title type 2 found: %.*ls\n", doubleMatch[1].rm_eo - doubleMatch[1].rm_so, myData + doubleMatch[1].rm_so);
 					regexAppend(myHead, myData + doubleMatch[1].rm_so, doubleMatch[1].rm_eo - doubleMatch[1].rm_so);
 				}
 			}
 			if(singleMatch[1].rm_so != -1 && singleMatch[1].rm_eo - singleMatch[1].rm_so > 0)
 			{
-				singleMatch[1].rm_so += currentOffset;
-				singleMatch[1].rm_eo += currentOffset;
 //				ci_debug_printf(10, "Space type 1 was: '%.*ls'\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData + singleMatch[1].rm_so);
-				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
+//				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
+				has_spaces = 1;
 			}
 			else if(singleMatch[8].rm_so != -1 && singleMatch[8].rm_eo - singleMatch[8].rm_so > 0)
 			{
-				singleMatch[8].rm_so += currentOffset;
-				singleMatch[8].rm_eo += currentOffset;
 //				ci_debug_printf(8, "Space type 2 was: '%.*ls'\n", singleMatch[8].rm_eo - singleMatch[8].rm_so, myData + singleMatch[8].rm_so);
-				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
+//				regexReplace(myHead, current, &singleMatch[0], L" ", 1, 0);
+				has_spaces = 1;
 			}
-			else regexRemove(myHead, current, &singleMatch[0]);
+//			else regexRemove(myHead, current, &singleMatch[0]);
 			currentOffset = singleMatch[0].rm_eo;
+			while(myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
+		}
+		if(shortcut.rm_eo)
+		{
+			if(has_spaces)
+			{
+				regexReplace(myHead, current, &shortcut, L" ", 1, 0);
+				has_spaces = 0;
+			}
+			else regexRemove(myHead, current, &shortcut);
+			shortcut.rm_so = 0;
+			shortcut.rm_eo = 0;
 		}
 		current = current->next;
 	}
@@ -821,6 +865,7 @@ uint32_t tempUTF32CHAR;
 				ci_debug_printf(3, "Found Unhandled HTML Entity: %.*ls\n", singleMatch[1].rm_eo - singleMatch[1].rm_so, myData+singleMatch[1].rm_so);
 				currentOffset++;
 			}
+			while(myData[currentOffset] != L'&' && current->rm_eo > currentOffset) currentOffset++;
 		}
 		current=current->next;
 	}
@@ -848,8 +893,7 @@ uint32_t tempUTF32CHAR;
 	while(current != NULL) // Make everything lower case -- increase accuracy and lower key count
 	{
 		myData=(wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
-		currentOffset = current->rm_so;
-		for(; currentOffset < current->rm_eo; currentOffset++)
+		for(currentOffset = current->rm_so; currentOffset < current->rm_eo; currentOffset++)
 		{
 /*			if(iswupper(myData[currentOffset]))
 			{*/

@@ -166,6 +166,7 @@ int prehash_data_file = 0;
 	{
 		prehash_data_file = 0;
 		if(myHashes.hashes) free(myHashes.hashes);
+		close(prehash_data_file);
 	}
 #endif
 	if(prehash_data_file <= 0)
@@ -212,7 +213,7 @@ struct dirent *dp;
 struct stat info;
 int tnum;
 struct timespec delay = { 0, 10000000L};
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 unsigned char d_type;
 #else
 enum DTYPE {DT_UNKNOWN, DT_REG};
@@ -238,7 +239,7 @@ DTYPE d_type;
 			if ((dp = readdir(dirp)) != NULL)
 			{
 				snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 				if(dp->d_type == DT_UNKNOWN)
 				{
 					stat(full_path, &info);

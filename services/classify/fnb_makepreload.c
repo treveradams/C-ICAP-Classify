@@ -53,6 +53,7 @@
 char *fbc_out_file;
 char *fbc_dir;
 
+/* Verified that -p and -s are not needed, but they have been left in as I may be using them in the future */
 int readArguments(int argc, char *argv[])
 {
 int i;
@@ -81,6 +82,8 @@ int i;
 			sscanf(argv[i+1], "%s", fbc_dir);
 		}
 	}
+	// Use old preload, if it exists, to speed up things -- at this time the following two lines are commented as they don't seem to make a difference
+	preLoadBayes(fbc_out_file);
 /*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
 	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
 	printf("Learn File: %s\n", judge_file);*/

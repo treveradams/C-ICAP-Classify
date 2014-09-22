@@ -1,0 +1,266 @@
+HOW TO USE?
+===========
+
+This is very complex. The following is just a brief overview of how to set it
+up. Paths below are relative to the C-ICAP Classify source distribution top
+level directory.
+
+
+What you need:
+==============
+
+* C-ICAP - http://c-icap.sourceforge.net/
+* Squid Proxy - http://www.squid-cache.org/ (or other ICAP enabled proxy, this
+document uses Squid)
+* A data set for the classifier (text and/or image data)
+
+
+How to get it going:
+====================
+
+services/classify/c-icap-classify.conf.example contains an example
+configuration file.
+
+Most of these options will be set/determined by which data set you use. Some
+examples of those that are not necessarily determined by the data set are:
+srv_classify.TmpDir /var/tmp/c_icap
+srv_classify.TextFileTypes TEXT
+srv_classify.ImageFileTypes PNG GIF JPEG BMP ICO
+srv_classify.Allow204Responces on
+srv_classify.MaxObjectSize 40M
+srv_classify.ExternalTextFileType
+srv_classify.ExternalImageFileType
+srv_classify.MaxMemClassification
+srv_classify.MaxTotalMemClassification
+srv_classify.MaxWindowSize
+srv_classify.ImageMinProcess
+srv_classify.debugSaveOriginal 1
+srv_classify.debugSaveParts 1
+srv_classify.debugSaveMarked 1
+srv_classify.debugDemonstrate 1
+srv_classify.debugDemonstrateMasked 1
+srv_classify.ImageInterpolation LINEAR
+srv_classify.ImageMaxScale 4
+srv_classify.ImageScaleDimension 240
+srv_classify.VideoInterpolation AREA
+srv_classify.VideoMaxScale 4
+srv_classify.VideoScaleDimension 320
+srv_classify.VideoProcessFramesPerSecond 3
+
+and finally, srv_classify.OptimizeFNB, which should be used only after all FNB
+data is loaded in your configuration (making it one of the last options in the
+configuration file will take care of this).
+
+Please, note that in the above, the spellings are accurate in the
+documentation, regardless of the correct spelling of the word.
+
+So, read the documentation that comes with the data set of your choice, use
+their options. Some of the above may be sensitive and related to the data set
+(particularly the interpolation, scaling, etc.). Follow the documentation on
+these and experiment if you believe it is worth changing.
+
+Once you have set all of the appropriate settings and have C-ICAP up and
+running, you are ready to configure Squid.
+
+
+Configuring Squid
+=================
+
+Start with a basic, default configuration. This is recommended as the
+configuration of Squid in general is beyond the scope of this document. It is
+wise to use a caching, basic, secure and simple setup to begin with.
+
+services/classify/HEADERS-FOR-ACL-USE.txt contains information on headers that
+can be used in your acl rules. The data set of your choice may have come with
+such configuration information.
+
+A few examples of using the headers are as follows, based on an example data
+set:
+
+acl adult.pinups rep_header X-TEXT-CATEGORY-NB ^adult.pinups$
+acl adult.porn rep_header X-TEXT-CATEGORY-NB ^adult.porn$
+acl entertainment.gambling rep_header X-TEXT-CATEGORY-NB ^entertainment.gambling$
+acl entertainment.onlinegames rep_header X-TEXT-CATEGORY-NB ^entertainment.onlinegames$
+
+Notice these acls do not deny or grant access to anything. They merely setup
+rules that can be checked based on the headers returned by C-ICAP Classify.
+
+deny_info ERR_ACCESS_DENIED_ADULT.PINUPS adult.pinups
+deny_info ERR_ACCESS_DENIED_ADULT.PORN adult.porn
+deny_info ERR_ACCESS_DENIED_ENTERTAINMENT.GAMBLING entertainment.gambling
+deny_info ERR_ACCESS_DENIED_ENTERTAINMENT.ONLINEGAMES entertainment.onlinegames
+
+Again, these rules do NOT deny or grant access. These rules setup what error
+page should be shown. These types of rules are used to show specific errors of
+desired. Where the files are located and how to configure them is beyond the
+scope of this document. The file names, this example, are all in capital
+letters.
+
+Now, let us talk about the actual denying/granting of access to certain sites.
+Any overrides should be placed before the general rules. An example, might be
+for an educational game site used by several school districts in the United
+States:
+
+acl AllowedDomains dstdomain .sumdog.com  # Educational Site Encouraged By Some Schools
+http_reply_access allow AllowedDomains
+
+Again, the first rule doesn't grant or deny access. It adds the sumdog.com
+sites to "AllowedDomains" which is then allowed to everyone.
+
+Some content may be appropriate to some ages and not others (I do not suggest
+pornography and the like is one of these, but some use it that way):
+
+auth_param ...
+
+acl authed_users proxy_auth REQUIRED
+
+http_access allow authed_users
+
+external_acl_type NAME OPTIONS
+
+acl ACL_EXCEPTION_TYPE external NAME GROUP
+
+The above five lines setup authentication an one exception called
+ACL_EXCEPTION_TYPE. NAME is the name program, options are what is to be fed to
+the program. This might be LDAP, SQL or text file look-ups depending on the
+helper programs you choose to use. An example of all of this might be:
+
+http_reply_access allow TextConfidenceSolid entertainment.onlinegames adult
+
+This says, allow access to entertainment.onlinegames, if the user is an adult
+(ACL_EXCEPTION_TYPE would be replaced with adult in the above section... note
+that you can have multiple such exception groups). Notice that
+TextConfidenceSolid is similar to the acl rep_headers above. I haven't included
+it as it will be based on the C-ICAP Classify configuration (data dependent).
+
+Also note, this http_reply_access allow rule has three conditions that must be
+met (AND relationship) TextConfidenceSolid, entertainment.onlinegames, and (our
+authentication related group) adult. An OR relationship is done by placing each
+on a separate line (one each for each of the conditions). Always use a
+TextConfidenceSolid or TextConfidenceAmbiguous, never use a
+TextConfidenceNearest. Be very careful of even the Ambiguous. It might be
+useful for protecting minors from porn, but it is risky!
+
+Finally, you have your global denies or allows:
+
+http_reply_access deny TextConfidenceSolid adult.pinups
+http_reply_access deny TextConfidenceSolid adult.porn
+http_reply_access deny TextConfidenceSolid entertainment.gambling
+http_reply_access deny TextConfidenceSolid entertainment.onlinegames
+
+In the global section or specific section, you can use deny or allow as needed.
+In many of the setups I do, it is best to do specific allows, then global
+denies and not do any global allows (unless it is a legally good idea to show
+that a protected category, such as religion, is very much intended to be
+allowed). If you have very complex rules, you may have specific denies and
+global allows for other reasons.
+
+Now, we need to tell squid above the classify icap service, this is done with
+the following line (assuming you have no port and address bindings beside the
+default in C-ICAP):
+icap_service svcClassify respmod_precache bypass=0 routing=0
+icap://127.0.0.1:1344/srv_classify
+
+Next, we need to tell it to use the service. This is done with the following
+line:
+adaptation_service_chain standardChain svcClassify
+
+You can add additional services (such as the C-ICAP ClamAV virus scanning
+module) by adding more icap_service lines and adding them to the same
+adaptation_service_chain as svcClassify above.
+
+Finally, the acl to say who should use this chain:
+adaptation_access standardChain allow all
+
+If you use other modules, such as the virus scanning module, you may need to
+remove the all on the above adaptation_access and make it more restrictive. You
+would then need alternative chain/chains with the appropriate options to bypass
+them. An example of this is if you use the virelator mode in the virus scanning
+module. Without providing a chain that bypasses it and the appropriate access
+rules, security and program update sites (Windows Updates, etc.) will be
+broken. Please, refer to the appropriate documentation to discover the
+appropriate options and how to use them to implement this alternative chain.
+
+If you use transparent proxying, authentication does NOT work. All denied page
+types will be denied for everyone. In one setup known to the documenter, both
+transparent and normal proxying are used. When the browser is pointed to the
+appropriate proxy server (This would be the fully qualified domain name, i.e.
+proxy.example.org, and port 3128 for standard Squid setup) it will then
+authenticate properly. This means that only the browsers setup to directly use
+the proxy authenticate, the others don't. This is necessary due to the
+configuration of phones, tablets, etc. and the lack of authentication mechanism
+on such devices as decided would be the only method for security reasons.
+
+One final note: if you deny something and a later line allows it, it will be
+denied. Allows must happen first, hence one reason why I do allows as specifics
+and do global denies after!
+
+
+Great, where can I get a data set?
+==================================
+
+At this time, I do not know of a publicly available data set, whether free as
+in gratis or free as in liberty or cost. I know of at least two that are in
+development. One is nearly ready for prime time other than legal issues
+(licensing, intended to be gratis to home uses, businesses, schools, etc.,
+anyone who doesn't make money off of it; i.e. may not be free to consultants,
+contractors, ISPs, etc.) in English with partial support for many others. (The
+accompanying image data set is not as far along due to changes in the OpenCV
+library training algorithm and resultant problems which haven't been fixed as
+of yet; it otherwise would be ready for testing.)
+
+If you are a lawyer and interested in helping to bring this to light and have
+some time and the skills to go with it and wish to donate such services, please
+contact the main developer for details. The other data set, its existence is
+known, but not the status.
+
+Sorry.
+
+
+What about SSL/TLS (secure websites)... why aren't they classified?
+===================================================================
+
+Simple answer: Because they are encrypted and the content is unavailable.
+
+COMPLEX! DANGEROUS! PROCEED AT YOUR OWN RISK! YOU HAVE BEEN WARNED! answer:
+sslBump functionality in Squid can overcome this. I mention this only so
+advanced, informed, technical people can be aware there is a solution. It is
+complex and the security risks are very high if even the slightest mistakes are
+made. Also, not all services/programs/certificates will allow this setup to
+work, so it is important to have someone who can recognize how/when to use this
+and how to bypass it for specific clients/services/sites.
+
+
+Alright. I have it up and running. Is that enough?
+==================================================
+
+Unfortunately, no. It is impossible to block/filter everything. Appropriate
+firewall rules, sslBump, etc. can help. I will not document those things here
+as a competent individual will know how to handle and mitigate most of the ways
+around this content classifier and the general public doesn't need
+documentation on how to bypass it.
+
+Additionally, if you care about people, or live in an area where you may be
+liable for the addictive behavior of employees/members (yes, there have been
+some rather screwy court decisions over the last decade), then you may also
+wish to do a few more things. Please, consult with appropriate legal or other
+professionals, but here is a short list:
+
+1) Acceptable use policies are a must.
+2) Instead of just saying a website is blocked, it may be wise to encourage
+addiction recovery/support programs (21 steps made famous by AA or any other
+such things). This is especially true of things that have been documented to
+destroy lives in one way or another, such as, addiction to pornography and the
+like, addiction to gambling and addiction to playing games (not gambling).
+3) Possibly including warnings about addictive/inappropriate behavior that
+includes information on such recovery/support programs.
+
+Finally, "Well-taught doctrines and principles have a more powerful influence
+on behavior than rules." (Dallin H. Oaks, 1999) Whether you are a business, a
+non-profit, private organization, church, or family, this statement will help
+with all appropriate/inappropriate behavior more than most any other thing.
+Education. Information. Enlightenment. The way you implement it will vary
+depending on what kind of organization is in question and what the culture
+and/or values of that organization is. This is one reason this classifier was
+designed to be very flexible.
+

@@ -87,6 +87,11 @@ You must always have all the files within each category share the hash seeds.
 Additionally, all categories within the same classifier data set \fBmust\fR
 share the same hash seeds.
 .PP
+This program creates ".pre-hash-*" files in the possibles directory. These
+must be manually removed. Any time there is a change to any of the C-ICAP
+Classify programs, these should be removed before any mass train, smart train
+or restage.
+.PP
 .SH "FILES"
 .nf
 NONE

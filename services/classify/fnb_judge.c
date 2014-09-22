@@ -122,10 +122,10 @@ HTMLClassification classification;
 	normalizeCurrency(&myRegexHead);
 	regexMakeSingleBlock(&myRegexHead);
 
+	s2=clock();
 	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
 	myHashes.slots = HTML_MAX_FEATURE_COUNT;
 	myHashes.used = 0;
-	s2=clock();
 	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 	s3=clock();
 

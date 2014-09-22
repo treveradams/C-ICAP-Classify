@@ -21,8 +21,8 @@ fhs_learn_CFLAGS = -DTRAINER -DNOT_CICAP -std=gnu99
 fhs_learn_LDFLAGS = -ltre -lm $(ICU_LIBS)
 
 fhs_findtolearn_SOURCES = fhs_findtolearn.c html.c train_common.c train_common_threads.c
-fhs_findtolearn_CFLAGS = -DTRAINER -DNOT_CICAP -std=gnu99 -lpthread
-fhs_findtolearn_LDFLAGS = -ltre -lm $(ICU_LIBS)
+fhs_findtolearn_CFLAGS = -DTRAINER -DNOT_CICAP -std=gnu99
+fhs_findtolearn_LDFLAGS = -ltre -lm -lpthread $(ICU_LIBS)
 
 fhs_makepreload_SOURCES = fhs_makepreload.c html.c
 fhs_makepreload_CFLAGS = -DTRAINER -DNOT_CICAP -std=gnu99

@@ -33,15 +33,19 @@ process_entry *item;
 		item = file_names;
 	else
 		item = calloc(1, sizeof(process_entry));
+	// Populate item
+	item->full_path = strdup(full_path);
+	item->file_name = strdup(file_name);
+
+	// Get next free file_name slot
 	file_names = item->next;
 
 	// Add item to busy list
 	item->next = busy_file_names;
 	busy_file_names = item;
 
-	item->full_path = strdup(full_path);
-	item->file_name = strdup(file_name);
 
+	// threading house-keeping
 	file_available++;
 	file_need_data--;
 	pthread_cond_signal(&file_avl_cnd);
@@ -60,6 +64,8 @@ process_entry *item = NULL, ret_entry = {NULL, NULL, NULL};
 		file_names = item;
 
 		ret_entry = *item;
+
+		// threading house-keeping
 		file_available--;
 	}
 	return ret_entry;

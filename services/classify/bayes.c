@@ -310,52 +310,103 @@ return 0;
 }
 
 #ifdef TRAINER
+#ifdef _POSIX_MAPPED_FILES
+static inline void binary2char(char *source, char *destination, int16_t bytes)
+{
+	for(int z=0; z < bytes; z++) destination[z] = source[z];
+}
+#endif
+
 int writeFBCHashes(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list, uint16_t category, uint32_t zero_point)
 {
 uint32_t i;
 uint_least32_t qty = 0;
 uint16_t j;
+#ifndef _POSIX_MAPPED_FILES
 int writecheck;
+#else
+struct stat st;
+int64_t mmap_offset, size;
+char *address;
+#endif
 
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
 	if(header->WCS != sizeof(wchar_t) || header->version != FBC_FORMAT_VERSION)
 	{
-		ci_debug_printf(1, "writeFBCHashes cannot write to a different version file or to a file with a different WCS!\n");
+		ci_debug_printf(1, "writeFBCHashes: cannot write to a different version file or to a file with a different WCS!\n");
 		return -2;
 	}
+#ifdef _POSIX_MAPPED_FILES
+	i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	fstat(file, &st);
+	size = st.st_size;
+	mmap_offset = lseek64(file, 0, SEEK_CUR);
+	address = mmap(0, size, PROT_WRITE, MAP_SHARED, file, 0);
+	if(address == MAP_FAILED)
+	{
+		ci_debug_printf(3, "writeFBCHashes: Failed to mmap\n");
+		return -1;
+	}
+#endif
 	if(hashes_list->used) // check before we write
 	{
 		for(i = 0; i < hashes_list->used; i++)
 		{
 			for(j = 0; j < hashes_list->hashes[i].used; j++)
 			{
-				// Make sure that this is the right category and that we have enough counts to write (not <= zero_point)
-				if(hashes_list->hashes[i].users[j].category == category && hashes_list->hashes[i].users[j].data.count >= zero_point)
+				if(hashes_list->hashes[i].users != NULL)
 				{
-					qty++;
-					do { // write hash
-						writecheck = write(file, &hashes_list->hashes[i].hash, FBC_v1_HASH_SIZE);
-				                if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-					} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
-					do { // write use count
-						writecheck = write(file, &hashes_list->hashes[i].users[j].data.count, FBC_v1_HASH_USE_COUNT_SIZE);
-				                if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-					} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
+					// Make sure that this is the right category and that we have enough counts to write (not <= zero_point)
+					if(hashes_list->hashes[i].users[j].category == category && hashes_list->hashes[i].users[j].data.count >= zero_point)
+					{
+						qty++;
+#ifdef _POSIX_MAPPED_FILES
+						// write hash
+						binary2char((char *) &hashes_list->hashes[i].hash, address + mmap_offset, FBC_v1_HASH_SIZE);
+						mmap_offset += FBC_v1_HASH_SIZE;
+						// write use count
+						binary2char((char *) &hashes_list->hashes[i].users[j].data.count, address + mmap_offset, FBC_v1_HASH_USE_COUNT_SIZE);
+						mmap_offset += FBC_v1_HASH_USE_COUNT_SIZE;
+#else
+						do { // write hash
+							writecheck = write(file, &hashes_list->hashes[i].hash, FBC_v1_HASH_SIZE);
+						        if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+						} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
+						do { // write use count
+							writecheck = write(file, &hashes_list->hashes[i].users[j].data.count, FBC_v1_HASH_USE_COUNT_SIZE);
+						        if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+						} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
+#endif
+					}
 				}
 			}
 		}
+		header->records = qty;
+#ifdef _POSIX_MAPPED_FILES
+		binary2char((char *) &header->records, address + 9, FBC_HEADERv1_RECORDS_QTY_SIZE);
+		// wrap up mmap
+/*		if(msync(address, size, MS_SYNC) < 0) {
+			ci_debug_printf(3, "writeFBCHashes: msync failed with error: %s\n", strerror(errno));
+			strerror(errno);
+		} */
+		if(munmap(address, size) < 0) {
+			ci_debug_printf(3, "writeFBCHashes: munmap failed with error: %s\n", strerror(errno));
+
+		}
+		i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+#else
 		if(ftruncate(file, lseek64(file, 0, SEEK_CUR)) != 0)
 		{
 			ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
 		}
 		/* Ok, have written hashes, now save new count */
 //		ci_debug_printf(10, "%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
-		header->records = qty;
 		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 		} while (writecheck >=0 && writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE);
+#endif
 		return 0;
 	}
 	return -1;
@@ -364,31 +415,78 @@ int writecheck;
 int writeFBCHashesPreload(int file, FBC_HEADERv1 *header, FBCHashList *hashes_list)
 {
 uint32_t i;
+uint_least32_t qty = 0;
 const uint_least32_t ZERO_COUNT = 0;
+#ifndef _POSIX_MAPPED_FILES
 int writecheck;
+#else
+struct stat st;
+int64_t mmap_offset, size;
+char *address;
+#endif
+
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
 	i = ftruncate64(file, 13);
 	lseek64(file, 0, SEEK_END);
+#ifdef _POSIX_MAPPED_FILES
+	i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	fstat(file, &st);
+	size = st.st_size;
+	mmap_offset = lseek64(file, 0, SEEK_CUR);
+	address = mmap(0, size, PROT_WRITE, MAP_SHARED, file, 0);
+	if(address == MAP_FAILED)
+	{
+		ci_debug_printf(3, "Failed to mmap in writeFBCHashesPreload\n");
+		return -1;
+	}
+#endif
 	if(hashes_list->used) // check before we write
 	{
 		for(i = 0; i < hashes_list->used; i++)
 		{
-			do { // write hash
-				writecheck = write(file, &hashes_list->hashes[i].hash, FBC_v1_HASH_SIZE);
-		                if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
-			do { // write use count
-				writecheck = write(file, &ZERO_COUNT, FBC_v1_HASH_USE_COUNT_SIZE);
-		                if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
-			} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
+			if(hashes_list->hashes[i].users != NULL)
+			{
+				qty++;
+#ifdef _POSIX_MAPPED_FILES
+				// write hash
+				binary2char((char *) &hashes_list->hashes[i].hash, address + mmap_offset, FBC_v1_HASH_SIZE);
+				mmap_offset += FBC_v1_HASH_SIZE;
+				// write use count
+				binary2char((char *) &ZERO_COUNT, address + mmap_offset, FBC_v1_HASH_USE_COUNT_SIZE);
+				mmap_offset += FBC_v1_HASH_USE_COUNT_SIZE;
+#else
+				do { // write hash
+					writecheck = write(file, , FBC_v1_HASH_SIZE);
+				        if(writecheck < FBC_v1_HASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+				} while (writecheck >=0 && writecheck < FBC_v1_HASH_SIZE);
+				do { // write use count
+					writecheck = write(file, &ZERO_COUNT, FBC_v1_HASH_USE_COUNT_SIZE);
+				        if(writecheck < FBC_v1_HASH_USE_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
+				} while (writecheck >=0 && writecheck < FBC_v1_HASH_USE_COUNT_SIZE);
+#endif
+			}
 		}
 		/* Ok, have written hashes, now save new count */
-		header->records = hashes_list->used;
+		header->records = qty;
+#ifdef _POSIX_MAPPED_FILES
+		binary2char((char *) &header->records, address + 9, FBC_HEADERv1_RECORDS_QTY_SIZE);
+		// wrap up mmap
+/*		if(msync(address, size, MS_SYNC) < 0) {
+			ci_debug_printf(3, "writeFBCHashesPreload: msync failed with error: %s\n", strerror(errno));
+			strerror(errno);
+		} */
+		if(munmap(address, size) < 0) {
+			ci_debug_printf(3, "writeFBCHashesPreload: munmap failed with error: %s\n", strerror(errno));
+
+		}
+		i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+#else
 		lseek64(file, 9, SEEK_SET);
 		do {
 			writecheck = write(file, &header->records, FBC_HEADERv1_RECORDS_QTY_SIZE);
 			if(writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 		} while (writecheck >=0 && writecheck < FBC_HEADERv1_RECORDS_QTY_SIZE);
+#endif
 		return 0;
 	}
 	return -1;
@@ -758,7 +856,7 @@ char *address;
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 #else
 		// read hash
-		char2binary(address+ mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
+		char2binary(address + mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
 		mmap_offset += FBC_v1_HASH_SIZE;
 		// read use count
 		char2binary(address + mmap_offset, (char *) &count, FBC_v1_HASH_USE_COUNT_SIZE);
@@ -984,7 +1082,7 @@ char *address;
 		} while (status >=0 && status < FBC_v1_HASH_USE_COUNT_SIZE);
 #else
 		// read hash
-		char2binary(address+ mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
+		char2binary(address + mmap_offset, (char *) &hash, FBC_v1_HASH_SIZE);
 		mmap_offset += FBC_v1_HASH_SIZE;
 		// read use count
 		char2binary(address + mmap_offset, (char *) &count, FBC_v1_HASH_USE_COUNT_SIZE);

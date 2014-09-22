@@ -34,6 +34,8 @@
 
 #define NOT_CICAP
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
@@ -41,8 +43,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <locale.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <wchar.h>
@@ -50,9 +50,11 @@
 #include <dirent.h>
 #include <errno.h>
 #include <pthread.h>
+#include <libgen.h>
 
 #include "hash.c"
 #include "bayes.c"
+#include "findtolearn_util.c"
 #include "train_common.h"
 #include "train_common_threads.h"
 
@@ -127,11 +129,6 @@ int i;
 		}
 	}
 	if(fbc_out_file == NULL) goto HELP;
-	if(do_directory_learn == 1)
-	{
-		preLoadBayes(fbc_out_file);
-		unlink(fbc_out_file);
-	}
 	if(argc == 5 && (zero_point < 1 || fbc_out_file == NULL))
 	{
 		goto HELP;
@@ -149,20 +146,69 @@ void doLearn(char *data_file)
 regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
 wchar_t *myData;
 HashList myHashes;
-	myData=makeData(data_file);
-	mkRegexHead(&myRegexHead, myData, 0);
-	removeHTML(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
-	normalizeCurrency(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
+#ifdef _GNU_SOURCE
+char *temp, *prehash_file = NULL, *dirpath, *filename;
+#else
+char *prehash_file = NULL, *dirpath, *filename;
+#endif
+int prehash_data_file = 0;
 
-//	printf("%ls\n", myRegexHead.main_memory);
+#ifdef _GNU_SOURCE
+	if(do_directory_learn > 0)
+	{
+		temp = strdup(data_file);
+		dirpath = strdup(dirname(temp));
+		free(temp);
+		filename = basename(data_file);
+		prehash_file = malloc(strlen(filename) + 12 + strlen(dirpath));
+		strcpy(prehash_file, dirpath);
+		strcat(prehash_file, "/");
+		strcat(prehash_file, ".pre-hash-");
+		strcat(prehash_file, filename);
+		free(dirpath);
+		// If we find the file, load it
+		if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0);
+		{
+			readPREHASHES(prehash_data_file, &myHashes);
+			close(prehash_data_file);
+		}
+		if(myHashes.used < 5)
+		{
+			prehash_data_file = 0;
+			if(myHashes.hashes) free(myHashes.hashes);
+			close(prehash_data_file);
+		}
+	}
+#endif
 
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
-	myHashes.slots = HTML_MAX_FEATURE_COUNT;
-	myHashes.used = 0;
+	if(prehash_data_file <= 0)
+	{
+		myData=makeData(data_file);
+		mkRegexHead(&myRegexHead, myData, 0);
+		removeHTML(&myRegexHead);
+		regexMakeSingleBlock(&myRegexHead);
+		normalizeCurrency(&myRegexHead);
+		regexMakeSingleBlock(&myRegexHead);
 
-	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+//		printf("%ls\n", myRegexHead.main_memory);
+
+		myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+		myHashes.slots = HTML_MAX_FEATURE_COUNT;
+		myHashes.used = 0;
+		computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+		myData = NULL;
+	}
+
+#ifdef _GNU_SOURCE
+	if(do_directory_learn > 0 && prehash_data_file <= 0 && myHashes.used > 0)
+	{
+		// write out preload file
+		prehash_data_file = open(prehash_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
+		writePREHASHES(prehash_data_file, &myHashes);
+		close(prehash_data_file);
+	}
+	free(prehash_file);
+#endif
 
 	pthread_mutex_lock(&train_mtx);
 	learnHashesBayesCategory(0, &myHashes);
@@ -178,14 +224,14 @@ char full_path[PATH_MAX];
 struct stat info;
 int tnum;
 struct timespec delay = { 0, 10000000L};
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 unsigned char d_type;
 #else
-enum DTYPE {DT_UNKNOWN, DT_REG};
+typedef enum {DT_UNKNOWN, DT_REG} DTYPE;
 DTYPE d_type;
 #endif
 
-#ifndef _SVID_SOURCE
+#if !defined(_SVID_SOURCE) && !defined(_POSIX_C_SOURCE)
 DIR *dirp;
 struct dirent *dp;
 
@@ -200,7 +246,7 @@ struct dirent *dp;
 		if ((dp = readdir(dirp)) != NULL)
 		{
 			snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 			if(dp->d_type == DT_UNKNOWN)
 			{
 				stat(full_path, &info);
@@ -211,9 +257,9 @@ struct dirent *dp;
 #else
 			stat(full_path, &info);
 			if(S_ISREG(info.st_mode)) d_type = DT_REG;
-			else d_type == DT_UNKNOWN;
+			else d_type = DT_UNKNOWN;
 #endif
-			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && d_type == DT_REG)
+			if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && d_type == DT_REG)
 			{
 				printf("Learning %s\n", dp->d_name);
 				fprintf(stderr, "Learning %s\n", dp->d_name);
@@ -248,7 +294,7 @@ int32_t n;
 		for(uint32_t i = 0; i <= n; i++)
 		{
 			snprintf(full_path, PATH_MAX, "%s/%s", directory, namelist[i]->d_name);
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 			if(namelist[i]->d_type == DT_UNKNOWN)
 			{
 				stat(full_path, &info);
@@ -259,9 +305,10 @@ int32_t n;
 #else
 			stat(full_path, &info);
 			if(S_ISREG(info.st_mode)) d_type = DT_REG;
-			else d_type == DT_UNKNOWN;
+
+			else d_type = DT_UNKNOWN;
 #endif
-			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0 && d_type == DT_REG)
+			if (strcmp(namelist[i]->d_name, ".") != 0 && strcmp(namelist[i]->d_name, "..") != 0 && strncmp(namelist[i]->d_name, ".pre-hash-", 10) != 0 && d_type == DT_REG)
 			{
 				printf("Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
 				fprintf(stderr, "Learning %s (%"PRIu32" / %"PRIu32")\n", namelist[i]->d_name, i, n);
@@ -343,12 +390,12 @@ struct thread_info *tinfo;
 int i;
 process_entry *temp;
 
-	if(readArguments(argc, argv)==-1) exit(-1);
 	checkMakeUTF8();
 	initHTML();
 	initBayesClassifier();
+	if(readArguments(argc, argv)==-1) exit(-1);
 
-        if(loadBayesCategory(fbc_out_file, "LEARNING") == -1 && do_directory_learn != 1)
+	if(loadBayesCategory(fbc_out_file, "LEARNING") == -1 && do_directory_learn != 1)
 		printf("Unable to open %s\n", fbc_out_file);
 
 	if(learning)

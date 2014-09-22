@@ -30,6 +30,8 @@
 
 #define NOT_CICAP
 
+#include <sys/types.h>
+#include <sys/stat.h>
 #include <stdio.h>
 #include <stdint.h>
 #include <inttypes.h>
@@ -37,8 +39,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <locale.h>
-#include <sys/types.h>
-#include <sys/stat.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <wchar.h>
@@ -156,7 +156,7 @@ int prehash_data_file = 0;
 	strcat(prehash_file, ".pre-hash-");
 	strcat(prehash_file, filename);
 	free(dirpath);
-	// If we found the file, load it
+	// If we find the file, load it
 	if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0);
 	{
 		readPREHASHES(prehash_data_file, &myHashes);
@@ -166,6 +166,7 @@ int prehash_data_file = 0;
 	{
 		prehash_data_file = 0;
 		if(myHashes.hashes) free(myHashes.hashes);
+		close(prehash_data_file);
 	}
 #endif
 	if(prehash_data_file <= 0)
@@ -186,8 +187,16 @@ int prehash_data_file = 0;
 		computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
 		myData = NULL;
 	}
-
-	classification = doBayesPrepandClassify(&myHashes);
+	if(myHashes.used < 5) // We don't want untrainable and irrelevant files messing things up
+	{
+		classification.primary_name = train_as_category;
+		classification.secondary_name = train_as_category;
+		classification.primary_probability = DBL_MAX;
+		classification.secondary_probability = DBL_MAX;
+		classification.primary_probScaled = DBL_MAX;
+		classification.secondary_probScaled = DBL_MAX;
+	}
+	else classification = doBayesPrepandClassify(&myHashes);
 
 #ifdef _GNU_SOURCE
 	if(prehash_data_file <= 0 && myHashes.used > 0)
@@ -212,10 +221,10 @@ struct dirent *dp;
 struct stat info;
 int tnum;
 struct timespec delay = { 0, 10000000L};
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 unsigned char d_type;
 #else
-enum DTYPE {DT_UNKNOWN, DT_REG};
+typedef enum {DT_UNKNOWN, DT_REG} DTYPE;
 DTYPE d_type;
 #endif
 
@@ -238,7 +247,7 @@ DTYPE d_type;
 			if ((dp = readdir(dirp)) != NULL)
 			{
 				snprintf(full_path, PATH_MAX, "%s/%s", directory, dp->d_name);
-#ifdef _BSD_SOURCE
+#if defined(_BSD_SOURCE) || defined(_DEFAULT_SOURCE)
 				if(dp->d_type == DT_UNKNOWN)
 				{
 					stat(full_path, &info);
@@ -249,7 +258,7 @@ DTYPE d_type;
 #else
 				stat(full_path, &info);
 				if(S_ISREG(info.st_mode)) d_type = DT_REG;
-				else d_type == DT_UNKNOWN;
+				else d_type = DT_UNKNOWN;
 #endif
 				if (strcmp(dp->d_name, ".") != 0 && strcmp(dp->d_name, "..") != 0 && strncmp(dp->d_name, ".pre-hash-", 10) != 0 && d_type == DT_REG)
 				{

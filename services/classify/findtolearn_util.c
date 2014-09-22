@@ -25,24 +25,66 @@ int writePREHASHES(int file, HashList *hashes_list)
 {
 uint32_t i;
 uint_least32_t qty = 0;
+#ifndef _POSIX_MAPPED_FILES
 int writecheck;
+#else
+struct stat st;
+int64_t mmap_offset = 0, size;
+char *address;
+#endif
+
+#ifdef _POSIX_MAPPED_FILES
+	i = ftruncate64(file, (hashes_list->used * PREHASH_SIZE) +  PREHASH_COUNT_SIZE);
+	fstat(file, &st);
+	size = st.st_size;
+	address = mmap(0, size, PROT_WRITE, MAP_SHARED, file, 0);
+	if(address == MAP_FAILED)
+	{
+		ci_debug_printf(3, " writePREHASHES: Failed to mmap with error: %s\n", strerror(errno));
+		return -1;
+	}
+#endif
 
 	if(hashes_list->used) // check before we write
 	{
 		qty = hashes_list->used;
+
+#ifdef _POSIX_MAPPED_FILES
+		binary2char((char *) &qty, address, PREHASH_COUNT_SIZE);
+		mmap_offset += PREHASH_COUNT_SIZE;
+#else
 		do {
 			writecheck = write(file, &qty, PREHASH_COUNT_SIZE);
 			if(writecheck < PREHASH_COUNT_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 		} while (writecheck >=0 && writecheck < PREHASH_COUNT_SIZE);
+#endif
 
 		for(i = 0; i < hashes_list->used; i++)
 		{
+#ifdef _POSIX_MAPPED_FILES
+			binary2char((char *) &hashes_list->hashes[i], address + mmap_offset, PREHASH_SIZE);
+			mmap_offset += PREHASH_SIZE;
+#else
 			do { // write hash
 				writecheck = write(file, &hashes_list->hashes[i], PREHASH_SIZE);
 		                if(writecheck < PREHASH_SIZE) lseek64(file, -writecheck, SEEK_CUR);
 			} while (writecheck >=0 && writecheck < PREHASH_SIZE);
+#endif
 		}
+#ifdef _POSIX_MAPPED_FILES
+		// wrap up mmap
+/*		if(msync(address, size, MS_SYNC) < 0) {
+			ci_debug_printf(3, "writeFBCHashes: msync failed with error: %s\n", strerror(errno));
+			strerror(errno);
+		} */
+		if(munmap(address, size) < 0) {
+			ci_debug_printf(3, " writePREHASHES: munmap failed with error: %s\n", strerror(errno));
+
+		}
+		i = ftruncate64(file, (qty * PREHASH_SIZE) + PREHASH_COUNT_SIZE);
+#else
 		ftruncate(file, lseek64(file, 0, SEEK_CUR));
+#endif
 		/* Ok, have written hashes, now save new count */
 //		ci_debug_printf(10, "%"PRIu32" hashes, wrote %"PRIu32" hashes\n", hashes_list->used, qty);
 		return 0;
@@ -54,8 +96,10 @@ int readPREHASHES(int file, HashList *hashes_list)
 {
 uint_least32_t qty = 0;
 int readcheck;
+struct stat st;
 
-	if(file < 0)
+	fstat(file, &st);
+	if(file < 0 || st.st_size < PREHASH_COUNT_SIZE)
 	{
 		hashes_list->used = 0;
 		hashes_list->hashes = NULL;
@@ -67,6 +111,15 @@ int readcheck;
 		if(readcheck < PREHASH_COUNT_SIZE) lseek64(file, -readcheck, SEEK_CUR);
 	} while (readcheck >0 && readcheck < PREHASH_COUNT_SIZE);
 
+
+	if(st.st_size < PREHASH_COUNT_SIZE + (PREHASH_SIZE * qty))
+	{
+		ci_debug_printf(1, "readPREHASHES: file too small for number of records it says it holds. Aborting prehash read.\n");
+		hashes_list->used = 0;
+		hashes_list->hashes = NULL;
+		hashes_list->slots = 0;
+		return -999;
+	}
 	hashes_list->used = qty;
 	hashes_list->hashes = malloc(sizeof(HTMLFeature) * qty);
 	hashes_list->slots = qty;

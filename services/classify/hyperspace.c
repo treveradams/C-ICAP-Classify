@@ -49,6 +49,9 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <errno.h>
+#ifdef _POSIX_MAPPED_FILES
+#include <sys/mman.h>
+#endif
 
 #include "html.h"
 
@@ -231,6 +234,13 @@ return 0;
 }
 
 #ifdef TRAINER
+#ifdef _POSIX_MAPPED_FILES
+static inline void binary2char(char *source, char *destination, int16_t bytes)
+{
+	for(int z=0; z < bytes; z++) destination[z] = source[z];
+}
+#endif
+
 int writeFHSHashes(int file, FHS_HEADERv1 *header, HashList *hashes_list)
 {
 uint16_t i;
