@@ -744,7 +744,7 @@ uint16_t current_category;
 	{
 		ci_debug_printf(3, "srv_classify_image: No categories present. I cannot initiate session.\n");
 		ci_thread_rwlock_unlock(&imageclassify_rwlock);
-		return NO_CATEGORIES;
+		return IMAGE_NO_CATEGORIES;
 	}
 
 	if(filename == NULL)
@@ -763,12 +763,12 @@ uint16_t current_category;
 	if((mySession->dstorage = cvCreateMemStorage(0)) == NULL)
 	{
             ci_thread_rwlock_unlock(&imageclassify_rwlock);
-            return NO_MEMORY;
+            return IMAGE_NO_MEMORY;
 	}
 	if((mySession->lstorage = cvCreateMemStorage(0)) == NULL)
 	{
             ci_thread_rwlock_unlock(&imageclassify_rwlock);
-            return NO_MEMORY;
+            return IMAGE_NO_MEMORY;
 	}
 	cvClearMemStorage( mySession->dstorage );
 	cvClearMemStorage( mySession->lstorage );
@@ -777,7 +777,7 @@ uint16_t current_category;
 		ci_debug_printf(1,
                        "Error allocation memory for service data!!!!!!!\n");
 		ci_thread_rwlock_unlock(&imageclassify_rwlock);
-		return NO_MEMORY;
+		return IMAGE_NO_MEMORY;
 	}
 	for(current_category = 0; current_category < num_image_categories; current_category++)
 	{
@@ -847,6 +847,14 @@ classify_req_data_t *data = ci_service_data(req);
 image_session_t mySession;
 int minDim = 0, ret = 0;
 CvMat myCvMat;
+
+    // Don't bother to do anything if there is nothing to be done
+    if(num_image_categories == 0)
+    {
+        ci_debug_printf(3, "srv_classify_image: No categories present. Ignoring. You are seeing this because you have no image categories set, but have a srv_classify.ImageFileTypes option set.\n");
+        addImageErrorHeaders(req, IMAGE_NO_CATEGORIES);
+        return CI_OK;
+    }
 
     // Load the image from that filename
     if(data->mem_body)
@@ -951,6 +959,14 @@ char **localargs;
 image_detected_count_t *count = NULL;
 uint16_t current_category;
 
+	// Don't bother to do anything if there is nothing to be done
+	if(num_image_categories == 0)
+	{
+		ci_debug_printf(3, "srv_classify_image: No categories present. Ignoring. You are seeing this because you have no image categories set, but have a srv_classify.ImageFileTypes option set.\n");
+		addImageErrorHeaders(req, IMAGE_NO_CATEGORIES);
+		return CI_OK;
+	}
+
 	mySession.origImage = NULL;
 
 	snprintf(CALL_OUT, CI_MAX_PATH, "%s/EXT_IMAGE-XXXXXX", CLASSIFY_TMP_DIR);
@@ -991,7 +1007,8 @@ uint16_t current_category;
 		if ((dirp = opendir(data->external_body->filename)) == NULL)
 		{
 			ci_debug_printf(3, "srv_classify_image: categorize_external_image: couldn't open '%s'", data->external_body->filename);
-			return -1;
+			addImageErrorHeaders(req, IMAGE_FAILED_LOAD);
+			return CI_ERROR;
 		}
 
 		// Setup Session
@@ -1003,7 +1020,7 @@ uint16_t current_category;
 			unlink_directory(data->external_body->filename);
 			free(data->external_body);
 			closedir(dirp);
-			return -1;
+			return CI_ERROR;
 		}
 
 		// Grab Referrer Classification before it is too late
@@ -1014,7 +1031,7 @@ uint16_t current_category;
 		{
 			ci_debug_printf(1, "srv_classify_image: categorize_external_image: couldn't allocate memory");
 			closedir(dirp);
-			return NO_MEMORY;
+			return IMAGE_NO_MEMORY;
 		}		
 		for(current_category = 0; current_category < num_image_categories; current_category++)
 		{

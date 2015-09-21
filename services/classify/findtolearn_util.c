@@ -33,23 +33,22 @@ int64_t mmap_offset = 0, size;
 char *address;
 #endif
 
-#ifdef _POSIX_MAPPED_FILES
-	i = ftruncate64(file, (hashes_list->used * PREHASH_SIZE) +  PREHASH_COUNT_SIZE);
-	fstat(file, &st);
-	size = st.st_size;
-	address = mmap(0, size, PROT_WRITE, MAP_SHARED, file, 0);
-	if(address == MAP_FAILED)
-	{
-		ci_debug_printf(3, " writePREHASHES: Failed to mmap with error: %s\n", strerror(errno));
-		return -1;
-	}
-#endif
-
 	if(hashes_list->used) // check before we write
 	{
 		qty = hashes_list->used;
 
 #ifdef _POSIX_MAPPED_FILES
+		// Truncate file and setup mmap
+		i = ftruncate64(file, (hashes_list->used * PREHASH_SIZE) +  PREHASH_COUNT_SIZE);
+		fstat(file, &st);
+		size = st.st_size;
+		address = mmap(0, size, PROT_WRITE, MAP_SHARED, file, 0);
+		if(address == MAP_FAILED)
+		{
+			ci_debug_printf(3, "writePREHASHES: Failed to mmap with error: %s\n", strerror(errno));
+			return -1; // If we can't mmap, we can't function
+		}
+		// Write out prehash count
 		binary2char((char *) &qty, address, PREHASH_COUNT_SIZE);
 		mmap_offset += PREHASH_COUNT_SIZE;
 #else
@@ -62,6 +61,7 @@ char *address;
 		for(i = 0; i < hashes_list->used; i++)
 		{
 #ifdef _POSIX_MAPPED_FILES
+			// write hash
 			binary2char((char *) &hashes_list->hashes[i], address + mmap_offset, PREHASH_SIZE);
 			mmap_offset += PREHASH_SIZE;
 #else
@@ -78,8 +78,7 @@ char *address;
 			strerror(errno);
 		} */
 		if(munmap(address, size) < 0) {
-			ci_debug_printf(3, " writePREHASHES: munmap failed with error: %s\n", strerror(errno));
-
+			ci_debug_printf(3, "writePREHASHES: munmap failed with error: %s\n", strerror(errno));
 		}
 		i = ftruncate64(file, (qty * PREHASH_SIZE) + PREHASH_COUNT_SIZE);
 #else
@@ -109,7 +108,7 @@ struct stat st;
 	do {
 		readcheck = read(file, &qty, PREHASH_COUNT_SIZE);
 		if(readcheck < PREHASH_COUNT_SIZE) lseek64(file, -readcheck, SEEK_CUR);
-	} while (readcheck >0 && readcheck < PREHASH_COUNT_SIZE);
+	} while (readcheck > 0 && readcheck < PREHASH_COUNT_SIZE);
 
 
 	if(st.st_size < PREHASH_COUNT_SIZE + (PREHASH_SIZE * qty))

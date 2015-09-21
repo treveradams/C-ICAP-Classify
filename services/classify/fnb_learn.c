@@ -204,6 +204,15 @@ int prehash_data_file = 0;
 	{
 		// write out preload file
 		prehash_data_file = open(prehash_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
+		// For some strange reason (which I don't believe is supposed
+		// to happen on modern systems, under conditions which will
+		// exist) opening the file occasionally fails, the second
+		// attempt appears to always work. If it doesn't, it is safe
+		// to fail. So, we only try the second time.
+		if(prehash_data_file <= 0)
+		{
+			prehash_data_file = open(prehash_file, O_CREAT | O_RDWR, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP);
+		}
 		writePREHASHES(prehash_data_file, &myHashes);
 		close(prehash_data_file);
 	}

@@ -73,7 +73,7 @@ const wchar_t *WCNULL = L"\0";
 #define F_PERM S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH
 #endif
 
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 extern int categorize_image(ci_request_t * req);
 extern int categorize_external_image(ci_request_t * req);
 extern int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata);
@@ -120,7 +120,7 @@ ci_thread_rwlock_t textclassify_rwlock;
 ci_thread_mutex_t memmanage_mtx;
 
 /* Image processing information */
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 //#include <opencv/cv.h>
 extern int IMAGE_SCALE_DIMENSION; // Scale to this dimension
 extern int IMAGE_MAX_SCALE; // Maximum rescale
@@ -185,7 +185,7 @@ extern char *strcasestr(const char *haystack, const char *needle);
 regex_t picslabel;
 int make_pics_header(ci_request_t * req);
 
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 // Referrer classification handling
 #define REFERRERS_SIZE 1000
 
@@ -237,7 +237,7 @@ static struct ci_conf_entry conf_variables[] = {
      {"TextPrimarySecondary", NULL, cfg_TextSecondary, NULL},
      {"MaxMemClassification", &MAX_MEM_CLASS_SIZE, ci_cfg_size_off, NULL},
      {"MaxTotalMemClassification", &MAX_MEM_CLASS_TOTAL_SIZE, ci_cfg_size_off, NULL},
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      {"ImageFileTypes", NULL, cfg_ClassifyFileTypes, NULL},
      {"ImageScaleDimension", &IMAGE_SCALE_DIMENSION, ci_cfg_set_int, NULL},
      {"ImageInterpolation", NULL, cfg_ImageInterpolation, NULL},
@@ -435,7 +435,9 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      tre_regwcomp(&picslabel, L"<meta http-equiv=\"PICS-Label\" content='\\(PICS-1.1 ([^']*)'.*/?>", REG_EXTENDED | REG_ICASE);
 //#endif
      initHTML();
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      CFG_NUM_CICAP_THREADS = server_conf->THREADS_PER_CHILD;
+#endif
      ci_thread_rwlock_unlock(&textclassify_rwlock);
 
      return 1;
@@ -445,7 +447,7 @@ int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
                            struct ci_server_conf *server_conf)
 {
 int ret = CI_OK;
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      ret = postInitImageClassificationService();
 
      ci_thread_rwlock_init(&referrers_rwlock);
@@ -460,7 +462,7 @@ int ret = CI_OK;
 
 void srvclassify_close_service()
 {
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      closeImageClassification();
      freeReferrerTable();
 #endif
@@ -597,7 +599,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
 
      /*Going to determine the file type, get_filetype can take preview_data as null ....... */
      data->file_type = get_filetype(req, preview_data, preview_data_len);
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      data->type_name = ci_data_type_name(magic_db, data->file_type);
 #endif
      if ((data->must_classify = must_classify(data->file_type, data)) == NO_CLASSIFY) {
@@ -953,7 +955,7 @@ HTMLClassification HSclassification, NBclassification;
                ci_debug_printf(10, "Added header: %s\n", reply);
           }
      }
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      // Store classification so images and videos can have the data
      char uri[MAX_URI_LENGTH + 1];
      ci_http_request_url(req, uri, MAX_URI_LENGTH);
@@ -1489,7 +1491,7 @@ char *temp;
 	return temp;
 }
 
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 /* All of this code below uses a very simple table.
    It might be better to re-implement this using a tree of some kind. */
 void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassification fnb_classification)
@@ -1819,7 +1821,7 @@ int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata)
 int ret = 0;
      if (argv == NULL || argv[0] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
-          ci_debug_printf(1, "Format: %s LOCATION_OF_FHS_PRELOAD_FILE\n", directive);
+          ci_debug_printf(1, "Format: %s LOCATION_OF_FHS_OR_FNB_PRELOAD_FILE\n", directive);
           return 0;
      }
      ci_debug_printf(1, "BE PATIENT -- Preloading Text Classification File: %s\n", argv[0]);
@@ -1837,7 +1839,7 @@ int cfg_AddTextCategory(const char *directive, const char **argv, void *setdata)
 int val = 0;
      if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
           ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
-          ci_debug_printf(1, "Format: %s NAME LOCATION_OF_FHS_FILE\n", directive);
+          ci_debug_printf(1, "Format: %s NAME LOCATION_OF_FHS_OR_FNB_FILE\n", directive);
           return val;
      }
      ci_debug_printf(1, "BE PATIENT -- Loading and optimizing Text Category: %s from File: %s\n", argv[0], argv[1]);
@@ -2006,7 +2008,7 @@ int cfg_ExternalTextConversion(const char *directive, const char **argv, void *s
      return 1;
 }
 
-#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
+#if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 int cfg_ExternalImageConversion(const char *directive, const char **argv, void *setdata)
 {
      int i, id = -1, k;
