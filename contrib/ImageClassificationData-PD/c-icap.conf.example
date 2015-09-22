@@ -1,0 +1,59 @@
+# These are the recommended settings for this data. For more information see
+# c-icap-classify.conf.example in the c-icap-classify/services/classify directory
+# of the c-icap-classify source code.
+# Remember that this code will not block anything. It labels it in the
+# HTTP headers. Use SQUID (or whatever ICAP-enabled proxy you are using
+# to filter based on those headers).
+
+# Sets the temp directory which we may use to store temporary text files
+srv_classify.TmpDir /var/tmp/c_icap
+
+# Sets the image file types to be classified
+srv_classify.ImageFileTypes PNG GIF JPEG BMP ICO
+
+# Sets whether the classify module allows 204 responses
+srv_classify.Allow204Responces on
+
+# Note: -1 means ThreadsPerChild, which is the maximum
+srv_classify.ImageCategoryCopies 50
+# Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or
+#     debugDemonstrateMarked is activated
+# Only one cascade per name, so you can mix and match data from version1 and version2,
+# but for performance reasons (and to avoid name clash) it is best to only use one of each type
+# srv_classify.ImageCategory CATEGORY_NAME FILE RED_CIRCLE_COLOR BLUE_CIRCLE_COLOR GREEN_CIRCLE_COLOR
+srv_classify.ImageCategory Breast PATH_TO_CASCADES/Female.Breast.Nude_cascade.xml 0xfe 0xe5 0xe8
+srv_classify.ImageCategory Butt PATH_TO_CASCADES/Human.Buttocks.Nude_haar_cascade.xml 0x66 0x00 0x00
+srv_classify.ImageCategory Penis PATH_TO_CASCADES/Male.Genitals.Nude_haar_cascade.xml 0xE0 0xFF 0xFF
+srv_classify.ImageCategory Vagina PATH_TO_CASCADES/Female.Genitals.Nude_haar_cascade.xml 0xff 0x00 0x00
+srv_classify.ImageCategory Kiss-Lick-Suck PATH_TO_CASCADES/Kiss-Lick-Suck_haar_cascade.xml 0x00 0x80 0x00
+# Coalesce detected objects if objects overlap by a givern percentage
+# (.5 is 50%, 1 is 100%)
+# srv_classify.ImageCoalesceOverlap CATEGORY_NAME PERCENT_OVERLAP
+srv_classify.ImageCoalesceOverlap Breast .80
+srv_classify.ImageCoalesceOverlap Vagina .80
+srv_classify.ImageCoalesceOverlap Penis .20
+srv_classify.ImageCoalesceOverlap Butt .80
+srv_classify.ImageCoalesceOverlap Kiss-Lick-Suck .75
+
+# Save the Original image
+# srv_classify.debugSaveOriginal 1
+# Save the detected parts
+# srv_classify.debugSaveParts 1
+# Save the original image with detected parts marked
+# srv_classify.debugSaveMarked 1
+# Demonstrate the detection by returning the marked image from above
+# srv_classify.debugDemonstrate 1
+# Demonstrate the detection by returning a mask with the objects circled
+#     (but not visible)
+# srv_classify.debugDemonstrateMasked 1
+# Type of interpolation to use for images. NN (fastest), LINEAR (default), AREA,
+#     BICUBIC (slowest).
+srv_classify.ImageInterpolation LINEAR
+# Maximum Scaling factor for images
+# Default: 4
+srv_classify.ImageMaxScale 4
+# If an image has an x or y dimension larger than this value, it is scaled by
+#     a factor that makes its maximum dimension fit this value (scaling factor
+#     can never be larger than ImageMaxScale)
+# Default: 240
+srv_classify.ImageScaleDimension 240
