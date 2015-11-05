@@ -18,7 +18,7 @@ srv_classify.Allow204Responces on
 srv_classify.ImageCategoryCopies 50
 # Add Image Categories, X_CIRCLE_COLOR is optional and used if debugSaveMarked or
 #     debugDemonstrateMarked is activated
-# Only one cascade per name, so you can mix and match data from version1 and version2,
+# Only one cascade per name, so you can mix and match data from version1,version2, or version3,
 # but for performance reasons (and to avoid name clash) it is best to only use one of each type
 # srv_classify.ImageCategory CATEGORY_NAME FILE RED_CIRCLE_COLOR BLUE_CIRCLE_COLOR GREEN_CIRCLE_COLOR
 srv_classify.ImageCategory Breast PATH_TO_CASCADES/Female.Breast.Nude_cascade.xml 0xfe 0xe5 0xe8
