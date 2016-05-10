@@ -145,6 +145,10 @@ HTMLClassification classification;
 char *temp, *prehash_file, *dirpath, *filename;
 int prehash_data_file = 0;
 
+myHashes.hashes = NULL;
+myHashes.used = 0;
+myHashes.slots = 0;
+
 #ifdef _GNU_SOURCE
 	temp = strdup(judge_file);
 	dirpath = strdup(dirname(temp));
@@ -164,8 +168,11 @@ int prehash_data_file = 0;
 	}
 	if(myHashes.used < 5)
 	{
-		prehash_data_file = 0;
-		if(myHashes.hashes) free(myHashes.hashes);
+		if(myHashes.hashes)
+		{
+			free(myHashes.hashes);
+			myHashes.hashes = NULL;
+		}
 		close(prehash_data_file);
 	}
 #endif

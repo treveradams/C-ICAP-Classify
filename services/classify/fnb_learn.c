@@ -153,6 +153,10 @@ char *prehash_file = NULL, *dirpath, *filename;
 #endif
 int prehash_data_file = 0;
 
+myHashes.hashes = NULL;
+myHashes.used = 0;
+myHashes.slots = 0;
+
 #ifdef _GNU_SOURCE
 	if(do_directory_learn > 0)
 	{
@@ -167,15 +171,18 @@ int prehash_data_file = 0;
 		strcat(prehash_file, filename);
 		free(dirpath);
 		// If we find the file, load it
-		if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0);
+		if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0)
 		{
 			readPREHASHES(prehash_data_file, &myHashes);
 			close(prehash_data_file);
 		}
 		if(myHashes.used < 5)
 		{
-			prehash_data_file = 0;
-			if(myHashes.hashes) free(myHashes.hashes);
+			if(myHashes.hashes)
+			{
+				free(myHashes.hashes);
+				myHashes.hashes = NULL;
+			}
 			close(prehash_data_file);
 		}
 	}
@@ -183,7 +190,7 @@ int prehash_data_file = 0;
 
 	if(prehash_data_file <= 0)
 	{
-		myData=makeData(data_file);
+		myData = makeData(data_file);
 		mkRegexHead(&myRegexHead, myData, 0);
 		removeHTML(&myRegexHead);
 		regexMakeSingleBlock(&myRegexHead);
@@ -223,7 +230,7 @@ int prehash_data_file = 0;
 	learnHashesBayesCategory(0, &myHashes);
 	pthread_mutex_unlock(&train_mtx);
 
-	free(myHashes.hashes);
+	if(myHashes.hashes) free(myHashes.hashes);
 	freeRegexHead(&myRegexHead);
 }
 

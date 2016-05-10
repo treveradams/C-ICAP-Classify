@@ -98,11 +98,9 @@ int readcheck;
 struct stat st;
 
 	fstat(file, &st);
+
 	if(file < 0 || st.st_size < PREHASH_COUNT_SIZE)
 	{
-		hashes_list->used = 0;
-		hashes_list->hashes = NULL;
-		hashes_list->slots = 0;
 		return -999;
 	}
 	do {
@@ -114,9 +112,6 @@ struct stat st;
 	if(st.st_size < PREHASH_COUNT_SIZE + (PREHASH_SIZE * qty))
 	{
 		ci_debug_printf(1, "readPREHASHES: file too small for number of records it says it holds. Aborting prehash read.\n");
-		hashes_list->used = 0;
-		hashes_list->hashes = NULL;
-		hashes_list->slots = 0;
 		return -999;
 	}
 	hashes_list->used = qty;

@@ -1178,7 +1178,7 @@ HTMLFeature current_hash;
 			PTinsert(&pt_session, current_hash);
 #endif
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
-			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", current_hash,
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
@@ -1272,7 +1272,7 @@ HTMLFeature current_hash;
 			PTinsert(&pt_session, current_hash);
 #endif
 #ifdef DANGEROUS_DEBUG_PARSE_HASH
-			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", hashes_list->hashes[hashes_list->used],
+			ci_debug_printf(10, "Hashed: %"PRIX64" (%.*ls %.*ls %.*ls)\n", current_hash,
 				matches[pos].rm_eo - matches[pos].rm_so, myData+matches[pos].rm_so,
 				(i>1 ? i-1 : 0), placeHolder,
 				matches[modPos].rm_eo - matches[modPos].rm_so, myData+matches[modPos].rm_so);
