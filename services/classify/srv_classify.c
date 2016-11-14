@@ -836,7 +836,7 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
      }
      else {
           ci_simple_file_unlock_all(disk_body);   /*Unlock all data to continue send them, after all we only modify headers in this module..... */
-          ci_debug_printf(7, "file unlocked, flags :%d (unlocked:%" PRINTF_OFF_T ")\n",
+          ci_debug_printf(7, "file unlocked, flags: %d (unlocked: %" PRINTF_OFF_T ")\n",
                           disk_body->flags, disk_body->unlocked);
      }
      return CI_MOD_DONE;

@@ -1,5 +1,5 @@
 Name:           c_icap_classify
-Version:        20150921
+Version:        20161114
 Release:        1%{?dist}
 Summary:        Classification module for c-icap.
 
@@ -10,11 +10,11 @@ Source0:        c_icap_classify-%{version}.tar.gz
 BuildRoot:      %{_tmppath}/%{name}-%{version}-%{release}-root-%(%{__id_u} -n)
 
 BuildRequires:  c_icap-devel
-BuildRequires:	opencv-devel
+#BuildRequires:	opencv-devel
 BuildRequires:  tre-devel
 BuildRequires:  libicu-devel
 Requires:	c_icap_modules
-Requires:	opencv
+#Requires:	opencv
 Requires:	tre
 Requires:       c_icap
 Requires:       libicu

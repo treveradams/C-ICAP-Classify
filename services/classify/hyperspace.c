@@ -213,8 +213,10 @@ int file=0;
 		}
 		else
 #endif
+		{
 			if(file >= 0) close(file);
 			return -1;
+		}
 	}
 	return file;
 }

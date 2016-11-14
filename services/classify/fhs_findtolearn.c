@@ -161,7 +161,7 @@ myHashes.slots = 0;
 	strcat(prehash_file, filename);
 	free(dirpath);
 	// If we found the file, load it
-	if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0);
+	if((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0)
 	{
 		readPREHASHES(prehash_data_file, &myHashes);
 		close(prehash_data_file);

@@ -178,11 +178,13 @@ if test "$opencv" = "no" ; then
 	opencv="no";
 	dnl -------------------------------------------------------------
 	AC_MSG_CHECKING([for OpenCV older than 2.2.x w/ -fPIC])
-	AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui";  opencv="yes"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])])
+	AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui"; opencv="yes"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])])
 	AC_MSG_CHECKING([for OpenCV 2.2.x or newer w/ -fPIC])
-	AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d";  opencv="yes"; AC_DEFINE(HAVE_OPENCV_22X, 1, [Define HAVE_OPENCV if OpenCV installed])])
+	AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d"; opencv="yes"; AC_DEFINE(HAVE_OPENCV_22X, 1, [Define HAVE_OPENCV if OpenCV installed])])
 	AC_MSG_CHECKING([for OpenCV 2.3.x or newer w/ -fPIC])
-	AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc";  opencv="yes"; AC_DEFINE(HAVE_OPENCV_23X, 1, [Define HAVE_OPENCV if 2.3.x or newer OpenCV installed])])
+	AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc"; opencv="yes"; AC_DEFINE(HAVE_OPENCV_23X, 1, [Define HAVE_OPENCV if 2.3.x or newer OpenCV installed])])
+	AC_MSG_CHECKING([for OpenCV 3.0 or newer])
+	AC_CHECK_LIB(opencv_core, cvRound, [], [echo "Disabling support for OpenCV >= 3.0"; OPENCV_ADD_CFLAG=""; OPENCV_ADD_LDFLAG=""; opencv="no"; AC_DEFINE(HAVE_OPENCV_30X, 1, [Don't Define HAVE_OPENCV_30X if 3.0.x or newer OpenCV installed])])
 	AC_SUBST(OPENCV_ADD_LDFLAG)
 	AC_SUBST(OPENCV_ADD_CFLAG)
 	CFLAGS=$OLD_CFLAGS
