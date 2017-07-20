@@ -132,6 +132,7 @@ lang_codes = { "aa":"Afar",
 "ce":"Chechen",
 "cel":"Celtic languages",
 "ces":"Czech",
+"cdo":"Min Dong (Eastern Min Chinese)",
 "cha":"Chamorro",
 "chb":"Chibcha",
 "ch":"Chamorro",
@@ -396,6 +397,7 @@ lang_codes = { "aa":"Afar",
 "lat":"Latin",
 "lav":"Latvian",
 "lb":"Luxembourgish; Letzeburgesch",
+"lbe":"Lak",
 "lez":"Lezghian",
 "lg":"Ganda",
 "li":"Limburgan; Limburger; Limburgish",
@@ -893,6 +895,7 @@ for category in sorted_categories:
 print("<P>Languages:</P>")
 
 class Maturity(IntEnum):
+	zilch = 0
 	prealpha = 1
 	prealpha2 = 2
 	prealpha3 = 3
@@ -901,6 +904,7 @@ class Maturity(IntEnum):
 	alpha3 = 6
 	beta = 7
 	beta2 = 8
+	beta3 = 9
 
 	def describe(self):
 		# self is the member here
@@ -908,52 +912,58 @@ class Maturity(IntEnum):
 
 for language in sorted_languages:
 	cat_item=0
-	how_mature=Maturity.beta2
+	how_mature=Maturity.beta3
 	sorted_category = languages[language].keys()
 	sorted_category.sort()
 	print("<P><table><thead><th><a name=\"" + language + "\">%s</a></th></thead></table>" % lang_codes[language].encode('utf-8'))
-	print("<table id=\"" + language + "\" cellpadding=\"0\" cellpadding=\"0\"><thead>")
+	print("<table id=\"" + language + "\" cellpadding=\"0\"><thead>")
 	print("<th axis=\"string\">Category Name</th><th axis=\"number\">Relative Training Level (1-3 is good)</th></thead><tbody>")
 	for category in sorted_category:
 		training_level = math.log10(languages[language][category])
-		print("<tr id=\"%d\"><td>%s</td><td>%0.02f</td></tr>" % (cat_item,category, training_level))
+		print("<tr id=\"%d\"><td>%s</td><td>%0.02f</td></tr>" % (cat_item, category, training_level))
 		cat_item = cat_item + 1
 		try:
 			if(non_maturity_categories[category]):
 #				print("skipping " + category + " for language " + language)
 				pass
 		except:
-			if training_level < .30:
+			if how_mature > Maturity.alpha and training_level < .30:
 				how_mature = Maturity.alpha
 			elif how_mature > Maturity.alpha2 and training_level < .48:
 				how_mature = Maturity.alpha2
 			elif how_mature > Maturity.alpha3 and training_level < .6:
-				how_mature = Maturity.alph3
+				how_mature = Maturity.alpha3
 			elif how_mature > Maturity.beta and training_level < .78:
 				how_mature = Maturity.beta
-			elif how_mature > Maturity.beta and training_level < .9:
+			elif how_mature > Maturity.beta2 and training_level < .9:
 				how_mature = Maturity.beta2
+	total_categories = len(categories.keys()) - len(non_maturity_categories.keys())
+	language_total_categories = len(languages[language].keys())
 	for category in categories:
-		if len(languages[language].keys()) < len(categories.keys()):
-			categories_covered = float(len(languages[language].keys())) / float(len(categories.keys()))
+		if 	language_total_categories < total_categories:
+			categories_covered = float(language_total_categories) / float(total_categories)
 			if categories_covered > .33:
 				try:
 					if languages[language][category]:
 						pass
 					else:
 						print("<tr id=\"%d\"><td>%s</td><td>-1</td></tr>" % (cat_item, category))
-						how_mature = Maturity.prealpha
+						how_mature = Maturity.prealpha2
 				except KeyError:
 						print("<tr id=\"%d\"><td>%s</td><td>-1</td></tr>" % (cat_item, category))
-						how_mature = Maturity.prealpha
+						how_mature = Maturity.prealpha2
+			elif language_total_categories <= 3 and categories_covered < .1:
+				how_mature = Maturity.zilch
 			else:
 				how_mature = Maturity.prealpha
 			if categories_covered >= .90:
-				how_mature = Maturity.alpha
+				how_mature = Maturity.alpha3
 			elif categories_covered >= .75:
-				how_mature = Maturity.prealpha3
+				how_mature = Maturity.alpha2
 			elif categories_covered >= .65:
-				how_mature = Maturity.prealpha2
+				how_mature = Maturity.alpha
+			elif categories_covered >= .50:
+				how_mature = Maturity.prealpha3
 	language_maturity[language] = how_mature
 	print("</tbody><tfoot><tr><td colspan=\"2\">Guessed Maturity Level: " + str(how_mature.describe()) + "</td></tr></tfoot></table>")
 	print("<script type=\"text/javascript\"> var myTable = {}; window.addEvent('domready', function(){ myTable = new sortableTable('%s', {overCls: 'over', onClick: function(){alert(this.id)}});});</script></P>" % language)
@@ -982,6 +992,8 @@ for language in language_maturity:
 	lang_item = lang_item + 1
 print("</tbody><tfoot><tr><td></td><td></td></tr></tfoot></table>")
 print("<script type=\"text/javascript\"> var myTable = {}; window.addEvent('domready', function(){ myTable = new sortableTable('LM', {overCls: 'over', onClick: function(){alert(this.id)}});});</script></P>")
+
+print("<P>Understanding the above table: Prealpha is less than 1/3 of the categories having samples that train. Prealpha2 is up to 1/2 of the categories having samples that train. Prealpha 3 is up to 65%, Alpha, Alpha2, and Alpha3 are 75%, 90% and 100% respectively. If all categories are trained, a different logic kicks in that has to do with the number of the samples (as quality can only be measured by empirical testing). Prealpha may not even be useful as a proof of concept, depending on which categories are trained and how many. Prealpha2 and 3 will generally begin to show promise. Each additional sample will make a large difference. Alpha and Beta will change quickly, in general, with every additional sample. If you are considering using Alpha live, it may be worth a go. Beta most definitely should see at least some limited live testing. Beta here may actually be production quality. Again, the only way to know the quality of the results is empirical testing. Zilch means there are three or less categories populated; more work needs to be done.</P>")
 
 print("<P>Categories excluded from maturity (likely to be removed due to difficulty in training, using, or ambiguity):<br/>")
 for key, value in non_maturity_categories.items():
