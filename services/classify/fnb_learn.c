@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -32,7 +32,9 @@
 #include "autoconf.h"
 #endif
 
+#ifndef NOT_CICAP
 #define NOT_CICAP
+#endif
 
 #include <sys/types.h>
 #include <sys/stat.h>

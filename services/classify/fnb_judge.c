@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -28,7 +28,9 @@
 #define _FILE_OFFSET_BITS 64
 #endif
 
+#ifndef NOT_CICAP
 #define NOT_CICAP
+#endif
 
 #include <stdio.h>
 #include <stdint.h>

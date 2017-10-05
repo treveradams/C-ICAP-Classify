@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2013 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -28,7 +28,9 @@
 #define _FILE_OFFSET_BITS 64
 #endif
 
+#ifndef NOT_CICAP
 #define NOT_CICAP
+#endif
 
 #include <stdio.h>
 #include <stdint.h>
@@ -91,17 +93,20 @@ void loadMassCategories(void)
 {
 struct dirent *current_file = NULL;
 DIR *directory;
-	chdir(fhs_dir);
+	if (chdir(fhs_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
 
-	directory=opendir(".");
-	if(directory==NULL)
+	directory = opendir(".");
+	if(directory == NULL)
 	{
 		printf("Unable to open FHS Directory provided!\n");
 		exit(-1);
 	}
 	do {
 		current_file = readdir(directory);
-		if (current_file!=NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fhs_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fhs") == 0)
+		if (current_file != NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fhs_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fhs") == 0)
 		{
 			printf("Loading FHS file: %s\n", current_file->d_name);
 			loadHyperSpaceCategory(current_file->d_name, current_file->d_name);
@@ -121,7 +126,7 @@ uint_least16_t docsWritten = 0;
 	if(readArguments(argc, argv) == -1) exit(-1);
 
 	printf("Loading hashes -- be patient!\n");
-	start=clock();
+	start = clock();
 	loadMassCategories();
 	printf("\nWriting out preload file: %s\n", fhs_out_file);
 
@@ -131,7 +136,7 @@ uint_least16_t docsWritten = 0;
 
 	close(fhs_file);
 
-	end=clock();
+	end = clock();
 	printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", HSJudgeHashList.used, docsWritten);
 	printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
 

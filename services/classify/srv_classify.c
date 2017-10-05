@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -57,10 +57,6 @@
 #include "ci_threads.h"
 
 const wchar_t *WCNULL = L"\0";
-
-#ifdef HAVE_ZLIB
-#include <zlib.h>
-#endif
 
 #include "html.h"
 #include "bayes.h"
@@ -176,7 +172,6 @@ int categorize_external_text(ci_request_t * req, int classification_type);
 char *findCharset(const char *input, int64_t);
 int make_wchar(ci_request_t *req);
 int make_wchar_from_buf(ci_request_t * req, ci_membuf_t *input);
-int classify_uncompress(ci_request_t *req);
 static void addTextErrorHeaders(ci_request_t *req, int error, char *extra_info);
 /*External functions*/
 extern char *strcasestr(const char *haystack, const char *needle);
@@ -621,16 +616,6 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
           }
      }
 
-// The following block is not needed for current and likely future versions of c_icap... leaving in place for now
-/*
-     if((content_type = ci_http_response_get_header(req, "Content-Encoding")) != NULL) {
-          if(strstr(content_type, "gzip")) data->is_compressed = CI_ENCODE_GZIP;
-          else if(strstr(content_type, "deflate")) data->is_compressed = CI_ENCODE_DEFLATE;
-          else if(strstr(content_type, "bzip2")) data->is_compressed = CI_ENCODE_BZIP2;
-          else data->is_compressed = CI_ENCODE_UNKNOWN;
-     }
-     else data->is_compressed = CI_ENCODE_NONE;*/
-
      if (data->args.sizelimit && MAX_OBJECT_SIZE
          && content_size > MAX_OBJECT_SIZE) {
           ci_debug_printf(1,
@@ -792,19 +777,36 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
      {
           if(data->disk_body) diskBodyToMemBody(req);
           ci_debug_printf(8, "Classifying TEXT from memory\n");
-          #ifdef HAVE_ZLIB
-          if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE) {
-               classify_uncompress(req);
+
+          switch (data->is_compressed) {
+               case CI_ENCODE_GZIP:
+               case CI_ENCODE_DEFLATE:
+                    ci_debug_printf(8, "Classifying TEXT decompress gzip/deflate\n");
+                    data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
+                    if (CI_UNCOMP_OK != ci_inflate_to_membuf(data->mem_body->buf, data->mem_body->endpos, data->uncompressedbody, 0)) {
+                         ci_debug_printf(3, "Classifying TEXT failed to decompress gzip/deflate\n");
+                         addTextErrorHeaders(req, DECOMPRESS_FAIL, "gzip/deflate");
+                         ci_membuf_free(data->uncompressedbody);
+                         data->uncompressedbody = NULL;
+                    }
+                    break;
+               case CI_ENCODE_BZIP2:
+                    ci_debug_printf(8, "Classifying TEXT decompress bzip2\n");
+                    data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
+                    if (CI_UNCOMP_OK != ci_bzunzip_to_membuf(data->mem_body->buf, data->mem_body->endpos, data->uncompressedbody, 0)) {
+                         ci_debug_printf(3, "Classifying TEXT failed to decompress bzip2\n");
+                         addTextErrorHeaders(req, DECOMPRESS_FAIL, "bzip2");
+                         ci_membuf_free(data->uncompressedbody);
+                         data->uncompressedbody = NULL;
+                    }
+                    break;
+               case CI_ENCODE_UNKNOWN:
+                    addTextErrorHeaders(req, DECOMPRESS_FAIL, "unknown encoding/compression");
+                    break;
+               default:
+                    break;
           }
-          #endif
-          if (data->is_compressed == CI_ENCODE_BZIP2) {
-               data = ci_service_data(req);
-               mem_body = ci_membuf_new();
-               if (CI_UNCOMP_OK == ci_bzunzip_to_membuf(data->mem_body, data->mem_body->endpos, mem_body, 0)) {
-                    ci_membuf_free(data->mem_body);
-                    data->mem_body = mem_body;
-               }
-          }
+
           if(make_wchar(req) == CI_OK) // We should only categorize text if this returns >= 0
           {
                make_pics_header(req);
@@ -1183,7 +1185,7 @@ int i;
           status=iconv(convert, &buffer, &inBytes, &outputBuffer, &outBytes);
           if(status==-1)
           {
-               switch(errno) {
+               switch (errno) {
                    case EILSEQ: // Invalid character, keep going
                          buffer++;
                          inBytes--;
@@ -1256,7 +1258,7 @@ ci_off_t content_size = 0;
           status=iconv(convert, &buffer, &inBytes, &outputBuffer, &outBytes);
           if(status==-1)
           {
-               switch(errno) {
+               switch (errno) {
                    case EILSEQ: // Invalid character, keep going
                          buffer++;
                          inBytes--;
@@ -1314,98 +1316,6 @@ size_t len=0;
      }
      return token;
 }
-
-
-#ifdef HAVE_ZLIB
-/*
-  uncompress function is based on code from the gzip module.
-*/
-
-#define ZIP_HEAD_CRC     0x02   /* bit 1 set: header CRC present */
-#define ZIP_EXTRA_FIELD  0x04   /* bit 2 set: extra field present */
-#define ZIP_ORIG_NAME    0x08   /* bit 3 set: original file name present */
-#define ZIP_COMMENT      0x10   /* bit 4 set: file comment present */
-
-int classify_uncompress(ci_request_t * req)
-{
-     int ret, errors=0;
-     char *outputBuffer;
-     z_stream strm;
-     strm.zalloc = Z_NULL;
-     strm.zfree = Z_NULL;
-     strm.opaque = Z_NULL;
-     classify_req_data_t *data;
-
-     data = ci_service_data(req);
-
-     strm.avail_in = data->mem_body->endpos;
-     strm.next_in = (Bytef *) data->mem_body->buf;
-
-     outputBuffer = malloc(MAX_WINDOW);
-     strm.avail_out = MAX_WINDOW;
-     strm.next_out = (Bytef *) outputBuffer;
-
-     if(data->is_compressed == CI_ENCODE_GZIP)
-         ret = inflateInit2(&strm, 32 + 15);
-     else
-         ret = inflateInit(&strm);
-     if (ret != Z_OK)
-     {
-          ci_debug_printf(1, "Error initializing zlib (inflateInit return: %d)\n", ret);
-          addTextErrorHeaders(req, ZLIB_FAIL, NULL);
-          return CI_ERROR;
-     }
-     ci_debug_printf(7, "Decompressing data.\n");
-
-     data->uncompressedbody = ci_membuf_new_sized(strm.avail_in);
-     do {
-         strm.avail_out = MAX_WINDOW;
-         strm.next_out = (Bytef *) outputBuffer;
-
-         ret = inflate(&strm, Z_NO_FLUSH);
-         switch (ret) {
-              case Z_DATA_ERROR:
-                    ci_debug_printf(7, "zlib: Z_DATA_ERROR, attempting to resync.\n");
-                    ret=inflateSync(&strm);
-                    errors++;
-                    break;
-              case Z_STREAM_ERROR:
-                    ci_debug_printf(7, "zlib: Z_STREAM_ERROR.\n");
-                    ret = Z_STREAM_END;
-                    break;
-              case Z_BUF_ERROR:
-                    ci_debug_printf(7, "zlib: Z_BUFF_ERROR.\n");
-                    errors++;
-                    break;
-              case Z_MEM_ERROR:
-                    ci_debug_printf(7, "zlib: Z_MEM_ERROR.\n");
-                    ret = Z_STREAM_END;
-                    break;
-              case Z_NEED_DICT:
-                    ci_debug_printf(7, "zlib: Z_NEED_DICT.\n");
-                    ret = Z_STREAM_END;
-                    break;
-              case Z_OK:
-                    errors=0;
-                    break;
-         }
-         if(errors > 10) ret = Z_STREAM_END;
-         ci_membuf_write(data->uncompressedbody, outputBuffer, MAX_WINDOW - strm.avail_out, 0);
-         /* done when inflate() says it's done */
-     } while (ret != Z_STREAM_END);
-     strm.avail_out = MAX_WINDOW;
-     strm.next_out = (Bytef *) outputBuffer;
-     ret = inflate(&strm, Z_FINISH);
-     ci_membuf_write(data->uncompressedbody, outputBuffer, MAX_WINDOW - strm.avail_out, 0);
-    // DO NOT APPEND NULL HERE AS make_wchar (iconv) SEEMS TO CAUSE CORRUPTION / CRASHES WITH A NULL
-
-     // cleanup everything
-     inflateEnd(&strm);
-     free(outputBuffer);
-     ci_debug_printf(7, "Finished decompressing data.\n");
-     return CI_OK;
-}
-#endif
 
 void set_istag(ci_service_xdata_t * srv_xdata)
 {
@@ -1469,7 +1379,7 @@ char header[myMAX_HEADER + 1];
 	if (!ci_http_response_headers(req))
 		ci_http_response_create(req, 1, 1);
 
-	switch(error)
+	switch (error)
 	{
 		case NO_MEMORY:
 			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: OUT OF MEMORY");
@@ -1477,8 +1387,8 @@ char header[myMAX_HEADER + 1];
 		case NO_CATEGORIES:
 			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: NO CATEGORIES PROVIDED, CAN'T PROCESS");
 			break;
-		case ZLIB_FAIL:
-			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: ZLIB FAILURE");
+		case DECOMPRESS_FAIL:
+			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: DECOMPRESSION FAILURE (%s)", (extra_info ? extra_info : "UNKNOWN"));
 			break;
 		case NO_CHARSET:
 			snprintf(header, myMAX_HEADER, "X-TEXT-ERROR: CANNOT CONVERT %s TO WCHAR_T", (extra_info ? extra_info : "UNKNOWN"));

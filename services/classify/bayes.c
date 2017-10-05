@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -242,7 +242,12 @@ int i;
 	header->UBM = UNICODE_BYTE_MARK;
 	header->WCS = sizeof(wchar_t);
 	header->records = 0;
-	i = ftruncate(file, 0);
+	do {
+		i = ftruncate(file, 0);
+	} while (i == -1 && errno == EINTR);
+	if (i == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFBCHeader, this will be a problem!\n");
+	}
 	lseek64(file, 0, SEEK_SET);
         do {
 		i = write(file, "FNB", FBC_HEADERv1_ID_SIZE);
@@ -337,7 +342,12 @@ char *address;
 		return -2;
 	}
 #ifdef _POSIX_MAPPED_FILES
-	i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	do {
+		i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	} while (i == -1 && errno == EINTR);
+	if (i == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
+	}
 	fstat(file, &st);
 	size = st.st_size;
 	mmap_offset = lseek64(file, 0, SEEK_CUR);
@@ -393,10 +403,17 @@ char *address;
 			ci_debug_printf(3, "writeFBCHashes: munmap failed with error: %s\n", strerror(errno));
 
 		}
-		i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+		do {
+			i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+		} while (i == -1 && errno == EINTR);
+		if (i == -1) {
+			ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
+		}
 #else
-		if(ftruncate(file, lseek64(file, 0, SEEK_CUR)) != 0)
-		{
+		do {
+			i = ftruncate(file, lseek64(file, 0, SEEK_CUR))
+		} while (i == -1 && errno == EINTR);
+		if (i == -1 ){
 			ci_debug_printf(1, "Failed to truncate file in writeFBCHashes, this will be a problem!\n");
 		}
 		/* Ok, have written hashes, now save new count */
@@ -426,10 +443,20 @@ char *address;
 #endif
 
         if(hashes_list->FBC_LOCKED) return -1; // We cannot write when FBC_LOCKED is set, as we are in optimized and not raw count mode
-	i = ftruncate64(file, 13);
+	do {
+		i = ftruncate64(file, 13);
+	} while (i == -1 && errno == EINTR);
+	if (i == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFBCHashesPreload, this will be a problem!\n");
+	}
 	lseek64(file, 0, SEEK_END);
 #ifdef _POSIX_MAPPED_FILES
-	i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	do {
+		i = ftruncate64(file, hashes_list->used * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+	} while (i == -1 && errno == EINTR);
+	if (i == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFBCHashesPreload, this will be a problem!\n");
+	}
 	fstat(file, &st);
 	size = st.st_size;
 	mmap_offset = lseek64(file, 0, SEEK_CUR);
@@ -479,7 +506,12 @@ char *address;
 			ci_debug_printf(3, "writeFBCHashesPreload: munmap failed with error: %s\n", strerror(errno));
 
 		}
-		i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+		do {
+			i = ftruncate64(file, header->records * (FBC_v1_HASH_SIZE + FBC_v1_HASH_USE_COUNT_SIZE) + 13);
+		} while (i == -1 && errno == EINTR);
+		if (i == -1) {
+			ci_debug_printf(1, "Failed to truncate file in writeFBCHashesPreload, this will be a problem!\n");
+		}
 #else
 		lseek64(file, 9, SEEK_SET);
 		do {
@@ -1098,7 +1130,7 @@ char *address;
 
 //		ci_debug_printf(10, "Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes->hashes[j], cat_name, i);
 		if(NBJudgeHashList.used == 0) goto ADD_HASH;
-		switch(preload_hash_compare(NBJudgeHashList.hashes[NBJudgeHashList.used-1].hash, hash))
+		switch (preload_hash_compare(NBJudgeHashList.hashes[NBJudgeHashList.used-1].hash, hash))
 		{
 			case -1:
 				ADD_HASH:
@@ -1142,18 +1174,28 @@ char old_dir[PATH_MAX];
 int name_len;
 char *cat_name;
 
-	getcwd(old_dir, PATH_MAX);
-	chdir(fbc_dir);
+	if (getcwd(old_dir, PATH_MAX) == NULL) {
+		ci_debug_printf(1, "Unable to get current working directory in loadMassBayesCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
+	if (chdir(fbc_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassBayesCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
 	preLoadBayes("preload.fnb");
-	chdir(old_dir);
-
+	if (chdir(old_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassBayesCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
 	if ((dirp = opendir(fbc_dir)) == NULL)
 	{
 		ci_debug_printf(3, "couldn't open '%s'", fbc_dir);
 		return -1;
 	}
 
-	chdir(fbc_dir);
+	if (chdir(fbc_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassBayesCategories because %s. This should be impossible. Ignoring.", strerror(errno));
+	}
 	do {
 		errno = 0;
 		if ((dp = readdir(dirp)) != NULL)
@@ -1174,6 +1216,8 @@ char *cat_name;
 	else
 		(void) closedir(dirp);
 
-	chdir(old_dir);
+	if (chdir(old_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassBayesCategories because %s. This should be impossible. Ignoring.", strerror(errno));
+	}
 	return 1;
 }

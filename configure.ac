@@ -72,45 +72,6 @@ AC_SUBST(DATADIR)
 
 dnl Checks for libraries
 
-dnl Check for zlib
-AC_ARG_WITH(zlib,
-[	--with-zlib	Path to zlib library],
-[
-case "$withval" in
-     yes)
-	zlib=yes;
-     ;;
-     no)
-	zlib=no;
-     ;;
-     *)
-	zlib=$withval;
-     ;;
-     esac
-],
-[ zlib=yes]
-)
-
-if test a"$zlib" != "ano"; then
-   if test a"$zlib" != "ayes"; then
-        OLDCFLAGS=$CFLAGS
-        OLDLDFLAGS=$LDFLAGS
-        CFLAGS="$CFLAGS -I$zlib/include"
-        LDFLAGS="$LDFLAGS -L $zlib/lib"
-	AC_CHECK_LIB(z,inflate,[ZLIB_ADD_LDFLAG="-L$zlib/lib -lz";ZLIB_ADD_FLAG="-I$zlib/include";AC_DEFINE(HAVE_ZLIB,1,[Define HAVE_ZLIB if zlib installed])],[zlib=no])
-        CFLAGS=$OLDCFLAGS
-        LDFLAGS=$OLDLDFLAGS
-	AC_SUBST(ZLIB_ADD_LDFLAG)
-	AC_SUBST(ZLIB_ADD_FLAG)
-   else
-	AC_CHECK_LIB(z,inflate,[ZLIB_ADD_LDFLAG=" -lz";AC_DEFINE(HAVE_ZLIB,1,[Define HAVE_ZLIB if zlib installed])],[zlib=no])
-	AC_SUBST(ZLIB_ADD_LDFLAG)
-   fi
-fi
-if test a"$zlib" = "ano"; then
-    AC_MSG_WARN("zlib is most likely required for srv_classify to work with most browsers!!")
-fi
-
 dnl Determine whether or not we are big or little endian
 AC_MSG_CHECKING([for endianness])
 AC_TRY_RUN(
@@ -202,7 +163,7 @@ AC_CHECK_LIB(tre, tre_regwncomp, [AC_DEFINE(HAVE_TRE_LIB, 1, [Define HAVE_TRE_LI
 
 dnl Check for scandir
 dnl -------------------------------------------------------------
-AC_CHECK_FUNCS(scandir, [AC_DEFINE(_SVID_SOURCE, 1, [Define _SVID_SOURCE if scandir function is found])])
+AC_CHECK_FUNCS(scandir, [AC_DEFINE(_DEFAULT_SOURCE, 1, [Define _DEFAULT_SOURCE if scandir function is found]),AC_DEFINE(_SVID_SOURCE, 1, [Define _SVID_SOURCE if scandir function is found])])
 
 dnl Check for libicu
 dnl -------------------------------------------------------------

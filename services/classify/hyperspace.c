@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -170,7 +170,12 @@ int i;
 	header->UBM = UNICODE_BYTE_MARK;
 	header->WCS = sizeof(wchar_t);
 	header->records=0;
-	i = ftruncate(file, 0);
+	do {
+		i = ftruncate(file, 0);
+	} while (i == -1 && errno == EINTR);
+	if (i == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFHSHeader, this will be a problem!\n");
+	}
 	lseek64(file, 0, SEEK_SET);
         do {
 		i = write(file, "FHS", 3);
@@ -285,7 +290,12 @@ hyperspaceFeatureExt *realHashes;
 int writecheck;
 uint16_t hash;
 	// Set records to zero and truncate the file
-	ftruncate64(file, 11);
+	do {
+		writecheck = ftruncate64(file, 11);
+	} while (writecheck == -1 && errno == EINTR);
+	if (writecheck == -1) {
+		ci_debug_printf(1, "Failed to truncate file in writeFHSHashesPreload, this will be a problem!\n");
+	}
 	lseek64(file, 0, SEEK_END);
 	header->records = 0;
 
@@ -557,7 +567,7 @@ uint16_t numHashes=0;
 		{
 //			ci_debug_printf(10, "Loading keys: %"PRIX64", in Category: %s Document:%"PRIu16"\n", docHashes[j], cat_name, i);
 			if(HSJudgeHashList.used == 0) goto ADD_HASH;
-			switch(preload_hash_compare(HSJudgeHashList.hashes[HSJudgeHashList.used-1].hash, docHashes[j]))
+			switch (preload_hash_compare(HSJudgeHashList.hashes[HSJudgeHashList.used-1].hash, docHashes[j]))
 			{
 				case -1:
 					ADD_HASH:
@@ -598,10 +608,19 @@ char old_dir[PATH_MAX];
 int name_len;
 char *cat_name;
 
-	getcwd(old_dir, PATH_MAX);
-	chdir(fhs_dir);
+	if (getcwd(old_dir, PATH_MAX) == NULL) {
+		ci_debug_printf(1, "Unable to get current working directory in loadMassHSCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
+	if (chdir(fhs_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassHSCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
 	preLoadHyperSpace("preload.fhs");
-	chdir(old_dir);
+	if (chdir(old_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassHSCategories because %s. Dying.", strerror(errno));
+		exit(-1);
+	}
 
 	if ((dirp = opendir(fhs_dir)) == NULL)
 	{
@@ -609,7 +628,9 @@ char *cat_name;
 		return -1;
 	}
 
-	chdir(fhs_dir);
+	if (chdir(fhs_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassHSsCategories because %s. This should be impossible. Ignoring.", strerror(errno));
+	}
 	do {
 		errno = 0;
 		if ((dp = readdir(dirp)) != NULL)
@@ -630,7 +651,9 @@ char *cat_name;
 	else
 		(void) closedir(dirp);
 
-	chdir(old_dir);
+	if (chdir(old_dir) == -1) {
+		ci_debug_printf(1, "Unable to change directory in loadMassHSCategories because %s. This should be impossible. Ignoring.", strerror(errno));
+	}
 	return 1;
 }
 

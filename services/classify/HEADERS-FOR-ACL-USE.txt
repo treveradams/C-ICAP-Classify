@@ -9,7 +9,7 @@ The following are values you may see:
 "OUT OF MEMORY" - memory couldn't be allocated
 "NO CATEGORIES PROVIDED, CAN'T PROCESS" - no image categories were
 	loaded.
-"ZLIB FAILURE" - object claims compression, we couldn't uncompress.
+"DECOMPRESS FAILURE" - object claims compression, we couldn't uncompress.
 "CANNOT CONVERT $CHARSET TO WCHAR_T" - could not convert charset from
 	some $CHARSET (i.e. ISO-8859-1) to WCHAR_T
 "UNKNOWN ERROR" - some other error

@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2014 Trever L. Adams
+ *  Copyright (C) 2008-2017 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -292,7 +292,7 @@ char header[myMAX_HEADER + 1];
 	if (!ci_http_response_headers(req))
 		ci_http_response_create(req, 1, 1);
 
-	switch(error)
+	switch (error)
 	{
 		case IMAGE_NO_MEMORY:
 			snprintf(header, myMAX_HEADER, "X-IMAGE-ERROR: OUT OF MEMORY");
