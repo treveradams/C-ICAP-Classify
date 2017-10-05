@@ -1001,7 +1001,7 @@ char interesting_bit;
 	}
 	if (PTget_bit(x, h->bit) == 0)
 		h->l = PTinsertR(session, h->l, x, bit, h);
-	else h->r =  PTinsertR(session, h->r, x, bit, h);
+	else h->r = PTinsertR(session, h->r, x, bit, h);
 	return h;
 }
 

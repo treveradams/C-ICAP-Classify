@@ -42,16 +42,16 @@
 #include <wchar.h>
 #include <wctype.h>
 
-#include "c-icap.h"
-#include "service.h"
-#include "header.h"
-#include "body.h"
-#include "simple_api.h"
-#include "debug.h"
-#include "cfg_param.h"
-#include "filetype.h"
-#include "commands.h"
-#include "txt_format.h"
+#include "c_icap/c-icap.h"
+#include "c_icap/service.h"
+#include "c_icap/header.h"
+#include "c_icap/body.h"
+#include "c_icap/simple_api.h"
+#include "c_icap/debug.h"
+#include "c_icap/cfg_param.h"
+#include "c_icap/filetype.h"
+#include "c_icap/commands.h"
+#include "c_icap/txt_format.h"
 #define IN_SRV_CLASSIFY
 #include "srv_classify.h"
 #include "ci_threads.h"
@@ -621,12 +621,15 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
           }
      }
 
+// The following block is not needed for current and likely future versions of c_icap... leaving in place for now
+/*
      if((content_type = ci_http_response_get_header(req, "Content-Encoding")) != NULL) {
           if(strstr(content_type, "gzip")) data->is_compressed = CI_ENCODE_GZIP;
           else if(strstr(content_type, "deflate")) data->is_compressed = CI_ENCODE_DEFLATE;
+          else if(strstr(content_type, "bzip2")) data->is_compressed = CI_ENCODE_BZIP2;
           else data->is_compressed = CI_ENCODE_UNKNOWN;
      }
-     else data->is_compressed = CI_ENCODE_NONE;
+     else data->is_compressed = CI_ENCODE_NONE;*/
 
      if (data->args.sizelimit && MAX_OBJECT_SIZE
          && content_size > MAX_OBJECT_SIZE) {
@@ -790,9 +793,18 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
           if(data->disk_body) diskBodyToMemBody(req);
           ci_debug_printf(8, "Classifying TEXT from memory\n");
           #ifdef HAVE_ZLIB
-          if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE)
+          if (data->is_compressed == CI_ENCODE_GZIP || data->is_compressed == CI_ENCODE_DEFLATE) {
                classify_uncompress(req);
+          }
           #endif
+          if (data->is_compressed == CI_ENCODE_BZIP2) {
+               data = ci_service_data(req);
+               mem_body = ci_membuf_new();
+               if (CI_UNCOMP_OK == ci_bzunzip_to_membuf(data->mem_body, data->mem_body->endpos, mem_body, 0)) {
+                    ci_membuf_free(data->mem_body);
+                    data->mem_body = mem_body;
+               }
+          }
           if(make_wchar(req) == CI_OK) // We should only categorize text if this returns >= 0
           {
                make_pics_header(req);
@@ -1416,7 +1428,7 @@ int get_filetype(ci_request_t * req, char *buf, int len)
 
      data = ci_service_data(req);
      filetype = ci_extend_filetype(magic_db, req, buf, len, &iscompressed);
-     data->is_compressed=iscompressed;
+     data->is_compressed = iscompressed;
 
      return filetype;
 }
@@ -1498,7 +1510,7 @@ void insertReferrer(char *uri, HTMLClassification fhs_classification, HTMLClassi
 {
 uint32_t primary = 0, secondary = 0;
 int oldest = 0, i;
-//HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+//HTMLClassification emptyClassification = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 	// Compute hash outside of lock
 	hashword2((uint32_t *) uri, strlen(uri)/4, &primary, &secondary);
 
@@ -1572,7 +1584,7 @@ int oldest = 0, i;
 void getReferrerClassification(const char *uri, HTMLClassification *fhs_classification, HTMLClassification *fnb_classification)
 {
 uint32_t primary = 0, secondary = 0;
-HTMLClassification emptyClassification =  { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
+HTMLClassification emptyClassification = { .primary_name = NULL, .primary_probability = 0.0, .primary_probScaled = 0.0, .secondary_name = NULL, .secondary_probability = 0.0, .secondary_probScaled = 0.0  };
 int i;
 char *realURI, *pos;
 	if(uri == NULL)

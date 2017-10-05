@@ -701,7 +701,7 @@ const double BAYES_MAXIMUM = DBL_MAX / 20000; // Conserve bits toward a maximum,
 
 //					ci_debug_printf(10, "Category: %"PRIu16" out of %"PRIu16"\n", NBJudgeHashList.hashes[BSRet].users[j].category, NBCategories.used);
 
-					local_probability =  ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
+					local_probability = ((double) NBJudgeHashList.hashes[BSRet].users[j].data.count / (double) (total)); // compute P(w|C)
 					local_probability /= ((double) (total - NBJudgeHashList.hashes[BSRet].users[j].data.count) / (double) (total)); // compute and divide by P(w|not C)
 					if(local_probability < MAGIC_MINIMUM) local_probability = MAGIC_MINIMUM;
 					else if(local_probability > 1) local_probability = 1;
