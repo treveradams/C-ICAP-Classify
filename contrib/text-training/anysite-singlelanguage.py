@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright (C) 2008-2016 Trever L. Adams
+# Copyright (C) 2008-2017 Trever L. Adams
 # While these scripts are designed to work with C-ICAP Classify,
 # They are not part of it and are NOT under the GNU LGPL v3.
 #
@@ -23,6 +23,28 @@ import time
 import sys
 
 
+def process_urls(arguments):
+	new_args = set()
+	for url in arguments:
+		try:
+			url = url.strip()
+			matchObj = re.match( r'(https?://(www.)?(.*?))/(.*/)?(.*)', url)
+	# matchObj.group(3) is host matchObj.group(5) is file
+			my_time = time.localtime(time.time())
+			output_file = options.language + '.UTF-8#' + matchObj.group(3) + '-' + str(my_time[0]) + str(my_time[1]).zfill(2) + str(my_time[2]).zfill(2) + '-' + str(time.time()) + '.html'
+			ret = url2utf8.main(url, output_file, [], options.redirect_only)
+			if ret not in [True, False, None]:
+				new_args.add(ret)
+				print ret
+			time.sleep(2)
+		except Exception as e:
+			print "Error " + url
+			print e
+	if len(new_args):
+		process_urls(new_args)
+	return new_args
+
+
 parser = optparse.OptionParser(description="Grabs pages from any site and writes out UTF-8",
 	prog="anysite-singlelanguage.py",
 	version="anysite 0.1",
@@ -35,6 +57,10 @@ parser.add_option("-k", "--keyboard",
 parser.add_option("-l", "--language",
                   dest="language", default='en_US',
                   help="Sets language and country code (i.e. en_US)")
+
+parser.add_option("-r", "--redirectonly",
+                  action="store_true", dest="redirect_only", default=False,
+                  help="If set, it saves only redirect errors. This is useful for catching redirects that are being misclassified. It will catch *ALL* redirects. Only one is likely the one you want. Don't feed more than one URL for simplicity's sake.")
 
 (options, arguments) = parser.parse_args()
 
@@ -49,15 +75,5 @@ if options.keyboard == True:
 		if len(chosenurl) > 1:
 			arguments.add(chosenurl)
 
-for url in arguments:
-	try:
-		url = url.strip()
-		matchObj = re.match( r'(https?://(www.)?(.*?))/(.*/)?(.*)', url)
-# matchObj.group(3) is host matchObj.group(5) is file
-		my_time = time.localtime(time.time())
-		output_file = options.language + '.UTF-8#' + matchObj.group(3) + '-' + str(my_time[0]) + str(my_time[1]).zfill(2) + str(my_time[2]).zfill(2) + '-' + str(time.time()) + '.html'
-		url2utf8.main(url, output_file, [])
-		time.sleep(2)
-	except:
-		print "Error " + url
+process_urls(arguments)
 	

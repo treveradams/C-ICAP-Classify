@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright (C) 2008-2016 Trever L. Adams
+# Copyright (C) 2008-2017 Trever L. Adams
 # While these scripts are designed to work with C-ICAP Classify,
 # They are not part of it and are NOT under the GNU LGPL v3.
 #
@@ -16,13 +16,22 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from urllib2 import Request, urlopen, URLError, HTTPError, unquote
+from urllib2 import Request, urlopen, URLError, HTTPError, unquote, build_opener, HTTPCookieProcessor, HTTPErrorProcessor
+from cookielib import CookieJar
+from urllib import urlencode
 import optparse
 import codecs
 import re
 import ssl
 
-def main(site, output_file, cookies):
+class NoRedirection(HTTPErrorProcessor):
+
+    def http_response(self, request, response):
+        return response
+
+    https_response = http_response
+
+def main(site, output_file, cookies, redirect_only):
 	try:
 		site = site.strip()
 		req = Request(site, None, {'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:18.0) Gecko/20100101 Firefox/18.0', 'Accept-Language' : 'en-us,en;q=0.8,he;q=0.5,es;q=0.3', 'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'})
@@ -34,8 +43,16 @@ def main(site, output_file, cookies):
 				name, value = cookie
 				output_cookies = output_cookies + name + '=' + value
 			req.add_header('Cookie', output_cookies)
-		output = urlopen(req)
+		if redirect_only == True:
+			cj = CookieJar()
+			opener = build_opener(NoRedirection, HTTPCookieProcessor(cj))
+			data = {}
+			req.get_method = lambda: "GET"
+			output = opener.open(req, urlencode(data))
+		else:
+			output = urlopen(req)
 		headers = output.info()
+		code = output.code
 		output = output.read()
 		matchObj = re.search( r'(<meta [^>]*?charset=\"?([^\">]*?)\")', output, flags = re.M + re.I + re.S)
 		if matchObj is not None and matchObj.group(2):
@@ -47,9 +64,14 @@ def main(site, output_file, cookies):
 			except:
 				output = output.decode('ISO-8859-1')
 		output_file = unquote(output_file)
-		file = codecs.open(output_file, "w", "utf-8")
-		file.write(output)
-		file.close()
+		if code in [301, 302, 303, 307, 308] and redirect_only is True:
+		    print "Writing " + site + " to " + output_file
+		if not (redirect_only is True and code not in [301, 302, 303, 307, 308]):
+			file = codecs.open(output_file, "w", "utf-8")
+			file.write(output)
+			file.close()
+		if code in [301, 302, 303, 307, 308] and redirect_only is True:
+			return headers['Location']
 	except HTTPError, e:
 		print 'The server couldn\'t fulfill the request. For ' + site
 		print 'Error code: ', e.code
@@ -58,6 +80,8 @@ def main(site, output_file, cookies):
 		print 'Reason: ', e.reason
 	except UnicodeDecodeError, e:
 		print site + ': '
+		print e
+	except Exception as e:
 		print e
 
 def __main__():
