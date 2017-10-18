@@ -779,31 +779,21 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
           ci_debug_printf(8, "Classifying TEXT from memory\n");
 
           switch (data->is_compressed) {
-               case CI_ENCODE_GZIP:
-               case CI_ENCODE_DEFLATE:
-                    ci_debug_printf(8, "Classifying TEXT decompress gzip/deflate\n");
-                    data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
-                    if (CI_UNCOMP_OK != ci_inflate_to_membuf(data->mem_body->buf, data->mem_body->endpos, data->uncompressedbody, 0)) {
-                         ci_debug_printf(3, "Classifying TEXT failed to decompress gzip/deflate\n");
-                         addTextErrorHeaders(req, DECOMPRESS_FAIL, "gzip/deflate");
-                         ci_membuf_free(data->uncompressedbody);
-                         data->uncompressedbody = NULL;
-                    }
-                    break;
-               case CI_ENCODE_BZIP2:
-                    ci_debug_printf(8, "Classifying TEXT decompress bzip2\n");
-                    data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
-                    if (CI_UNCOMP_OK != ci_bzunzip_to_membuf(data->mem_body->buf, data->mem_body->endpos, data->uncompressedbody, 0)) {
-                         ci_debug_printf(3, "Classifying TEXT failed to decompress bzip2\n");
-                         addTextErrorHeaders(req, DECOMPRESS_FAIL, "bzip2");
-                         ci_membuf_free(data->uncompressedbody);
-                         data->uncompressedbody = NULL;
-                    }
+               case CI_ENCODE_NONE:
                     break;
                case CI_ENCODE_UNKNOWN:
                     addTextErrorHeaders(req, DECOMPRESS_FAIL, "unknown encoding/compression");
                     break;
                default:
+                    ci_debug_printf(8, "Decompressing to Classify TEXT\n");
+                    data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
+                    if (CI_UNCOMP_OK != ci_decompress_to_membuf(data->is_compressed, data->mem_body->buf, data->mem_body->endpos,
+                                                                        data->uncompressedbody, 0))
+                    {
+                         addTextErrorHeaders(req, DECOMPRESS_FAIL, "");
+                         ci_membuf_free(data->uncompressedbody);
+                         data->uncompressedbody = NULL;
+                    }
                     break;
           }
 
