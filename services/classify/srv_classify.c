@@ -70,8 +70,8 @@ const wchar_t *WCNULL = L"\0";
 #endif
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
-extern int categorize_image(ci_request_t * req);
-extern int categorize_external_image(ci_request_t * req);
+extern int categorize_image(ci_request_t *req);
+extern int categorize_external_image(ci_request_t *req);
 extern int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata);
 extern int cfg_ImageInterpolation(const char *directive, const char **argv, void *setdata);
 extern int cfg_coalesceOverlap(const char *directive, const char **argv, void *setdata);
@@ -83,10 +83,10 @@ int cfg_ExternalImageConversion(const char *directive, const char **argv, void *
 int CFG_NUM_CICAP_THREADS;
 #endif
 
-int must_classify(int type, classify_req_data_t * data);
+int must_classify(int type, classify_req_data_t *data);
 
-void generate_error_page(classify_req_data_t * data, ci_request_t * req);
-char *srvclassify_compute_name(ci_request_t * req);
+void generate_error_page(classify_req_data_t *data, ci_request_t *req);
+char *srvclassify_compute_name(ci_request_t *req);
 /***********************************************************************************/
 /* Module definitions                                                              */
 
@@ -137,21 +137,21 @@ ci_service_xdata_t *srv_classify_xdata = NULL;
 static int CLASSIFYREQDATA_POOL = -1;
 static int HASHDATA_POOL = -1;
 
-int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
+int srvclassify_init_service(ci_service_xdata_t *srv_xdata,
                            struct ci_server_conf *server_conf);
-int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
+int srvclassify_post_init_service(ci_service_xdata_t *srv_xdata,
                            struct ci_server_conf *server_conf);
 void srvclassify_close_service();
 int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
                                     ci_request_t *);
 int srvclassify_end_of_data_handler(ci_request_t *);
-void *srvclassify_init_request_data(ci_request_t * req);
+void *srvclassify_init_request_data(ci_request_t *req);
 void srvclassify_release_request_data(void *data);
 int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
-                 ci_request_t * req);
+                 ci_request_t *req);
 
 /*Arguments parse*/
-void srvclassify_parse_args(classify_req_data_t * data, char *args);
+void srvclassify_parse_args(classify_req_data_t *data, char *args);
 /*Configuration Functions*/
 int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdata);
 int cfg_DoTextPreload(const char *directive, const char **argv, void *setdata);
@@ -165,20 +165,20 @@ int cfg_TmpDir(const char *directive, const char **argv, void *setdata);
 int cfg_TextSecondary(const char *directive, const char **argv, void *setdata);
 int cfg_ExternalTextConversion(const char *directive, const char **argv, void *setdata);
 /*General functions*/
-int get_filetype(ci_request_t *req, char *buf, int len);
+int get_filetype(ci_request_t *req, int *encoding);
 void set_istag(ci_service_xdata_t *srv_xdata);
 int categorize_text(ci_request_t *req);
-int categorize_external_text(ci_request_t * req, int classification_type);
+int categorize_external_text(ci_request_t *req, int classification_type);
 char *findCharset(const char *input, int64_t);
 int make_wchar(ci_request_t *req);
-int make_wchar_from_buf(ci_request_t * req, ci_membuf_t *input);
+int make_wchar_from_buf(ci_request_t *req, ci_membuf_t *input);
 static void addTextErrorHeaders(ci_request_t *req, int error, char *extra_info);
 /*External functions*/
 extern char *strcasestr(const char *haystack, const char *needle);
 
 // PICS label handling
 regex_t picslabel;
-int make_pics_header(ci_request_t * req);
+int make_pics_header(ci_request_t *req);
 
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
 // Referrer classification handling
@@ -377,7 +377,7 @@ ci_simple_file_t *tempbody;
 	data->mem_body = NULL;
 }
 
-int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
+int srvclassify_init_service(ci_service_xdata_t *srv_xdata,
                            struct ci_server_conf *server_conf)
 {
      int i;
@@ -438,7 +438,7 @@ int srvclassify_init_service(ci_service_xdata_t * srv_xdata,
      return 1;
 }
 
-int srvclassify_post_init_service(ci_service_xdata_t * srv_xdata,
+int srvclassify_post_init_service(ci_service_xdata_t *srv_xdata,
                            struct ci_server_conf *server_conf)
 {
 int ret = CI_OK;
@@ -512,7 +512,7 @@ void srvclassify_close_service()
 }
 
 
-void *srvclassify_init_request_data(ci_request_t * req)
+void *srvclassify_init_request_data(ci_request_t *req)
 {
      int preview_size;
      classify_req_data_t *data;
@@ -579,11 +579,11 @@ void srvclassify_release_request_data(void *data)
 
 
 int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
-                                    ci_request_t * req)
+                                    ci_request_t *req)
 {
      ci_off_t content_size = 0;
      classify_req_data_t *data = ci_service_data(req);
-     char *content_type = NULL;
+     const char *content_type = NULL;
 
      ci_debug_printf(9, "OK The preview data size is %d\n", preview_data_len);
 
@@ -593,7 +593,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
      }
 
      /*Going to determine the file type, get_filetype can take preview_data as null ....... */
-     data->file_type = get_filetype(req, preview_data, preview_data_len);
+     data->file_type = get_filetype(req, &data->encoded);
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X) || defined(HAVE_OPENCV_23X)
      data->type_name = ci_data_type_name(magic_db, data->file_type);
 #endif
@@ -658,7 +658,7 @@ int srvclassify_check_preview_handler(char *preview_data, int preview_data_len,
 
 
 
-int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
+int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t *req)
 {
      /* We can put here scanning for jscripts and html and raw data ...... */
      classify_req_data_t *data = ci_service_data(req);
@@ -714,7 +714,7 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t * req)
 
 
 
-int srvclassify_write_to_net(char *buf, int len, ci_request_t * req)
+int srvclassify_write_to_net(char *buf, int len, ci_request_t *req)
 {
      int bytes;
      classify_req_data_t *data = ci_service_data(req);
@@ -731,7 +731,7 @@ int srvclassify_write_to_net(char *buf, int len, ci_request_t * req)
 }
 
 int srvclassify_io(char *wbuf, int *wlen, char *rbuf, int *rlen, int iseof,
-                 ci_request_t * req)
+                 ci_request_t *req)
 {
      if (rbuf && rlen) {
           *rlen = srvclassify_read_from_net(rbuf, *rlen, iseof, req);
@@ -778,7 +778,7 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
           if(data->disk_body) diskBodyToMemBody(req);
           ci_debug_printf(8, "Classifying TEXT from memory\n");
 
-          switch (data->is_compressed) {
+          switch (data->encoded) {
                case CI_ENCODE_NONE:
                     break;
                case CI_ENCODE_UNKNOWN:
@@ -787,7 +787,7 @@ int srvclassify_end_of_data_handler(ci_request_t *req)
                default:
                     ci_debug_printf(8, "Decompressing to Classify TEXT\n");
                     data->uncompressedbody = ci_membuf_new_sized(data->mem_body->endpos);
-                    if (CI_UNCOMP_OK != ci_decompress_to_membuf(data->is_compressed, data->mem_body->buf, data->mem_body->endpos,
+                    if (CI_UNCOMP_OK != ci_decompress_to_membuf(data->encoded, data->mem_body->buf, data->mem_body->endpos,
                                                                         data->uncompressedbody, 0))
                     {
                          addTextErrorHeaders(req, DECOMPRESS_FAIL, "");
@@ -1076,7 +1076,7 @@ int wait_status;
 	return categorize_text(req);
 }
 
-int make_pics_header(ci_request_t * req)
+int make_pics_header(ci_request_t *req)
 {
 char *orig_header;
 char header[1501];
@@ -1307,40 +1307,35 @@ size_t len=0;
      return token;
 }
 
-void set_istag(ci_service_xdata_t * srv_xdata)
+void set_istag(ci_service_xdata_t *srv_xdata)
 {
      char istag[SERVICE_ISTAG_SIZE + 1];
-     char *text_cat_ver="text_categorize1.0";
-     char *image_cat_ver="image_categorize1.0";
+     char *cat_ver="classify1.0";
 
      /*cfg_version maybe must set by user when he is changing
         the srv_clamav configuration.... */
-     snprintf(istag, SERVICE_ISTAG_SIZE, "-T:%s-I:%s",
-              text_cat_ver, image_cat_ver);
+     snprintf(istag, SERVICE_ISTAG_SIZE, "%s", cat_ver);
      istag[SERVICE_ISTAG_SIZE] = '\0';
      ci_service_set_istag(srv_xdata, istag);
 }
 
-int get_filetype(ci_request_t * req, char *buf, int len)
+int get_filetype(ci_request_t *req, int *encoded)
 {
-     int iscompressed, filetype;
-     classify_req_data_t *data;
+     int filetype;
 
-     data = ci_service_data(req);
-     filetype = ci_extend_filetype(magic_db, req, buf, len, &iscompressed);
-     data->is_compressed = iscompressed;
+     filetype = ci_magic_req_data_type(req, encoded);
 
      return filetype;
 }
 
-int must_classify(int file_type, classify_req_data_t * data)
+int must_classify(int file_type, classify_req_data_t *data)
 {
      int type, i = 0;
-     int *file_groups;
+     const int *file_groups;
 
      ci_thread_rwlock_rdlock(&textclassify_rwlock);
 
-     file_groups = ci_data_type_groups(magic_db, file_type);
+     file_groups = ci_magic_type_groups(file_type);
      type = NO_CLASSIFY;
 
      if (file_groups) {
@@ -1611,7 +1606,7 @@ int i;
 /* Parse arguments function -
    Current arguments: allow204=on|off, force=on, sizelimit=off
 */
-void srvclassify_parse_args(classify_req_data_t * data, char *args)
+void srvclassify_parse_args(classify_req_data_t *data, char *args)
 {
      char *str;
      if ((str = strstr(args, "allow204="))) {
@@ -1665,16 +1660,16 @@ int cfg_ClassifyFileTypes(const char *directive, const char **argv, void *setdat
           return 0;
 
      for (i = 0; argv[i] != NULL; i++) {
-          if ((id = ci_get_data_type_id(magic_db, argv[i])) >= 0)
+          if ((id = ci_magic_type_id(argv[i])) >= 0)
                classifytypes[id] = type;
-          else if ((id = ci_get_data_group_id(magic_db, argv[i])) >= 0)
+          else if ((id = ci_magic_group_id(argv[i])) >= 0)
                classifygroups[id] = type;
           else
                ci_debug_printf(1, "Unknown data type %s \n", argv[i]);
 
      }
 
-     ci_debug_printf(1, "I am going to classify data for %s scanning of type:",
+     ci_debug_printf(1, "I am going to classify data for %s scanning of type: ",
                      (type == 1 ? "TEXT" : "IMAGE"));
      for (i = 0; i < ci_magic_types_num(magic_db); i++) {
           if (classifytypes[i] == type)
@@ -1804,7 +1799,7 @@ int cfg_TextHashSeeds(const char *directive, const char **argv, void *setdata)
      sscanf(argv[0], "%x", &HASHSEED1);
      sscanf(argv[1], "%x", &HASHSEED2);
 
-     ci_debug_printf(1, "Setting parameter :%s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
+     ci_debug_printf(1, "Setting parameter: %s (HASHSEED1: 0x%x HASHSEED2: 0x%x)\n", directive, HASHSEED1, HASHSEED2);
      return 1;
 }
 
@@ -1839,12 +1834,12 @@ int cfg_TextSecondary(const char *directive, const char **argv, void *setdata)
      {
           number_secondaries--;
           secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
-          ci_debug_printf(1, "Invalid REGEX In Setting parameter :%s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
+          ci_debug_printf(1, "Invalid REGEX In Setting parameter: %s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
           return 0;
      }
      secondary_compares[number_secondaries].bidirectional = bidirectional;
 
-     ci_debug_printf(1, "Setting parameter :%s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
+     ci_debug_printf(1, "Setting parameter: %s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
      number_secondaries++;
      return 1;
 }
@@ -1885,7 +1880,7 @@ int cfg_ExternalTextConversion(const char *directive, const char **argv, void *s
 
      if(strstr(directive, "FileType") != NULL)
      {
-          if ((id = ci_get_data_type_id(magic_db, argv[1])) >= 0)
+          if ((id = ci_magic_type_id(argv[1])) >= 0)
           {
                if(externalclassifytypes[id].data_type & type)
                {
@@ -1916,7 +1911,7 @@ int cfg_ExternalTextConversion(const char *directive, const char **argv, void *s
           externalclassifytypes[id].text_args[k] = NULL;
      }
 
-     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s, receiving via: %s)\n", directive, argv[2], argv[1], argv[0]);
+     ci_debug_printf(1, "Setting parameter: %s (Using program: %s [arguments hidden] to convert data for type %s, receiving via: %s)\n", directive, argv[2], argv[1], argv[0]);
      return 1;
 }
 
@@ -1936,7 +1931,7 @@ int cfg_ExternalImageConversion(const char *directive, const char **argv, void *
 
      if(strstr(directive, "FileType") != NULL)
      {
-          if ((id = ci_get_data_type_id(magic_db, argv[0])) >= 0)
+          if ((id = ci_magic_type_id(argv[0])) >= 0)
           {
                if(externalclassifytypes[id].data_type & type)
                {
@@ -1967,7 +1962,7 @@ int cfg_ExternalImageConversion(const char *directive, const char **argv, void *
           externalclassifytypes[id].image_args[k] = NULL;
      }
 
-     ci_debug_printf(1, "Setting parameter :%s (Using program: %s [arguments hidden] to convert data for type %s)\n", directive, argv[1], argv[0]);
+     ci_debug_printf(1, "Setting parameter: %s (Using program: %s [arguments hidden] to convert data for type %s)\n", directive, argv[1], argv[0]);
      return 1;
 }
 #endif

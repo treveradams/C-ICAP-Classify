@@ -34,11 +34,11 @@ typedef struct classify_req_data {
      ci_simple_file_t *external_body;
      ci_membuf_t *uncompressedbody;
 #if defined(HAVE_OPENCV) || defined(HAVE_OPENCV_22X)
-     char *type_name;
+     const char *type_name;
 #endif
      int file_type;
      int must_classify;
-     int is_compressed;
+     int encoded;
      int allow204;
      struct{
 	  int enable204;

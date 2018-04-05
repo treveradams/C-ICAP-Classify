@@ -87,6 +87,9 @@ return(1);
 }
 ], [echo big-endian; CFLAGS="$CFLAGS -DBIG_ENDIAN"; AC_DEFINE(BIG_ENDIAN, 1, [Define BIG_ENDIAN])],[echo little-endian; CFLAGS="$CFLAGS -DLITTLE_ENDIAN"; AC_DEFINE(LITTLE_ENDIAN, 1, [Define LITTLE_ENDIAN])],[echo cross-compiling])
 
+dnl Determine LARGEFILE support
+AC_SYS_LARGEFILE
+
 dnl Check for OpenCV
 AC_ARG_WITH(opencv,
 [  --with-opencv       Where to find opencv ],

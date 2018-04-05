@@ -1162,7 +1162,7 @@ int cfg_AddImageCategory(const char *directive, const char **argv, void *setdata
            }
     }
     ret = initImageCategory(argv[0], argv[1], CV_RGB(RED, GREEN, BLUE));
-    ci_debug_printf(1, "Setting parameter :%s (Name: %s Cascade File: %s Red: 0x%x Green: 0x%x Blue: 0x%x)\n", directive, argv[0], argv[1], RED, GREEN, BLUE);
+    ci_debug_printf(1, "Setting parameter: %s (Name: %s Cascade File: %s Red: 0x%x Green: 0x%x Blue: 0x%x)\n", directive, argv[0], argv[1], RED, GREEN, BLUE);
     return ret;
 }
 
@@ -1185,7 +1185,7 @@ int cfg_ImageInterpolation(const char *directive, const char **argv, void *setda
           ci_debug_printf(1, "Unknown option in directive: %s\n", directive);
 	return 0;
      }
-     ci_debug_printf(1, "Setting parameter :%s=%s\n", directive, argv[0]);
+     ci_debug_printf(1, "Setting parameter: %s=%s\n", directive, argv[0]);
      return 1;
 }
 
@@ -1201,7 +1201,7 @@ uint16_t current_category = 0;
           if(strcasecmp(argv[0], imageCategories[current_category].name) == 0)
           {
               sscanf(argv[1], "%f", &imageCategories[current_category].coalesceOverlap);
-              ci_debug_printf(1, "Setting parameter :%s=(%s,%s)\n", directive, argv[0], argv[1]);
+              ci_debug_printf(1, "Setting parameter: %s=(%s,%s)\n", directive, argv[0], argv[1]);
               return 1;
           }
      }
@@ -1226,6 +1226,6 @@ int cfg_imageCategoryCopies(const char *directive, const char **argv, void *setd
           IMAGE_CATEGORY_COPIES = IMAGE_CATEGORY_COPIES_MIN;
      if(IMAGE_CATEGORY_COPIES > CFG_NUM_CICAP_THREADS) IMAGE_CATEGORY_COPIES = CFG_NUM_CICAP_THREADS;
 
-     ci_debug_printf(1, "Setting parameter :%s=(%d)\n", directive, IMAGE_CATEGORY_COPIES);
+     ci_debug_printf(1, "Setting parameter: %s=(%d)\n", directive, IMAGE_CATEGORY_COPIES);
      return 1;
 }
