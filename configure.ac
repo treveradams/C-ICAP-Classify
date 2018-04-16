@@ -116,22 +116,33 @@ OLD_CFLAGS=$CFLAGS
 OLD_LIBS=$LIBS
 LIBS=$opencvlib
 CFLAGS=$opencvinc
-opencv="no";
+opencv="no"
+opencv_badversion="no"
 dnl -------------------------------------------------------------
+AH_TEMPLATE([HAVE_OPENCV],[Define if OpenCV version < 2.2])
+AH_TEMPLATE([HAVE_OPENCV_22X],[Define if OpenCV version is 2.2X])
+AH_TEMPLATE([HAVE_OPENCV_23X],[Define if OpenCV version is 2.3X])
+AH_TEMPLATE([HAVE_OPENCV_30X],[Define if OpenCV version is 3.0X or newer])
 AC_MSG_CHECKING([for OpenCV older than 2.2.x])
-AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui";  opencv="yes"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])])
+AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui";  opencv="yes"; opencv_version="HAVE_OPENCV"])
 AC_MSG_CHECKING([for OpenCV 2.2.x or newer])
-AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d";  opencv="yes"; AC_DEFINE(HAVE_OPENCV_22X, 1, [Define HAVE_OPENCV if OpenCV installed])])
+AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d"; opencv="yes"; opencv_version="HAVE_OPENCV_22X"])
 AC_MSG_CHECKING([for OpenCV 2.3.x or newer])
-AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc";  opencv="yes"; AC_DEFINE(HAVE_OPENCV_23X, 1, [Define HAVE_OPENCV if 2.3.x or newer OpenCV installed])])
-AC_MSG_CHECKING([for OpenCV 3.0 or newer])
-AC_CHECK_LIB(opencv_core, cvRound, [], [echo "Disabling support for OpenCV >= 3.0"; OPENCV_ADD_CFLAG=""; OPENCV_ADD_LDFLAG=""; opencv="no"; AC_DEFINE(HAVE_OPENCV_30X, 1, [Don't Define HAVE_OPENCV_30X if 3.0.x or newer OpenCV installed])])
+AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc";  opencv="yes"; opencv_version="HAVE_OPENCV_23X"])
+if test "$opencv" = "yes" ; then
+	AC_MSG_CHECKING([for OpenCV 3.0 or newer])
+	AC_CHECK_LIB(opencv_core, cvRound, [], [echo "Disabling support for OpenCV >= 3.0"; OPENCV_ADD_CFLAG=""; OPENCV_ADD_LDFLAG=""; opencv="no"; opencv_badversion="yes"; opencv_version="HAVE_OPENCV_30X"])
+fi
+if test "$opencv" = "yes" ; then
+	AC_DEFINE_UNQUOTED([$opencv_version], 1, [Define correct HAVE_OPENCV_VERSION if OpenCV installed])
+	AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])
+fi
 AC_SUBST(OPENCV_ADD_LDFLAG)
 AC_SUBST(OPENCV_ADD_CFLAG)
 CFLAGS=$OLD_CFLAGS
 LIBS=$OLD_LIBS
 
-if test "$opencv" = "no" ; then
+if test "$opencv" = "no" && test "$opencv_badversion" = "no"; then
 	AC_SUBST(opencvinc)
 	AC_SUBST(opencvlib)
         unset ac_cv_lib_cxcore_cvCreateImage
@@ -143,14 +154,20 @@ if test "$opencv" = "no" ; then
 	CFLAGS="$opencvinc -fPIC"
 	opencv="no";
 	dnl -------------------------------------------------------------
-	AC_MSG_CHECKING([for OpenCV older than 2.2.x w/ -fPIC])
-	AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui"; opencv="yes"; AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])])
-	AC_MSG_CHECKING([for OpenCV 2.2.x or newer w/ -fPIC])
-	AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d"; opencv="yes"; AC_DEFINE(HAVE_OPENCV_22X, 1, [Define HAVE_OPENCV if OpenCV installed])])
-	AC_MSG_CHECKING([for OpenCV 2.3.x or newer w/ -fPIC])
-	AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_CFLAG="-fPIC"; OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc"; opencv="yes"; AC_DEFINE(HAVE_OPENCV_23X, 1, [Define HAVE_OPENCV if 2.3.x or newer OpenCV installed])])
-	AC_MSG_CHECKING([for OpenCV 3.0 or newer])
-	AC_CHECK_LIB(opencv_core, cvRound, [], [echo "Disabling support for OpenCV >= 3.0"; OPENCV_ADD_CFLAG=""; OPENCV_ADD_LDFLAG=""; opencv="no"; AC_DEFINE(HAVE_OPENCV_30X, 1, [Don't Define HAVE_OPENCV_30X if 3.0.x or newer OpenCV installed])])
+	AC_MSG_CHECKING([for OpenCV older than 2.2.x])
+	AC_CHECK_LIB(cxcore, cvCreateImage, [OPENCV_ADD_LDFLAG="-lcv -lcxcore -lhighgui";  opencv="yes";])
+	AC_MSG_CHECKING([for OpenCV 2.2.x or newer])
+	AC_CHECK_LIB(opencv_core, cvCreateImage, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d"; opencv="yes"; opencv_version="HAVE_OPENCV_22X"])
+	AC_MSG_CHECKING([for OpenCV 2.3.x or newer])
+	AC_CHECK_LIB(opencv_imgproc, cvResize, [OPENCV_ADD_LDFLAG="-lopencv_core -lopencv_highgui -lopencv_objdetect -lopencv_features2d -lopencv_imgproc";  opencv="yes"; opencv_version="HAVE_OPENCV_23X"])
+	if test "$opencv" = "yes" ; then
+		AC_MSG_CHECKING([for OpenCV 3.0 or newer])
+		AC_CHECK_LIB(opencv_core, cvRound, [], [echo "Disabling support for OpenCV >= 3.0"; OPENCV_ADD_CFLAG=""; OPENCV_ADD_LDFLAG=""; opencv="no"; opencv_badversion="yes"; opencv_version="HAVE_OPENCV_30X"])
+	fi
+	if test "$opencv" = "yes" ; then
+		AC_DEFINE_UNQUOTED([$opencv_version], 1, [Define $opencv_version if OpenCV installed])
+		AC_DEFINE(HAVE_OPENCV, 1, [Define HAVE_OPENCV if OpenCV installed])
+	fi
 	AC_SUBST(OPENCV_ADD_LDFLAG)
 	AC_SUBST(OPENCV_ADD_CFLAG)
 	CFLAGS=$OLD_CFLAGS

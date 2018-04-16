@@ -1078,7 +1078,7 @@ int wait_status;
 
 int make_pics_header(ci_request_t *req)
 {
-char *orig_header;
+const char *orig_header;
 char header[1501];
 regmatch_t singleMatch[2];
 classify_req_data_t *data = ci_service_data(req);

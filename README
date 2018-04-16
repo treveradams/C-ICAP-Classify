@@ -11,6 +11,9 @@ classification is done using Fast Hyperspace (based on Hyperspace from
 CRM114) and/or a Fast Naive Bayes. Image and video (when implemented)
 use haar feature detection from the OpenCV Library.
 
+OpenCV newer than 2.3X is specifically not supported. Patches are welcome
+provided backward compatibility is retained with ifdefs.
+
 
 DICTATORS AND CONTROL FREAKS
 ============================
@@ -76,6 +79,9 @@ sanctioned, approved, endorsed, certified, etc. by the C-ICAP Classify
 Project, or any author/contributor to that project without their
 written and signed consent. Such respect and courtesy should be
 extended to those of the C-ICAP project as well.
+
+Please, see documentation, such as it is, in the contrib directory for
+explanation on training your own data.
 
 
 TRADEMARKS AND OTHER MARKS
