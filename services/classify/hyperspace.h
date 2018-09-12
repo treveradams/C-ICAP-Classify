@@ -52,44 +52,48 @@
 #define FHS_v1_QTY_MAX UINT_LEAST16_MAX
 
 typedef struct {
-	char ID[3];
-	uint_least16_t version;
-	uint_least16_t UBM;
-	uint_least16_t WCS;
-	uint_least16_t records;
+    char ID[3];
+    uint_least16_t version;
+    uint_least16_t UBM;
+    uint_least16_t WCS;
+    uint_least16_t records;
 } FHS_HEADERv1;
 
 typedef struct {
-	char *name;
-	uint16_t totalDocuments;
-	int32_t totalFeatures;
-	uint16_t *documentKnownHashes; // documents[TextCategory.totalDocuments] with the value being the number of known hashes
+    char *name;
+    uint16_t totalDocuments;
+    int32_t totalFeatures;
+    uint16_t *documentKnownHashes; // documents[TextCategory.totalDocuments] with the value being the number of known hashes
 } FHSTextCategory;
 
 typedef struct {
-	FHSTextCategory *categories;
-	uint16_t used;
-	uint16_t slots;
+    FHSTextCategory *categories;
+    uint16_t used;
+    uint16_t slots;
 } FHSTextCategoryExt;
 
-typedef struct __attribute__ ((__packed__)) {
-//	uint16_t category;
-//	uint16_t document;
-	uint_least16_t category;
-	uint_least16_t document;
-} FHSHashJudgeUsers;
+typedef struct __attribute__ ((__packed__))
+{
+//  uint16_t category;
+//  uint16_t document;
+    uint_least16_t category;
+    uint_least16_t document;
+}
+FHSHashJudgeUsers;
 
-typedef struct __attribute__ ((__packed__)) {
-	HTMLFeature hash;
-	FHSHashJudgeUsers *users;
-//	uint16_t used;
-	uint_least16_t used;
-} hyperspaceFeatureExt;
+typedef struct __attribute__ ((__packed__))
+{
+    HTMLFeature hash;
+    FHSHashJudgeUsers *users;
+//  uint16_t used;
+    uint_least16_t used;
+}
+hyperspaceFeatureExt;
 
 typedef struct  {
-	hyperspaceFeatureExt *hashes;
-	int32_t used;
-	int32_t slots;
+    hyperspaceFeatureExt *hashes;
+    int32_t used;
+    int32_t slots;
 } HashListExt;
 
 #ifdef IN_HYPSERSPACE
@@ -144,6 +148,6 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 #endif
 
 #if !defined(_MSC_VER) && defined(NOT_CICAP)
- extern void (*__log_error)(void *req, const char *format,... );
+extern void (*__log_error)(void *req, const char *format,... );
 #define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif

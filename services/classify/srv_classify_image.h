@@ -25,44 +25,44 @@
 #define myMAX_HEADER 512
 
 typedef struct _linkedcascade {
-	CvHaarClassifierCascade *cascade;
-	struct _linkedcascade *next;
+    CvHaarClassifierCascade *cascade;
+    struct _linkedcascade *next;
 } LinkedCascade;
 
 typedef struct _Category {
-	char name[CATMAXNAME+1];
-	char cascade_location[CI_MAX_PATH+1];
-	LinkedCascade *cascade_array; // This is simply an array of the cascades, only here so we can free properly
-	LinkedCascade *free_cascade; // don't forget to free me on any reload
-	CvScalar Color;
-	float coalesceOverlap;
-	ci_thread_mutex_t mutex;
-	ci_thread_cond_t cond;
-	int freeing_category;
+    char name[CATMAXNAME+1];
+    char cascade_location[CI_MAX_PATH+1];
+    LinkedCascade *cascade_array; // This is simply an array of the cascades, only here so we can free properly
+    LinkedCascade *free_cascade; // don't forget to free me on any reload
+    CvScalar Color;
+    float coalesceOverlap;
+    ci_thread_mutex_t mutex;
+    ci_thread_cond_t cond;
+    int freeing_category;
 } ImageCategory;
 
 typedef struct _Detected {
-	ImageCategory *category; // Don't free this. This is a copy.
-	CvSeq *detected;
+    ImageCategory *category; // Don't free this. This is a copy.
+    CvSeq *detected;
 } image_detected_t;
 
 typedef struct _DetectedCount {
-	ImageCategory *category; // Don't free this. This is a copy.
-	uint16_t count;
+    ImageCategory *category; // Don't free this. This is a copy.
+    uint16_t count;
 } image_detected_count_t;
 
 typedef struct {
-	char fname[CI_MAX_PATH+1];
-	float scale;
-	IplImage *origImage;
-	IplImage *rightImage;
-	CvMemStorage *dstorage; // For use in detect routines and in using detected objects -- don't forget to free me after each image with cvClearMemStorage
-	CvMemStorage *lstorage; // For all other uses -- don't forget to free me after each image with cvClearMemStorage
-	image_detected_t *detected;
-	int featuresDetected;
-	ci_request_t *req;
-	HTMLClassification referrer_fhs_classification;
-	HTMLClassification referrer_fnb_classification;
+    char fname[CI_MAX_PATH+1];
+    float scale;
+    IplImage *origImage;
+    IplImage *rightImage;
+    CvMemStorage *dstorage; // For use in detect routines and in using detected objects -- don't forget to free me after each image with cvClearMemStorage
+    CvMemStorage *lstorage; // For all other uses -- don't forget to free me after each image with cvClearMemStorage
+    image_detected_t *detected;
+    int featuresDetected;
+    ci_request_t *req;
+    HTMLClassification referrer_fhs_classification;
+    HTMLClassification referrer_fnb_classification;
 } image_session_t;
 
 enum {IMAGE_NO_CATEGORIES=-1, IMAGE_NO_MEMORY=-2, IMAGE_FAILED_LOAD=-3};

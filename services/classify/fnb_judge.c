@@ -57,95 +57,88 @@ char *fbc_dir;
 
 int readArguments(int argc, char *argv[])
 {
-int i;
-char temp[PATH_MAX];
+    int i;
+    char temp[PATH_MAX];
 
-	if(argc < 9)
-	{
-		printf("Format of arguments is:\n");
-		printf("\t-p PRIMARY_HASH_SEED\n");
-		printf("\t-s SECONDARY_HASH_SEED\n");
-		printf("\t-i INPUT_FILE_TO_JUDGE\n");
-		printf("\t-d CATEGORY_FNB_FILES_DIR\n");
-		printf("\t-r Related categories in form of \"primary,secondary,bidirectional\". Bidirectional should be 1 for yes, 0 for no. This option should only be supplied once. To include more than one, separate with \"=\".\n");
-		printf("Spaces and case matter.\n");
-		return -1;
-	}
-	for(i=1; i<9; i+=2)
-	{
-		if(strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
-		else if(strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
-		else if(strcmp(argv[i], "-i") == 0)
-		{
-			judge_file = malloc(strlen(argv[i+1]) + 1);
-			sscanf(argv[i+1], "%s", judge_file);
-		}
-		else if(strcmp(argv[i], "-d") == 0)
-		{
-			int len = strlen(argv[i+1]);
-			fbc_dir = malloc(len + 1);
-			sscanf(argv[i+1], "%s", fbc_dir);
-			if(fbc_dir[len-1] == '/') fbc_dir[len-1] = '\0';
-		}
-		else if(strcmp(argv[i], "-r") == 0)
-		{
-			strncpy(temp, argv[i+1], PATH_MAX-1);
-			setupPrimarySecondFromCmdLine(temp);
-		}
-	}
-/*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
-	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
-	printf("Learn File: %s\n", judge_file);*/
-	return 0;
+    if (argc < 9) {
+        printf("Format of arguments is:\n");
+        printf("\t-p PRIMARY_HASH_SEED\n");
+        printf("\t-s SECONDARY_HASH_SEED\n");
+        printf("\t-i INPUT_FILE_TO_JUDGE\n");
+        printf("\t-d CATEGORY_FNB_FILES_DIR\n");
+        printf("\t-r Related categories in form of \"primary,secondary,bidirectional\". Bidirectional should be 1 for yes, 0 for no. This option should only be supplied once. To include more than one, separate with \"=\".\n");
+        printf("Spaces and case matter.\n");
+        return -1;
+    }
+    for (i=1; i<9; i+=2) {
+        if (strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
+        else if (strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
+        else if (strcmp(argv[i], "-i") == 0) {
+            judge_file = malloc(strlen(argv[i+1]) + 1);
+            sscanf(argv[i+1], "%s", judge_file);
+        } else if (strcmp(argv[i], "-d") == 0) {
+            int len = strlen(argv[i+1]);
+            fbc_dir = malloc(len + 1);
+            sscanf(argv[i+1], "%s", fbc_dir);
+            if (fbc_dir[len-1] == '/') fbc_dir[len-1] = '\0';
+        } else if (strcmp(argv[i], "-r") == 0) {
+            strncpy(temp, argv[i+1], PATH_MAX-1);
+            setupPrimarySecondFromCmdLine(temp);
+        }
+    }
+    /*  printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
+        printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
+        printf("Learn File: %s\n", judge_file);*/
+    return 0;
 }
 
 int main (int argc, char *argv[])
 {
-regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
-wchar_t *myData;
-HashList myHashes;
-clock_t start, s2, s3, end;
-HTMLClassification classification;
-	checkMakeUTF8();
-	initHTML();
-	initBayesClassifier();
-	if(readArguments(argc, argv)==-1) exit(-1);
-	myData=makeData(judge_file);
+    regexHead myRegexHead = {.head = NULL, .tail = NULL, .dirty = 0, . main_memory = NULL, .arrays = NULL, .lastarray = NULL};
+    wchar_t *myData;
+    HashList myHashes;
+    clock_t start, s2, s3, end;
+    HTMLClassification classification;
+    checkMakeUTF8();
+    initHTML();
+    initBayesClassifier();
+    if (readArguments(argc, argv)==-1) exit(-1);
+    myData=makeData(judge_file);
 
-	printf("Loading hashes -- be patient!\n");
-	loadMassBayesCategories(fbc_dir);
-	optimizeFBC(&NBJudgeHashList);
+    printf("Loading hashes -- be patient!\n");
+    loadMassBayesCategories(fbc_dir);
+    optimizeFBC(&NBJudgeHashList);
 
-	printf("Classifying\n");
-	start=clock();
-	mkRegexHead(&myRegexHead, myData, 0);
-	removeHTML(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
-	normalizeCurrency(&myRegexHead);
-	regexMakeSingleBlock(&myRegexHead);
+    printf("Classifying\n");
+    start=clock();
+    mkRegexHead(&myRegexHead, myData, 0);
+    removeHTML(&myRegexHead);
+    regexMakeSingleBlock(&myRegexHead);
+    normalizeCurrency(&myRegexHead);
+    regexMakeSingleBlock(&myRegexHead);
 
-	s2=clock();
-	myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
-	myHashes.slots = HTML_MAX_FEATURE_COUNT;
-	myHashes.used = 0;
-	computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
-	s3=clock();
+    s2=clock();
+    myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
+    myHashes.slots = HTML_MAX_FEATURE_COUNT;
+    myHashes.used = 0;
+    computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
+    s3=clock();
 
-	classification=doBayesPrepandClassify(&myHashes);
-	end=clock();
+    classification=doBayesPrepandClassify(&myHashes);
+    end=clock();
 
-//	printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
+//  printf("%ld: %.*ls\n", myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.head->rm_eo - myRegexHead.head->rm_so, myRegexHead.main_memory);
 
-	printf("Classification took %lf ms (Prep: %lf, Hash: %lf Classify: %lf)\n", (double)((end-start)/(CLOCKS_PER_SEC/1000)), (double)((s2-start)/(CLOCKS_PER_SEC/1000)), (double)((s3-s2)/(CLOCKS_PER_SEC/1000)), (double)((end-s3)/(CLOCKS_PER_SEC/1000)));
-	printf("Best match: %s prob: %lf pR: %lf\n", classification.primary_name, classification.primary_probability, classification.primary_probScaled);
-	if(classification.secondary_name != NULL)
-		printf("Best match: %s prob: %lf pR: %lf\n", classification.secondary_name, classification.secondary_probability, classification.secondary_probScaled);
+    printf("Classification took %lf ms (Prep: %lf, Hash: %lf Classify: %lf)\n", (double)((end-start)/(CLOCKS_PER_SEC/1000)), (double)((s2-start)/(CLOCKS_PER_SEC/1000)), (double)((s3-s2)/(CLOCKS_PER_SEC/1000)), (double)((end-s3)/(CLOCKS_PER_SEC/1000)));
+    printf("Best match: %s prob: %lf pR: %lf\n", classification.primary_name, classification.primary_probability, classification.primary_probScaled);
+    if (classification.secondary_name != NULL)
+        printf("Best match: %s prob: %lf pR: %lf\n", classification.secondary_name, classification.secondary_probability, classification.secondary_probScaled);
 
-	free(myHashes.hashes);
-	freeRegexHead(&myRegexHead);
-	free(judge_file);
-	free(fbc_dir);
-	deinitBayesClassifier();
-	deinitHTML();
-	return 0;
+    free(myHashes.hashes);
+    freeRegexHead(&myRegexHead);
+    free(judge_file);
+    free(fbc_dir);
+    deinitBayesClassifier();
+    deinitHTML();
+    return 0;
 }

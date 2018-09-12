@@ -28,80 +28,79 @@
 
 void addFile(char *full_path, char *file_name)
 {
-process_entry *item;
-	if(file_names)
-		item = file_names;
-	else
-		item = calloc(1, sizeof(process_entry));
-	// Populate item
-	item->full_path = strdup(full_path);
-	item->file_name = strdup(file_name);
+    process_entry *item;
+    if (file_names)
+        item = file_names;
+    else
+        item = calloc(1, sizeof(process_entry));
+    // Populate item
+    item->full_path = strdup(full_path);
+    item->file_name = strdup(file_name);
 
-	// Get next free file_name slot
-	file_names = item->next;
+    // Get next free file_name slot
+    file_names = item->next;
 
-	// Add item to busy list
-	item->next = busy_file_names;
-	busy_file_names = item;
+    // Add item to busy list
+    item->next = busy_file_names;
+    busy_file_names = item;
 
 
-	// threading house-keeping
-	file_available++;
-	file_need_data--;
-	pthread_cond_signal(&file_avl_cnd);
+    // threading house-keeping
+    file_available++;
+    file_need_data--;
+    pthread_cond_signal(&file_avl_cnd);
 }
 
 process_entry getNextFile(void)
 {
-process_entry *item = NULL, ret_entry = {NULL, NULL, NULL};
-	if(file_available)
-	{
-		item = busy_file_names;
-		busy_file_names = item->next;
+    process_entry *item = NULL, ret_entry = {NULL, NULL, NULL};
+    if (file_available) {
+        item = busy_file_names;
+        busy_file_names = item->next;
 
-		// Add item back to free list
-		item->next = file_names;
-		file_names = item;
+        // Add item back to free list
+        item->next = file_names;
+        file_names = item;
 
-		ret_entry = *item;
+        ret_entry = *item;
 
-		// threading house-keeping
-		file_available--;
-	}
-	return ret_entry;
+        // threading house-keeping
+        file_available--;
+    }
+    return ret_entry;
 }
 
 int start_threads(struct thread_info *tinfo, int num_threads, void *thread_start(void *arg))
 {
-int s, tnum;
+    int s, tnum;
 
-	pthread_mutex_init(&file_mtx, NULL);
-	pthread_mutex_init(&train_mtx, NULL);
-	pthread_cond_init(&file_avl_cnd, NULL);
-	pthread_cond_init(&need_file_cnd, NULL);
+    pthread_mutex_init(&file_mtx, NULL);
+    pthread_mutex_init(&train_mtx, NULL);
+    pthread_cond_init(&file_avl_cnd, NULL);
+    pthread_cond_init(&need_file_cnd, NULL);
 
-	/* Create one thread for each command-line argument */
+    /* Create one thread for each command-line argument */
 
-	for (tnum = 0; tnum < num_threads; tnum++) {
-		tinfo[tnum].thread_num = tnum + 1;
+    for (tnum = 0; tnum < num_threads; tnum++) {
+        tinfo[tnum].thread_num = tnum + 1;
 
-		/* The pthread_create() call stores the thread ID into
-		corresponding element of tinfo[] */
+        /* The pthread_create() call stores the thread ID into
+        corresponding element of tinfo[] */
 
-		s = pthread_create(&tinfo[tnum].thread_id, NULL,
-		                  thread_start, &tinfo[tnum]);
-		if (s != 0)
-			handle_error_en(s, "pthread_create");
-	}
-	return 0;
+        s = pthread_create(&tinfo[tnum].thread_id, NULL,
+                           thread_start, &tinfo[tnum]);
+        if (s != 0)
+            handle_error_en(s, "pthread_create");
+    }
+    return 0;
 }
 
 void destroy_threads(struct thread_info *tinfo)
 {
-	free(tinfo);
+    free(tinfo);
 
-	pthread_mutex_destroy(&file_mtx);
-	pthread_mutex_destroy(&train_mtx);
-	pthread_cond_destroy(&file_avl_cnd);
-	pthread_cond_destroy(&need_file_cnd);
+    pthread_mutex_destroy(&file_mtx);
+    pthread_mutex_destroy(&train_mtx);
+    pthread_cond_destroy(&file_avl_cnd);
+    pthread_cond_destroy(&need_file_cnd);
 }

@@ -23,11 +23,11 @@
 #define FBC_FORMAT_VERSION 2
 #define UNICODE_BYTE_MARK 0xFEFF
 
-#define	MARKOV_C1	16	/* Markov C1 */
-#define MARKOV_C2	1	/* Markov C2 */
+#define MARKOV_C1   16  /* Markov C1 */
+#define MARKOV_C2   1   /* Markov C2 */
 
 typedef struct {
-	double naiveBayesResult;
+    double naiveBayesResult;
 } FBCJudge;
 
 // Fast Naive Bayes File Format Version 1 is as follows
@@ -60,43 +60,47 @@ typedef uint_least32_t FBC_v1_HASH_COUNT;
 #define FBC_v1_QTY_MAX UINT_LEAST16_MAX
 
 typedef struct {
-	char ID[3];
-	uint_least16_t version;
-	uint_least16_t UBM;
-	uint_least16_t WCS;
-	uint_least32_t records;
+    char ID[3];
+    uint_least16_t version;
+    uint_least16_t UBM;
+    uint_least16_t WCS;
+    uint_least32_t records;
 } FBC_HEADERv1;
 
 typedef struct {
-	char *name;
-	int32_t totalFeatures;
+    char *name;
+    int32_t totalFeatures;
 } FBCTextCategory;
 
 typedef struct {
-	FBCTextCategory *categories;
-	uint16_t used;
-	uint16_t slots;
+    FBCTextCategory *categories;
+    uint16_t used;
+    uint16_t slots;
 } FBCTextCategoryExt;
 
-typedef struct __attribute__ ((__packed__)) {
-	uint_least16_t category;
-        union {
-		float probability;
-		uint32_t count;
-	} data;
-} FBCHashJudgeUsers;
+typedef struct __attribute__ ((__packed__))
+{
+    uint_least16_t category;
+    union {
+        float probability;
+        uint32_t count;
+    } data;
+}
+FBCHashJudgeUsers;
 
-typedef struct __attribute__ ((__packed__)) {
-	HTMLFeature hash;
-	FBCHashJudgeUsers *users;
-	uint_least16_t used;
-} FBCFeatureExt;
+typedef struct __attribute__ ((__packed__))
+{
+    HTMLFeature hash;
+    FBCHashJudgeUsers *users;
+    uint_least16_t used;
+}
+FBCFeatureExt;
 
 typedef struct  {
-	FBCFeatureExt *hashes;
-	int32_t used;
-	int32_t slots;
-	int FBC_LOCKED; // FBC_LOCKED is used to keep from loading more data or writing data if we are in an optimized state.
+    FBCFeatureExt *hashes;
+    int32_t used;
+    int32_t slots;
+    int FBC_LOCKED; // FBC_LOCKED is used to keep from loading more data or writing data if we are in an optimized state.
 } FBCHashList;
 
 #ifdef IN_BAYES
@@ -155,7 +159,7 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 #define ci_debug_printf __ldebug_printf
 
 #else
- extern void (*__log_error)(void *req, const char *format,... );
+extern void (*__log_error)(void *req, const char *format,... );
 #define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif
 #endif

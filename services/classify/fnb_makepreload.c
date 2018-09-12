@@ -58,94 +58,87 @@ char *fbc_dir;
 /* Verified that -p and -s are not needed, but they have been left in as I may be using them in the future */
 int readArguments(int argc, char *argv[])
 {
-int i;
-	if(argc < 9)
-	{
-		printf("Format of arguments is:\n");
-		printf("\t-p PRIMARY_HASH_SEED\n");
-		printf("\t-s SECONDARY_HASH_SEED\n");
-		printf("\t-d FNB_DIRECTORY\n");
-		printf("\t-o OUTPUT_FNB_PRELOAD_FILE, must be a file name only, will be saved to FNB DIRECTORY\n");
-		printf("Spaces and case matter.\n");
-		return -1;
-	}
-	for(i=1; i<9; i+=2)
-	{
-		if(strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
-		else if(strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
-		else if(strcmp(argv[i], "-o") == 0)
-		{
-			fbc_out_file = malloc(strlen(argv[i+1]) + 1);
-			sscanf(argv[i+1], "%s", fbc_out_file);
-		}
-		else if(strcmp(argv[i], "-d") == 0)
-		{
-			fbc_dir = malloc(strlen(argv[i+1]) + 1);
-			sscanf(argv[i+1], "%s", fbc_dir);
-		}
-	}
-	// Use old preload, if it exists, to speed up things -- at this time the following two lines are commented as they don't seem to make a difference
-	preLoadBayes(fbc_out_file);
-/*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
-	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
-	printf("Learn File: %s\n", judge_file);*/
-	return 0;
+    int i;
+    if (argc < 9) {
+        printf("Format of arguments is:\n");
+        printf("\t-p PRIMARY_HASH_SEED\n");
+        printf("\t-s SECONDARY_HASH_SEED\n");
+        printf("\t-d FNB_DIRECTORY\n");
+        printf("\t-o OUTPUT_FNB_PRELOAD_FILE, must be a file name only, will be saved to FNB DIRECTORY\n");
+        printf("Spaces and case matter.\n");
+        return -1;
+    }
+    for (i=1; i<9; i+=2) {
+        if (strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
+        else if (strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
+        else if (strcmp(argv[i], "-o") == 0) {
+            fbc_out_file = malloc(strlen(argv[i+1]) + 1);
+            sscanf(argv[i+1], "%s", fbc_out_file);
+        } else if (strcmp(argv[i], "-d") == 0) {
+            fbc_dir = malloc(strlen(argv[i+1]) + 1);
+            sscanf(argv[i+1], "%s", fbc_dir);
+        }
+    }
+    // Use old preload, if it exists, to speed up things -- at this time the following two lines are commented as they don't seem to make a difference
+    preLoadBayes(fbc_out_file);
+    /*  printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
+        printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
+        printf("Learn File: %s\n", judge_file);*/
+    return 0;
 }
 
 void loadMassCategories(void)
 {
-struct dirent *current_file = NULL;
-DIR *directory;
-	if (chdir(fbc_dir) == -1) {
-		ci_debug_printf(1, "Unable to change directory in loadMassCategories because %s. Dying.", strerror(errno));
-		exit(-1);
-	}
+    struct dirent *current_file = NULL;
+    DIR *directory;
+    if (chdir(fbc_dir) == -1) {
+        ci_debug_printf(1, "Unable to change directory in loadMassCategories because %s. Dying.", strerror(errno));
+        exit(-1);
+    }
 
-	directory = opendir(".");
-	if(directory == NULL)
-	{
-		printf("Unable to open FNB Directory provided!\n");
-		exit(-1);
-	}
-	do {
-		current_file = readdir(directory);
-		if (current_file != NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fbc_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fnb") == 0)
-		{
-			printf("Loading FNB file: %s\n", current_file->d_name);
-			loadBayesCategory(current_file->d_name, current_file->d_name);
-		}
-	} while (current_file != NULL);
-	closedir(directory);
+    directory = opendir(".");
+    if (directory == NULL) {
+        printf("Unable to open FNB Directory provided!\n");
+        exit(-1);
+    }
+    do {
+        current_file = readdir(directory);
+        if (current_file != NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fbc_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fnb") == 0) {
+            printf("Loading FNB file: %s\n", current_file->d_name);
+            loadBayesCategory(current_file->d_name, current_file->d_name);
+        }
+    } while (current_file != NULL);
+    closedir(directory);
 }
 
 int main(int argc, char *argv[])
 {
-int fbc_file;
-FBC_HEADERv1 header;
-clock_t start, end;
-uint32_t realHashesUsed = 0;
-	initHTML();
-	initBayesClassifier();
-	if(readArguments(argc, argv) == -1) exit(-1);
+    int fbc_file;
+    FBC_HEADERv1 header;
+    clock_t start, end;
+    uint32_t realHashesUsed = 0;
+    initHTML();
+    initBayesClassifier();
+    if (readArguments(argc, argv) == -1) exit(-1);
 
-	printf("Loading hashes -- be patient!\n");
-	start = clock();
-	loadMassCategories();
-	printf("\nWriting out preload file: %s\n", fbc_out_file);
+    printf("Loading hashes -- be patient!\n");
+    start = clock();
+    loadMassCategories();
+    printf("\nWriting out preload file: %s\n", fbc_out_file);
 
-	fbc_file = openFBC(fbc_out_file, &header, 1);
+    fbc_file = openFBC(fbc_out_file, &header, 1);
 
-	realHashesUsed = NBJudgeHashList.used;
+    realHashesUsed = NBJudgeHashList.used;
 
-	writeFBCHashesPreload(fbc_file, &header, &NBJudgeHashList);
+    writeFBCHashesPreload(fbc_file, &header, &NBJudgeHashList);
 
-	close(fbc_file);
+    close(fbc_file);
 
-	end = clock();
-	printf("Wrote out: %"PRIu32" hashes.\n", realHashesUsed);
-	printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
+    end = clock();
+    printf("Wrote out: %"PRIu32" hashes.\n", realHashesUsed);
+    printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
 
-	deinitBayesClassifier();
-	deinitHTML();
-	return 0;
+    deinitBayesClassifier();
+    deinitHTML();
+    return 0;
 }

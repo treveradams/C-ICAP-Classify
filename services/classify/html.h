@@ -35,55 +35,55 @@ enum {UNKNOWN_ERROR=-9999, NO_CATEGORIES=-1, NO_MEMORY=-2, DOCUMENT_TOO_SMALL=-3
 enum {CJK_NONE = 0, KATAKANA, HIRAGANA, CJK_BREAK=999};
 
 typedef struct _myRadix_t {
-	int64_t start;
-	int64_t stop;
+    int64_t start;
+    int64_t stop;
 } myRadix_t;
 
 typedef struct _myRegmatch_t {
-	regoff_t rm_so;
-	regoff_t rm_eo;
-	wchar_t *data;
-	int owns_memory;
-	struct _myRegmatch_t *next;
+    regoff_t rm_so;
+    regoff_t rm_eo;
+    wchar_t *data;
+    int owns_memory;
+    struct _myRegmatch_t *next;
 } myRegmatch_t;
 
-typedef struct _myRegmatchArray{
-	myRegmatch_t matches[regexEDITS];
-	int used;
-	struct _myRegmatchArray *next;
+typedef struct _myRegmatchArray {
+    myRegmatch_t matches[regexEDITS];
+    int used;
+    struct _myRegmatchArray *next;
 } myRegmatchArray;
 
 typedef struct {
-	myRegmatch_t *head;
-	myRegmatch_t *tail;
-	int dirty;
-	wchar_t *main_memory;
-	myRegmatchArray *arrays;
-	myRegmatchArray *lastarray;
-	int head_cicap_membuf;
+    myRegmatch_t *head;
+    myRegmatch_t *tail;
+    int dirty;
+    wchar_t *main_memory;
+    myRegmatchArray *arrays;
+    myRegmatchArray *lastarray;
+    int head_cicap_membuf;
 } regexHead;
 
 typedef uint_least64_t HTMLFeature;
 
 typedef struct {
-	HTMLFeature *hashes;
-	uint32_t used;
-	uint32_t slots;
+    HTMLFeature *hashes;
+    uint32_t used;
+    uint32_t slots;
 } HashList;
 
 typedef struct {
-	char *primary_name;
-	double primary_probability;
-	double primary_probScaled;
-	char *secondary_name;
-	double secondary_probability;
-	double secondary_probScaled;
+    char *primary_name;
+    double primary_probability;
+    double primary_probScaled;
+    char *secondary_name;
+    double secondary_probability;
+    double secondary_probScaled;
 } HTMLClassification;
 
 typedef struct {
-	regex_t primary_regex;
-	regex_t secondary_regex;
-	int bidirectional;
+    regex_t primary_regex;
+    regex_t secondary_regex;
+    int bidirectional;
 } secondaries_t;
 
 #ifdef IN_HTML
@@ -98,24 +98,23 @@ static void freeRegexes(void);
 typedef uint64_t PTKey;
 typedef uint64_t PTItem;
 
-typedef struct _PTnode
-{
-	char bit;
-	PTKey item;
-        struct _PTnode *l, *r;
+typedef struct _PTnode {
+    char bit;
+    PTKey item;
+    struct _PTnode *l, *r;
 } PTnode;
 
 typedef PTnode* PTlink;
 
 typedef struct {
-	PTlink head;
+    PTlink head;
 
-	PTnode **nodes;
-	int32_t number_of_node_heads;
-	int32_t number_of_nodes;
-	int32_t last_used_node;
-	char zero_found;
-	HashList *hashes_list;
+    PTnode **nodes;
+    int32_t number_of_node_heads;
+    int32_t number_of_nodes;
+    int32_t last_used_node;
+    char zero_found;
+    HashList *hashes_list;
 } PTsession;
 
 #else
@@ -154,7 +153,7 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 #endif
 
 #if !defined(_MSC_VER) && defined(NOT_CICAP)
- extern void (*__log_error)(void *req, const char *format,... );
+extern void (*__log_error)(void *req, const char *format,... );
 #define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif
 

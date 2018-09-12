@@ -46,89 +46,82 @@
 
 void checkMakeUTF8(void)
 {
-	setlocale(LC_ALL, "");
-	int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
-	if(!utf8_mode) setlocale(LC_ALL, "en_US.UTF-8");
+    setlocale(LC_ALL, "");
+    int utf8_mode = (strcmp(nl_langinfo(CODESET), "UTF-8") == 0);
+    if (!utf8_mode) setlocale(LC_ALL, "en_US.UTF-8");
 }
 
 wchar_t *makeData(char *input_file)
 {
-int data=0;
-struct stat stat_buf;
-char *tempData = NULL;
-wchar_t *myData = NULL;
-int32_t realLen;
-int32_t status;
-	if((data = open(input_file, O_RDONLY)) >= 0)
-	{
-		if(fstat(data, &stat_buf) == 0)
-		{
-			tempData = malloc(stat_buf.st_size + 1);
-			if(tempData == NULL) exit(-1);
-			do {
-				status = read(data, tempData, stat_buf.st_size);
-				if(status < stat_buf.st_size) lseek64(data, -status, SEEK_CUR);
-			} while (status >=0 && status < stat_buf.st_size);
-			close(data);
-			tempData[stat_buf.st_size] = '\0';
-			myData = malloc((stat_buf.st_size + 1) * UTF32_CHAR_SIZE);
-			realLen = mbstowcs(myData, tempData, stat_buf.st_size);
-			if(realLen!=-1) myData[realLen] = L'\0';
-			else {
-				ci_debug_printf(1, "*** Bad character data in %s, ignoring file\n", input_file);
-				myData[0] = L'\0';
-			}
-			free(tempData);
-		}
-	}
-	return myData;
+    int data=0;
+    struct stat stat_buf;
+    char *tempData = NULL;
+    wchar_t *myData = NULL;
+    int32_t realLen;
+    int32_t status;
+    if ((data = open(input_file, O_RDONLY)) >= 0) {
+        if (fstat(data, &stat_buf) == 0) {
+            tempData = malloc(stat_buf.st_size + 1);
+            if (tempData == NULL) exit(-1);
+            do {
+                status = read(data, tempData, stat_buf.st_size);
+                if (status < stat_buf.st_size) lseek64(data, -status, SEEK_CUR);
+            } while (status >=0 && status < stat_buf.st_size);
+            close(data);
+            tempData[stat_buf.st_size] = '\0';
+            myData = malloc((stat_buf.st_size + 1) * UTF32_CHAR_SIZE);
+            realLen = mbstowcs(myData, tempData, stat_buf.st_size);
+            if (realLen!=-1) myData[realLen] = L'\0';
+            else {
+                ci_debug_printf(1, "*** Bad character data in %s, ignoring file\n", input_file);
+                myData[0] = L'\0';
+            }
+            free(tempData);
+        }
+    }
+    return myData;
 }
 
 void setupPrimarySecondary(char *primary, char *secondary, int bidirectional)
 {
 
-	if(number_secondaries == 0 || secondary_compares == NULL)
-	{
-		secondary_compares = malloc(sizeof(secondaries_t));
-	}
-	else
-	{
-		secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
-	}
+    if (number_secondaries == 0 || secondary_compares == NULL) {
+        secondary_compares = malloc(sizeof(secondaries_t));
+    } else {
+        secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+    }
 
-	if(tre_regcomp(&secondary_compares[number_secondaries].primary_regex, primary, REG_EXTENDED | REG_ICASE) != 0 ||
-		tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, secondary, REG_EXTENDED | REG_ICASE) != 0)
-	{
-		tre_regfree(&secondary_compares[number_secondaries].primary_regex);
-		tre_regfree(&secondary_compares[number_secondaries].secondary_regex);
-		number_secondaries--;
-		ci_debug_printf(1, "Invalid REGEX In Setting parameter (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", primary, secondary, bidirectional ? "TRUE" : "FALSE" );
-		exit(-1);
-	}
-	secondary_compares[number_secondaries].bidirectional = bidirectional;
+    if (tre_regcomp(&secondary_compares[number_secondaries].primary_regex, primary, REG_EXTENDED | REG_ICASE) != 0 ||
+            tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, secondary, REG_EXTENDED | REG_ICASE) != 0) {
+        tre_regfree(&secondary_compares[number_secondaries].primary_regex);
+        tre_regfree(&secondary_compares[number_secondaries].secondary_regex);
+        number_secondaries--;
+        ci_debug_printf(1, "Invalid REGEX In Setting parameter (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", primary, secondary, bidirectional ? "TRUE" : "FALSE" );
+        exit(-1);
+    }
+    secondary_compares[number_secondaries].bidirectional = bidirectional;
 
-	number_secondaries++;
+    number_secondaries++;
 }
 
 void setupPrimarySecondFromCmdLine(char *cmdline)
 {
-char *end, *start;
-char pri_name[513], sec_name[513];
-int bidir;
-	start = cmdline;
-	if(strstr(cmdline, "null,") != NULL) return;
-//	fprintf(stderr, "Got: %s\n", start);
-	while((end=strchr(start, '=')) != NULL)
-	{
-		*end = '\0';
-		sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
-//		fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
-//		fflush(stderr);
-		setupPrimarySecondary(pri_name, sec_name, bidir);
-		start = end + 1;
-	}
-	sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
-//	fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
-//	fflush(stderr);
-	setupPrimarySecondary(pri_name, sec_name, bidir);
+    char *end, *start;
+    char pri_name[513], sec_name[513];
+    int bidir;
+    start = cmdline;
+    if (strstr(cmdline, "null,") != NULL) return;
+//  fprintf(stderr, "Got: %s\n", start);
+    while ((end=strchr(start, '=')) != NULL) {
+        *end = '\0';
+        sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
+//      fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
+//      fflush(stderr);
+        setupPrimarySecondary(pri_name, sec_name, bidir);
+        start = end + 1;
+    }
+    sscanf(start, "%512[^,], %512[^,], %d", pri_name, sec_name, &bidir);
+//  fprintf(stderr, "Parts: \"%s\", \"%s\", \"%d\"\n", pri_name, sec_name, bidir);
+//  fflush(stderr);
+    setupPrimarySecondary(pri_name, sec_name, bidir);
 }

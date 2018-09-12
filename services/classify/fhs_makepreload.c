@@ -57,90 +57,83 @@ char *fhs_dir;
 
 int readArguments(int argc, char *argv[])
 {
-int i;
-	if(argc < 9)
-	{
-		printf("Format of arguments is:\n");
-		printf("\t-p PRIMARY_HASH_SEED\n");
-		printf("\t-s SECONDARY_HASH_SEED\n");
-		printf("\t-d FHS DIRECTORY TO READ\n");
-		printf("\t-o OUTPUT_FHS_PRELOAD_FILE, must be a file name only, will be saved to FHS DIRECTORY\n");
-		printf("Spaces and case matter.\n");
-		return -1;
-	}
-	for(i=1; i<9; i+=2)
-	{
-		if(strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
-		else if(strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
-		else if(strcmp(argv[i], "-o") == 0)
-		{
-			fhs_out_file = malloc(strlen(argv[i+1]) + 1);
-			sscanf(argv[i+1], "%s", fhs_out_file);
-		}
-		else if(strcmp(argv[i], "-d") == 0)
-		{
-			fhs_dir = malloc(strlen(argv[i+1]) + 1);
-			sscanf(argv[i+1], "%s", fhs_dir);
-		}
-	}
-/*	printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
-	printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
-	printf("Learn File: %s\n", judge_file);*/
-	return 0;
+    int i;
+    if (argc < 9) {
+        printf("Format of arguments is:\n");
+        printf("\t-p PRIMARY_HASH_SEED\n");
+        printf("\t-s SECONDARY_HASH_SEED\n");
+        printf("\t-d FHS DIRECTORY TO READ\n");
+        printf("\t-o OUTPUT_FHS_PRELOAD_FILE, must be a file name only, will be saved to FHS DIRECTORY\n");
+        printf("Spaces and case matter.\n");
+        return -1;
+    }
+    for (i=1; i<9; i+=2) {
+        if (strcmp(argv[i], "-p") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED1);
+        else if (strcmp(argv[i], "-s") == 0) sscanf(argv[i+1], "%"PRIx32, &HASHSEED2);
+        else if (strcmp(argv[i], "-o") == 0) {
+            fhs_out_file = malloc(strlen(argv[i+1]) + 1);
+            sscanf(argv[i+1], "%s", fhs_out_file);
+        } else if (strcmp(argv[i], "-d") == 0) {
+            fhs_dir = malloc(strlen(argv[i+1]) + 1);
+            sscanf(argv[i+1], "%s", fhs_dir);
+        }
+    }
+    /*  printf("Primary Seed: %"PRIX32"\n", HASHSEED1);
+        printf("Secondary Seed: %"PRIX32"\n", HASHSEED2);
+        printf("Learn File: %s\n", judge_file);*/
+    return 0;
 }
 
 void loadMassCategories(void)
 {
-struct dirent *current_file = NULL;
-DIR *directory;
-	if (chdir(fhs_dir) == -1) {
-		ci_debug_printf(1, "Unable to change directory in loadMassCategories because %s. Dying.", strerror(errno));
-		exit(-1);
-	}
+    struct dirent *current_file = NULL;
+    DIR *directory;
+    if (chdir(fhs_dir) == -1) {
+        ci_debug_printf(1, "Unable to change directory in loadMassCategories because %s. Dying.", strerror(errno));
+        exit(-1);
+    }
 
-	directory = opendir(".");
-	if(directory == NULL)
-	{
-		printf("Unable to open FHS Directory provided!\n");
-		exit(-1);
-	}
-	do {
-		current_file = readdir(directory);
-		if (current_file != NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fhs_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fhs") == 0)
-		{
-			printf("Loading FHS file: %s\n", current_file->d_name);
-			loadHyperSpaceCategory(current_file->d_name, current_file->d_name);
-		}
-	} while (current_file != NULL);
-	closedir(directory);
+    directory = opendir(".");
+    if (directory == NULL) {
+        printf("Unable to open FHS Directory provided!\n");
+        exit(-1);
+    }
+    do {
+        current_file = readdir(directory);
+        if (current_file != NULL && strcmp(current_file->d_name, ".") != 0 && strcmp(current_file->d_name, "..") != 0 && strcmp(current_file->d_name, fhs_out_file) != 0 && strcmp(&current_file->d_name[strlen(current_file->d_name)-4], ".fhs") == 0) {
+            printf("Loading FHS file: %s\n", current_file->d_name);
+            loadHyperSpaceCategory(current_file->d_name, current_file->d_name);
+        }
+    } while (current_file != NULL);
+    closedir(directory);
 }
 
 int main(int argc, char *argv[])
 {
-int fhs_file;
-FHS_HEADERv1 header;
-clock_t start, end;
-uint_least16_t docsWritten = 0;
-	initHTML();
-	initHyperSpaceClassifier();
-	if(readArguments(argc, argv) == -1) exit(-1);
+    int fhs_file;
+    FHS_HEADERv1 header;
+    clock_t start, end;
+    uint_least16_t docsWritten = 0;
+    initHTML();
+    initHyperSpaceClassifier();
+    if (readArguments(argc, argv) == -1) exit(-1);
 
-	printf("Loading hashes -- be patient!\n");
-	start = clock();
-	loadMassCategories();
-	printf("\nWriting out preload file: %s\n", fhs_out_file);
+    printf("Loading hashes -- be patient!\n");
+    start = clock();
+    loadMassCategories();
+    printf("\nWriting out preload file: %s\n", fhs_out_file);
 
-	fhs_file = openFHS(fhs_out_file, &header, 1);
+    fhs_file = openFHS(fhs_out_file, &header, 1);
 
-	docsWritten = writeFHSHashesPreload(fhs_file, &header, &HSJudgeHashList);
+    docsWritten = writeFHSHashesPreload(fhs_file, &header, &HSJudgeHashList);
 
-	close(fhs_file);
+    close(fhs_file);
 
-	end = clock();
-	printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", HSJudgeHashList.used, docsWritten);
-	printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
+    end = clock();
+    printf("Wrote out: %"PRIu32" hashes as %"PRIu16" documents.\n", HSJudgeHashList.used, docsWritten);
+    printf("Preload making took %lf seconds\n", (double)((end-start)/(CLOCKS_PER_SEC)));
 
-	deinitHyperSpaceClassifier();
-	deinitHTML();
-	return 0;
+    deinitHyperSpaceClassifier();
+    deinitHTML();
+    return 0;
 }

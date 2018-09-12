@@ -21,22 +21,22 @@
 #include <pthread.h>
 
 struct thread_info {    /* Used as argument to thread_start() */
-	pthread_t thread_id;        /* ID returned by pthread_create() */
-	int       thread_num;       /* Application-defined thread # */
+    pthread_t thread_id;        /* ID returned by pthread_create() */
+    int       thread_num;       /* Application-defined thread # */
 };
 
 typedef struct _process_entry {
-	char *full_path;
-	char *file_name;
-	struct _process_entry *next;
+    char *full_path;
+    char *file_name;
+    struct _process_entry *next;
 } process_entry;
 
 
 #define handle_error_en(en, msg) \
-	do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
+    do { errno = en; perror(msg); exit(EXIT_FAILURE); } while (0)
 
 #define handle_error(msg) \
-	do { perror(msg); exit(EXIT_FAILURE); } while (0)
+    do { perror(msg); exit(EXIT_FAILURE); } while (0)
 
 #ifdef _TRAIN_COMMON_THREADS
 extern pthread_mutex_t file_mtx, train_mtx;
