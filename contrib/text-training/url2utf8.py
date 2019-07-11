@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright (C) 2008-2017 Trever L. Adams
+# Copyright (C) 2008-2019 Trever L. Adams
 # While these scripts are designed to work with C-ICAP Classify,
 # They are not part of it and are NOT under the GNU LGPL v3.
 #
@@ -34,7 +34,7 @@ class NoRedirection(HTTPErrorProcessor):
 def main(site, output_file, cookies, redirect_only):
 	try:
 		site = site.strip()
-		req = Request(site, None, {'User-Agent' : 'Mozilla/5.0 (X11; Linux x86_64; rv:18.0) Gecko/20100101 Firefox/18.0', 'Accept-Language' : 'en-us,en;q=0.8,he;q=0.5,es;q=0.3', 'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'})
+		req = Request(site, None, {'User-Agent' : 'Mozilla/5.0 (X11; Fedora; Linux x86_64; rv:67.0) Gecko/20100101 Firefox/67.0', 'Accept-Language' : 'en-us,en;q=0.8,he;q=0.5,es;q=0.3', 'Accept' : 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'})
 		if cookies != None:
 			output_cookies = ''
 			for cookie in cookies:

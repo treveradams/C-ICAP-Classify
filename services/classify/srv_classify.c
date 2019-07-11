@@ -1072,8 +1072,8 @@ int make_wchar(ci_request_t *req)
     // Fetch document character set
     charSet = findCharset(input->buf, input->endpos);
     if (charSet == NULL) {
-        charSet = ci_http_response_get_header(req, "Content-Type");
-        if (charSet) != NULL) {
+        charSet = (char *) ci_http_response_get_header(req, "Content-Type");
+        if (charSet != NULL) {
             i = strcspn(charSet, "\r\n\0");
             tempbuffer = malloc(i + 1);
             strncpy(tempbuffer, charSet, i);

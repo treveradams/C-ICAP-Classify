@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-# Copyright (C) 2008-2017 Trever L. Adams
+# Copyright (C) 2008-2019 Trever L. Adams
 # While these scripts are designed to work with C-ICAP Classify,
 # They are not part of it and are NOT under the GNU LGPL v3.
 #
