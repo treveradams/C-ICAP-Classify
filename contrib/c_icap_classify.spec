@@ -1,5 +1,5 @@
 Name:           c_icap_classify
-Version:        20180912
+Version:        20190723
 Release:        1%{?dist}
 Summary:        Classification module for c-icap.
 

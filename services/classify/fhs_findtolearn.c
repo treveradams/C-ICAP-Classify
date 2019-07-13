@@ -75,7 +75,7 @@ char lowest_file[PATH_MAX + 1] = "\0";
 int readArguments(int argc, char *argv[])
 {
     int i;
-    char temp[PATH_MAX];
+    char temp[PATH_MAX + 1];
 
     if (argc < 13) {
         printf("Format of arguments is:\n");
@@ -115,7 +115,7 @@ int readArguments(int argc, char *argv[])
             sscanf(argv[i+1], "%d", &num_threads);
             FILES_PER_NEED = num_threads * FILES_PER_NEED_MULT;
         } else if (strcmp(argv[i], "-r") == 0) {
-            strncpy(temp, argv[i+1], PATH_MAX-1);
+            strncpy(temp, argv[i+1], PATH_MAX);
             setupPrimarySecondFromCmdLine(temp);
         }
     }
@@ -315,20 +315,23 @@ static void *thread_start(void *arg)
             if (lowest_category_correct) {
                 // this is NOT the correct category
                 if (!new_category_correct) {
-                    strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
+                    strncpy(lowest_file, entry.file_name, PATH_MAX);
+                    lowest_file[PATH_MAX] = '\0';
                     lowest = this;
 //                  ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
                 }
                 // this is the correct category, but a lower score
                 else if (lowest.primary_probScaled > this.primary_probScaled) {
-                    strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
+                    strncpy(lowest_file, entry.file_name, PATH_MAX);
+                    lowest_file[PATH_MAX] = '\0';
                     lowest = this;
 //                  ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
                 }
             } else { // lowest is NOT the correct category
                 // this is NOT the correct category and has a higher score (which is further from the right category)
                 if (!new_category_correct && lowest.primary_probScaled < this.primary_probScaled) {
-                    strncpy(lowest_file, entry.file_name, PATH_MAX + 1);
+                    strncpy(lowest_file, entry.file_name, PATH_MAX);
+                    lowest_file[PATH_MAX] = '\0';
                     lowest = this;
 //                  ci_debug_printf(10, "*** Thread: %d / To Train now %s @ %f\n", tinfo->thread_num, entry.file_name, lowest.primary_probScaled);
                 }
