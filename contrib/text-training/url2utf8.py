@@ -16,9 +16,11 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-from urllib2 import Request, urlopen, URLError, HTTPError, unquote, build_opener, HTTPCookieProcessor, HTTPErrorProcessor
-from cookielib import CookieJar
-from urllib import urlencode
+from urllib.request import urlopen, Request, build_opener, HTTPCookieProcessor, HTTPErrorProcessor
+from urllib.error import HTTPError, URLError
+from urllib.parse import unquote
+from http.cookiejar import CookieJar
+from urllib.parse import urlencode
 import optparse
 import codecs
 import re
@@ -46,15 +48,15 @@ def main(site, output_file, cookies, redirect_only):
 		if redirect_only == True:
 			cj = CookieJar()
 			opener = build_opener(NoRedirection, HTTPCookieProcessor(cj))
-			data = {}
+			data = ()
 			req.get_method = lambda: "GET"
-			output = opener.open(req, urlencode(data))
+			output = opener.open(req, data)
 		else:
 			output = urlopen(req)
 		headers = output.info()
 		code = output.code
 		output = output.read()
-		matchObj = re.search( r'(<meta [^>]*?charset=\"?([^\">]*?)\")', output, flags = re.M + re.I + re.S)
+		matchObj = re.search( r'(<meta [^>]*?charset=\"?([^\">]*?)\")', output.decode(), flags = re.M + re.I + re.S)
 		if matchObj is not None and matchObj.group(2):
 			output = output.decode(matchObj.group(2))
 		else:
@@ -65,24 +67,24 @@ def main(site, output_file, cookies, redirect_only):
 				output = output.decode('ISO-8859-1')
 		output_file = unquote(output_file)
 		if code in [301, 302, 303, 307, 308] and redirect_only is True:
-		    print "Writing " + site + " to " + output_file
+		    print("Writing " + site + " to " + output_file)
 		if not (redirect_only is True and code not in [301, 302, 303, 307, 308]):
 			file = codecs.open(output_file, "w", "utf-8")
 			file.write(output)
 			file.close()
 		if code in [301, 302, 303, 307, 308] and redirect_only is True:
 			return headers['Location']
-	except HTTPError, e:
-		print 'The server couldn\'t fulfill the request. For ' + site
-		print 'Error code: ', e.code
-	except URLError, e:
-		print 'Skipping URI ' + site
-		print 'Reason: ', e.reason
-	except UnicodeDecodeError, e:
-		print site + ': '
-		print e
+	except HTTPError as e:
+		print('The server couldn\'t fulfill the request. For ' + site)
+		print('Error code: ', e.code)
+	except URLError as e:
+		print('Skipping URI ' + site)
+		print('Reason: ', e.reason)
+	except UnicodeDecodeError as e:
+		print(site + ': ')
+		print(e)
 	except Exception as e:
-		print e
+		print(e)
 
 def __main__():
 	try:
@@ -95,4 +97,4 @@ def __main__():
 
 #	main(arguments[0], arguments[1])
 	except IndexError:
-		print
+		print()

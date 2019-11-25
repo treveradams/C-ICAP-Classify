@@ -35,11 +35,11 @@ def process_urls(arguments):
 			ret = url2utf8.main(url, output_file, [], options.redirect_only)
 			if ret not in [True, False, None]:
 				new_args.add(ret)
-				print ret
+				print(ret)
 			time.sleep(2)
 		except Exception as e:
-			print "Error " + url
-			print e
+			print("Error " + url)
+			print(e)
 	if len(new_args):
 		process_urls(new_args)
 	return new_args
@@ -65,7 +65,7 @@ parser.add_option("-r", "--redirectonly",
 (options, arguments) = parser.parse_args()
 
 if options.keyboard == True:
-	print "Enter the first url (or just enter to quit):"
+	print("Enter the first url (or just enter to quit):")
 	chosenurl = sys.stdin.readline()
 	arguments = set()
 	arguments.add(chosenurl)

@@ -1014,13 +1014,16 @@ void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondar
                    myData,
                    current->rm_eo,
                    &status);
+//    if(U_FAILURE(status)) goto hash_terminate; Some errors are okay... not sure yet how to handle this
 
     if (u16_length == current->rm_eo) ubp_only = 1;
 
-    myHead_u16 = realloc(myHead_u16, ( u16_length + 1) * sizeof(UChar));
+    myHead_u16 = realloc(myHead_u16, (u16_length + 1) * sizeof(UChar));
 
-    bi = ubrk_open(UBRK_WORD, 0, NULL, 0, &status);
+    bi = ubrk_open(UBRK_WORD, NULL, NULL, 0, &status);
+    if(U_FAILURE(status)) goto hash_terminate;
     ubrk_setText(bi, myHead_u16, u16_length, &status);
+    if(U_FAILURE(status)) goto hash_terminate;
 
     wordboundary = ubrk_current(bi);
     for (i = 0; i < 5 && wordboundary != UBRK_DONE; i++) {
