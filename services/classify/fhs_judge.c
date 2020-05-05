@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2020 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -103,13 +103,18 @@ int main (int argc, char *argv[])
     initHTML();
     initHyperSpaceClassifier();
     if (readArguments(argc, argv)==-1) exit(-1);
-    myData=makeData(judge_file);
+    myData = makeData(judge_file);
+    if (myData == NULL)
+    {
+        printf("File %s is empty or doesn't exist! Exiting.\n", judge_file);
+        return 1;
+    }
 
     printf("Loading hashes -- be patient!\n");
     loadMassHSCategories(fhs_dir);
 
     printf("Classifying\n");
-    start=clock();
+    start = clock();
     mkRegexHead(&myRegexHead, myData, 0);
     removeHTML(&myRegexHead);
     regexMakeSingleBlock(&myRegexHead);
@@ -119,9 +124,9 @@ int main (int argc, char *argv[])
     myHashes.hashes = malloc(sizeof(HTMLFeature) * HTML_MAX_FEATURE_COUNT);
     myHashes.slots = HTML_MAX_FEATURE_COUNT;
     myHashes.used = 0;
-    s2=clock();
+    s2 = clock();
     computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
-    s3=clock();
+    s3 = clock();
 
     classification=doHSPrepandClassify(&myHashes);
     end=clock();

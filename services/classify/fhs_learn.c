@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2020 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -100,7 +100,13 @@ int main (int argc, char *argv[])
     if (readArguments(argc, argv)==-1) exit(-1);
     checkMakeUTF8();
     initHTML();
-    myData=makeData(learn_in_file);
+    myData = makeData(learn_in_file);
+    if (myData == NULL)
+    {
+        printf("File %s is empty or doesn't exist! Exiting.\n", judge_file);
+        return 1;
+    }
+
     mkRegexHead(&myRegexHead, myData, 0);
     removeHTML(&myRegexHead);
     regexMakeSingleBlock(&myRegexHead);
