@@ -1,8 +1,6 @@
 ##!/bin/bash
 
 # Copyright (C) 2008-2016 Trever L. Adams
-# While these scripts are designed to work with C-ICAP Classify,
-# They are not part of it and are NOT under the GNU LGPL v3.
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
