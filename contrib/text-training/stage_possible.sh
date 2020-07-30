@@ -14,6 +14,8 @@
 #    You should have received a copy of the GNU General Public License
 #    along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+source training_config.sh
+
 if [[ -z $1 || -z $2 ]]; then
 	echo "My first argument MUST be the a valid category for the files to be placed as possibles."
 	echo "My second argument MUST be the directory holding the files which will be placed as possibles."

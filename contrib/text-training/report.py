@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/usr/bin/python3
 # coding=UTF-8
 # coding: utf-8
 # -*- coding: utf-8 -*-
@@ -24,7 +24,7 @@ import re
 import math
 from enum import IntEnum
 
-data_set_name = u'Internet Classification Data'
+data_set_name = u'Fair Barrel&trade; Internet Classification Data&trade;'
 non_maturity_categories = {"adult.artnudes" : 1, "childfriendly" : 1, "government" : 1,}
 
 lang_codes = { "aa":"Afar",
@@ -864,11 +864,11 @@ for root, dirs, files in walklevel(arguments[0]):
 							categories[dir_name] = dict([(test.group(1), 1)])
 
 
-sorted_languages = languages.keys()
-sorted_languages.sort()
+sorted_languages = sorted(languages.keys())
+#sorted_languages.sort()
 
-sorted_categories = categories.keys()
-sorted_categories.sort()
+sorted_categories = sorted(categories.keys())
+#sorted_categories.sort()
 
 print("<html><head><meta charset=\"UTF-8\" /><title>%s Training Statistics</title>" % data_set_name)
 
@@ -880,11 +880,11 @@ print("</head><body>")
 
 print("<P>Languages:</P>")
 for language in sorted_languages:
-	print("<a href=\"#" + language + "\">" + lang_codes[language].encode('utf-8') + "</a>")
+	print("<a href=\"#" + language + "\">", lang_codes[language], "</a>")
 
 print("<P>Executive Summary of Languages (Guessed Maturity):</P>")
 for language in sorted_languages:
-	print("<a href=\"#LM_" + language + "\">" + lang_codes[language].encode('utf-8') + "</a>")
+	print("<a href=\"#LM_" + language + "\">", lang_codes[language], "</a>")
 
 print("<P>Categories:</P>")
 for category in sorted_categories:
@@ -911,9 +911,9 @@ class Maturity(IntEnum):
 for language in sorted_languages:
 	cat_item=0
 	how_mature=Maturity.beta3
-	sorted_category = languages[language].keys()
-	sorted_category.sort()
-	print("<P><table><thead><th><a name=\"" + language + "\">%s</a></th></thead></table>" % lang_codes[language].encode('utf-8'))
+	sorted_category = sorted(languages[language].keys())
+#	sorted_category.sort()
+	print("<P><table><thead><th><a name=\"" + language + "\">%s</a></th></thead></table>" % lang_codes[language])
 	print("<table id=\"" + language + "\" cellpadding=\"0\"><thead>")
 	print("<th axis=\"string\">Category Name</th><th axis=\"number\">Relative Training Level (1-3 is good)</th></thead><tbody>")
 	for category in sorted_category:
@@ -970,13 +970,13 @@ print("<P>Categories:</P>")
 
 for category in sorted_categories:
 	lang_item=0
-	sorted_languages = categories[category].keys()
-	sorted_languages.sort()
+	sorted_languages = sorted(categories[category].keys())
+#	sorted_languages.sort()
 	print("<P><table><thead><th><a name=\"" + category + "\">%s</a></th></thead></table>" % category)
 	print("<table id=\"" + category + "\" cellpadding=\"0\" cellpadding=\"0\"><thead>")
 	print("<th axis=\"string\">Language Name</th><th axis=\"number\">Relative Training Level (1-3 is good)</th></thead><tbody>")
 	for language in sorted_languages:
-		print("<tr id=\"%d\"><td>%s</td><td>%0.02f</td></tr>" % (lang_item, lang_codes[language].encode('utf-8'),math.log10(categories[category][language])))
+		print("<tr id=\"%d\"><td>%s</td><td>%0.02f</td></tr>" % (lang_item, lang_codes[language],math.log10(categories[category][language])))
 		lang_item = lang_item + 1
 	print("</tbody><tfoot><tr><td></td><td></td></tr></tfoot></table>")
 	print("<script type=\"text/javascript\"> var myTable = {}; window.addEvent('domready', function(){ myTable = new sortableTable('%s', {overCls: 'over', onClick: function(){alert(this.id)}});});</script></P>" % category)
@@ -986,7 +986,7 @@ print("<table id=\"LM\" cellpadding=\"0\" cellpadding=\"0\"><thead>")
 print("<th axis=\"string\">Language Name</th><th axis=\"string\">Guessed Maturity Level</th></thead><tbody>")
 lang_item=0
 for language in language_maturity:
-	print("<tr id=\"%d\"><td><a name=\"LM_%s\">%s</a></td><td>%s</td></tr>" % (lang_item, language, lang_codes[language].encode('utf-8'), language_maturity[language].describe()))
+	print("<tr id=\"%d\"><td><a name=\"LM_%s\">%s</a></td><td>%s</td></tr>" % (lang_item, language, lang_codes[language], language_maturity[language].describe()))
 	lang_item = lang_item + 1
 print("</tbody><tfoot><tr><td></td><td></td></tr></tfoot></table>")
 print("<script type=\"text/javascript\"> var myTable = {}; window.addEvent('domready', function(){ myTable = new sortableTable('LM', {overCls: 'over', onClick: function(){alert(this.id)}});});</script></P>")
