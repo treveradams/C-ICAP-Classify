@@ -103,7 +103,7 @@ int main (int argc, char *argv[])
     myData = makeData(learn_in_file);
     if (myData == NULL)
     {
-        printf("File %s is empty or doesn't exist! Exiting.\n", judge_file);
+        printf("File %s is empty or doesn't exist! Exiting.\n", learn_in_file);
         return 1;
     }
 
