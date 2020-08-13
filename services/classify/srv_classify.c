@@ -1267,13 +1267,20 @@ int get_filetype(ci_request_t *req, int *encoded)
 
 int must_classify(int file_type, classify_req_data_t *data)
 {
-    int type, i = 0;
+    int type = NO_CLASSIFY, i = 0;
     const int *file_groups;
+
+     if (file_type < 0) {
+	 ci_debug_printf(1, "WARNING! Error computing file type, can not get required info to classify url.\n");
+         /*
+           By default do not classify when you are not able to retrieve filetype.
+          */
+         return type;
+    }
 
     ci_thread_rwlock_rdlock(&textclassify_rwlock);
 
     file_groups = ci_magic_type_groups(file_type);
-    type = NO_CLASSIFY;
 
     if (file_groups) {
         while (file_groups[i] >= 0 && i < MAX_GROUPS) {
