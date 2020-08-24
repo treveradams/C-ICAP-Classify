@@ -397,6 +397,8 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
     int32_t BSRet=-1;
     int64_t offsets[HS_OFFSET_MAX+1];
     HTMLFeature *docHashes;
+    FHSTextCategory *tempCategory = NULL;
+    hyperspaceFeatureExt *tempHashes = NULL;
     FHS_HEADERv1 header;
     uint16_t numHashes=0;
     uint32_t startHashes = HSJudgeHashList.used;
@@ -404,7 +406,8 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
     if ((fhs_file = openFHS(fhs_name, &header, 0)) < 0) return fhs_file;
     if (HSCategories.used == HSCategories.slots) {
         HSCategories.slots += HYPERSPACE_CATEGORY_INC;
-        HSCategories.categories = realloc(HSCategories.categories, HSCategories.slots * sizeof(FHSTextCategory));
+        tempCategory = realloc(HSCategories.categories, HSCategories.slots * sizeof(FHSTextCategory));
+        if (tempCategory != NULL) HSCategories.categories = tempCategory;
     }
     HSCategories.categories[HSCategories.used].name = strndup(cat_name, MAX_HYPSERSPACE_CATEGORY_NAME);
     HSCategories.categories[HSCategories.used].totalDocuments = header.records;
@@ -413,7 +416,8 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
 
     if (HSJudgeHashList.used + featuresInCategory(fhs_file, &header) >= HSJudgeHashList.slots) {
         HSJudgeHashList.slots += featuresInCategory(fhs_file, &header);
-        HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
     }
 
 //  ci_debug_printf(7, "Going to read %"PRIu16" records from %s\n", header.records, cat_name);
@@ -427,7 +431,8 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
         if (HSJudgeHashList.used + numHashes > HSJudgeHashList.slots) {
             if (HSJudgeHashList.slots != 0) ci_debug_printf(10, "Ooops, we shouldn't be allocating more memory here. (%s)\n", fhs_name);
             HSJudgeHashList.slots += numHashes;
-            HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+            tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+            if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
         }
 
         for (j = 0; j < numHashes; j++) {
@@ -474,7 +479,8 @@ STORE_NEW:
     // Fixup memory usage
     if (HSJudgeHashList.slots > HSJudgeHashList.used && HSJudgeHashList.used > 1) {
         HSJudgeHashList.slots = HSJudgeHashList.used;
-        HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
     }
     close(fhs_file);
     return 1;
@@ -499,6 +505,7 @@ int preLoadHyperSpace(const char *fhs_name)
     int fhs_file;
     uint16_t i, j;
     uint_least64_t *docHashes;
+    hyperspaceFeatureExt *tempHashes = NULL;
     FHS_HEADERv1 header;
     uint16_t numHashes=0;
 
@@ -510,7 +517,8 @@ int preLoadHyperSpace(const char *fhs_name)
 
     if (featuresInCategory(fhs_file, &header) >= HSJudgeHashList.slots) {
         HSJudgeHashList.slots += featuresInCategory(fhs_file, &header);
-        HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
     }
 
 //  ci_debug_printf(10, "Going to read %"PRIu16" records from %s\n", header.records, fhs_name);
@@ -521,7 +529,8 @@ int preLoadHyperSpace(const char *fhs_name)
         if (HSJudgeHashList.used + numHashes > HSJudgeHashList.slots) {
             if (HSJudgeHashList.slots != 0) ci_debug_printf(10, "Ooops, we shouldn't be allocating more memory here. (%s)\n", fhs_name);
             HSJudgeHashList.slots += numHashes;
-            HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+            tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+            if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
         }
 
         for (j = 0; j < numHashes; j++) {
@@ -552,7 +561,8 @@ ADD_HASH:
     // Fixup memory usage
     if (HSJudgeHashList.slots > HSJudgeHashList.used && HSJudgeHashList.used > 1) {
         HSJudgeHashList.slots = HSJudgeHashList.used;
-        HSJudgeHashList.hashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
+        if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
     }
     close(fhs_file);
     return 1;

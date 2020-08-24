@@ -84,11 +84,13 @@ wchar_t *makeData(char *input_file)
 
 void setupPrimarySecondary(char *primary, char *secondary, int bidirectional)
 {
+    secondaries_t *tempCompares = NULL;
 
     if (number_secondaries == 0 || secondary_compares == NULL) {
         secondary_compares = malloc(sizeof(secondaries_t));
     } else {
-        secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+         tempCompares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+         if (tempCompares != NULL) secondary_compares = tempCompares;
     }
 
     if (tre_regcomp(&secondary_compares[number_secondaries].primary_regex, primary, REG_EXTENDED | REG_ICASE) != 0 ||

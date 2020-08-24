@@ -1731,6 +1731,7 @@ int cfg_TextHashSeeds(const char *directive, const char **argv, void *setdata)
 int cfg_TextSecondary(const char *directive, const char **argv, void *setdata)
 {
     unsigned int bidirectional = 0;
+    secondaries_t *tempCompares = NULL;
 
     if (argv == NULL || argv[0] == NULL || argv[1] == NULL) {
         ci_debug_printf(1, "Missing arguments in directive:%s\n", directive);
@@ -1747,13 +1748,16 @@ int cfg_TextSecondary(const char *directive, const char **argv, void *setdata)
     if (number_secondaries == 0 || secondary_compares == NULL) {
         secondary_compares = malloc(sizeof(secondaries_t));
     } else {
-        secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+        tempCompares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+        if (tempCompares != NULL) secondary_compares = tempCompares;
     }
 
     if (tre_regcomp(&secondary_compares[number_secondaries].primary_regex, argv[0], REG_EXTENDED | REG_ICASE) != 0 ||
             tre_regcomp(&secondary_compares[number_secondaries].secondary_regex, argv[1], REG_EXTENDED | REG_ICASE) != 0) {
         number_secondaries--;
-        secondary_compares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+        tempCompares = realloc(secondary_compares, sizeof(secondaries_t) * (number_secondaries + 1));
+        if (tempCompares != NULL) secondary_compares = tempCompares;
+
         ci_debug_printf(1, "Invalid REGEX In Setting parameter: %s (PRIMARY_CATEGORY_REGEX: %s SECONDARY_CATEGORY_REGEX: %s BIDIRECTIONAL: %s)\n", directive, argv[0], argv[1], bidirectional ? "TRUE" : "FALSE" );
         return 0;
     }

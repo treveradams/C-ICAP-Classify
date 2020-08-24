@@ -980,7 +980,7 @@ void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondar
     wchar_t *placeHolder = L"***";
     uint32_t prime1, prime2;
     uint32_t finalA, finalB;
-    UChar *myHead_u16;
+    UChar *myHead_u16, *tempHead_u16;
     UErrorCode status = U_ZERO_ERROR;
     int32_t u16_length;
     UBreakIterator *bi = NULL;
@@ -1018,7 +1018,8 @@ void computeOSBHashes(regexHead *myHead, uint32_t primaryseed, uint32_t secondar
 
     if (u16_length == current->rm_eo) ubp_only = 1;
 
-    myHead_u16 = realloc(myHead_u16, (u16_length + 1) * sizeof(UChar));
+    tempHead_u16 = realloc(myHead_u16, (u16_length + 1) * sizeof(UChar));
+    if (tempHead_u16 != NULL) myHead_u16 = tempHead_u16;
 
     bi = ubrk_open(UBRK_WORD, NULL, NULL, 0, &status);
     if(U_FAILURE(status)) goto hash_terminate;

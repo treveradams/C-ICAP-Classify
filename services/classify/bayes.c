@@ -767,6 +767,8 @@ int loadBayesCategory(const char *fbc_name, const char *cat_name)
     FBC_HEADERv1 header;
     uint32_t startHashes = NBJudgeHashList.used;
     HTMLFeature hash;
+    FBCTextCategory *tempCategory = NULL;
+    FBCFeatureExt *tempHashes = NULL;
     FBC_v1_HASH_COUNT count;
 #ifndef _POSIX_MAPPED_FILES
     int status;
@@ -782,14 +784,16 @@ int loadBayesCategory(const char *fbc_name, const char *cat_name)
 
     if (NBCategories.used == NBCategories.slots) {
         NBCategories.slots += BAYES_CATEGORY_INC;
-        NBCategories.categories = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
+        tempCategory = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
+        if (tempCategory != NULL) NBCategories.categories = tempCategory;
     }
     NBCategories.categories[NBCategories.used].name = strndup(cat_name, MAX_BAYES_CATEGORY_NAME);
     NBCategories.categories[NBCategories.used].totalFeatures = header.records;
 
     if (NBJudgeHashList.used + featuresInCategory(fbc_file, &header) >= NBJudgeHashList.slots) {
         NBJudgeHashList.slots += featuresInCategory(fbc_file, &header);
-        NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
     }
 
 //  ci_debug_printf(7, "Going to read %"PRIu32" records from %s\n", header.records, cat_name);
@@ -864,7 +868,8 @@ STORE_NEW:
     // Fixup memory usage
     if (NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1) {
         NBJudgeHashList.slots = NBJudgeHashList.used;
-        NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        if (tempHashes) NBJudgeHashList.hashes = tempHashes;
     }
 
 #ifdef _POSIX_MAPPED_FILES
@@ -884,20 +889,24 @@ int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
     uint16_t used;
     int32_t BSRet = -1;
     int64_t offsets[3];
-// FBC_HEADERv1 header; With fix below, this doesn't seem to be needed anymore. FIXME BY REMOVING
     uint32_t startHashes = NBJudgeHashList.used;
+    FBCTextCategory *tempCategory = NULL;
+    FBCFeatureExt *tempHashes = NULL;
+    FBCHashJudgeUsers *tempUsers = NULL;
 
     if (NBJudgeHashList.FBC_LOCKED) return -1; // We cannot load if we are optimized
     offsets[0] = 0;
     if (NBCategories.used == NBCategories.slots) {
         NBCategories.slots += BAYES_CATEGORY_INC;
-        NBCategories.categories = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
+        tempCategory = realloc(NBCategories.categories, NBCategories.slots * sizeof(FBCTextCategory));
+        if (tempCategory != NULL) NBCategories.categories = tempCategory;
     }
     NBCategories.categories[NBCategories.used].totalFeatures += docHashes->used;
 
     if (NBJudgeHashList.used + docHashes->used >= NBJudgeHashList.slots) {
         NBJudgeHashList.slots += docHashes->used;
-        NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
     }
 
 //  ci_debug_printf(10, "Going to learn %"PRIu32" hashes from input file\n", docHashes->used);
@@ -921,7 +930,8 @@ int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
                         }
                         if (handled == 0) {
 //                          ci_debug_printf(10, "Found keys: %"PRIX64" already in table (offset %"PRIu32") but not our category (%"PRIu16" != %"PRIu16"), updating\n", docHashes->hashes[i], z,NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category, cat_num);
-                            NBJudgeHashList.hashes[BSRet].users = realloc(NBJudgeHashList.hashes[BSRet].users, (NBJudgeHashList.hashes[BSRet].used+1) * sizeof(FBCHashJudgeUsers));
+                            tempUsers = realloc(NBJudgeHashList.hashes[BSRet].users, (NBJudgeHashList.hashes[BSRet].used+1) * sizeof(FBCHashJudgeUsers));
+                            if (tempUsers != NULL) NBJudgeHashList.hashes[BSRet].users = tempUsers;
                             NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].category = cat_num;
                             NBJudgeHashList.hashes[BSRet].users[NBJudgeHashList.hashes[BSRet].used].data.count = 1;
                             NBJudgeHashList.hashes[BSRet].used++;
@@ -954,7 +964,8 @@ STORE_NEW:
     /*  if(NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1)
         {
             NBJudgeHashList.slots = NBJudgeHashList.used;
-            NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+            tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+            if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
         }*/ // Not needed because this is a trainer
 
     return 1;
@@ -980,6 +991,7 @@ int preLoadBayes(const char *fbc_name)
     uint32_t i;
     FBC_HEADERv1 header;
     HTMLFeature hash;
+    FBCFeatureExt *tempHashes = NULL;
     uint_least32_t count;
 #ifndef _POSIX_MAPPED_FILES
     int status;
@@ -997,7 +1009,8 @@ int preLoadBayes(const char *fbc_name)
 
     if (featuresInCategory(fbc_file, &header) >= NBJudgeHashList.slots) {
         NBJudgeHashList.slots += featuresInCategory(fbc_file, &header);
-        NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        if (tempHashes != NULL ) NBJudgeHashList.hashes = tempHashes;
     }
 
 #ifdef _POSIX_MAPPED_FILES
@@ -1033,7 +1046,8 @@ int preLoadBayes(const char *fbc_name)
         if (NBJudgeHashList.used > NBJudgeHashList.slots) {
             if (NBJudgeHashList.slots != 0) ci_debug_printf(10, "Ooops, we shouldn't be allocating more memory here. (%s)\n", fbc_name);
             NBJudgeHashList.slots += header.records;
-            NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+            tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+            if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
         }
 
 //      ci_debug_printf(10, "Loading keys: %"PRIX64" in Category: %s Document:%"PRIu16"\n", docHashes->hashes[j], cat_name, i);
@@ -1059,7 +1073,8 @@ ADD_HASH:
     // Fixup memory usage
     if (NBJudgeHashList.slots > NBJudgeHashList.used && NBJudgeHashList.used > 1) {
         NBJudgeHashList.slots = NBJudgeHashList.used;
-        NBJudgeHashList.hashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
+        if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
     }
 
 #ifdef _POSIX_MAPPED_FILES
