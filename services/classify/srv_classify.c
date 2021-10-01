@@ -529,7 +529,6 @@ void *srvclassify_init_request_data(ci_request_t *req)
             data->args.enable204 = 0;
         data->args.forcescan = 0;
         data->args.sizelimit = 1;
-        data->args.mode = 0;
 
         if (req->args[0] != '\0') {
             ci_debug_printf(5, "service arguments:%s\n", req->args);
@@ -654,16 +653,11 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t *req)
     if (data->mem_body) {
         /* FIXME the following should just process what is had at the moment... possible? */
         if (ci_membuf_size(data->mem_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-            if (data->args.mode == 1) {
-                /* This shouldn't happen... we are in simple mode, cannot send early ICAP responses... */
-                ci_debug_printf(1, "Object does not fit to max object size and early responses are not allowed! \n");
-                return CI_ERROR;
-            } else { /*Send early response.*/
-                ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
-                data->must_classify = 0;
-                ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
-                ci_membuf_unlock_all(data->mem_body);        /*Unlock all body data to continue send them..... */
-            }
+            /*Send early response.*/
+            ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+            data->must_classify = NO_CLASSIFY;
+            ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+            ci_membuf_unlock_all(data->mem_body);        /*Unlock all body data to continue send them..... */
         }
         /* anything where we are not in over max object size, simply write and exit */
         else if (ci_membuf_size(data->mem_body) + len > data->mem_body->bufsize) {
@@ -674,16 +668,11 @@ int srvclassify_read_from_net(char *buf, int len, int iseof, ci_request_t *req)
     } else {
         /* FIXME the following should just process what is had at the moment... possible? */
         if (ci_simple_file_size(data->disk_body) >= MAX_OBJECT_SIZE && MAX_OBJECT_SIZE) {
-            if (data->args.mode == 1) {
-                /* This shouldn't happen... we are in simple mode, cannot send early ICAP responses... */
-                ci_debug_printf(1, "Object does not fit to max object size and early responses are not allowed! \n");
-                return CI_ERROR;
-            } else { /*Send early response.*/
-                ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
-                data->must_classify = 0;
-                ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
-                ci_simple_file_unlock_all(data->disk_body);        /*Unlock all body data to continue send them..... */
-            }
+            /*Send early response.*/
+            ci_debug_printf(1, "srv_classify: Object size is bigger than max classifiable file size\n");
+            data->must_classify = NO_CLASSIFY;
+            ci_req_unlock_data(req);      /*Allow ICAP to send data before receives the EOF....... */
+            ci_simple_file_unlock_all(data->disk_body);        /*Unlock all body data to continue send them..... */
         }
         /* anything where we are not in over max object size, simply write and exit */
         return ci_simple_file_write(data->disk_body, buf, len, iseof);

@@ -44,11 +44,10 @@ typedef struct classify_req_data {
         int enable204;
         int forcescan;
         int sizelimit;
-        int mode;
     } args;
 } classify_req_data_t;
 
-enum {NO_CLASSIFY=0, TEXT = 1, IMAGE = 2, EXTERNAL_TEXT = 4, EXTERNAL_TEXT_PIPE = 8, EXTERNAL_IMAGE = 16};
+enum {NO_CLASSIFY = 0, TEXT = 1, IMAGE = 2, EXTERNAL_TEXT = 4, EXTERNAL_TEXT_PIPE = 8, EXTERNAL_IMAGE = 16};
 
 typedef struct {
     int magic_type_num;
