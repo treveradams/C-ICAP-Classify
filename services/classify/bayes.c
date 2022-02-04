@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2021 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -790,7 +790,7 @@ int loadBayesCategory(const char *fbc_name, const char *cat_name)
     NBCategories.categories[NBCategories.used].name = strndup(cat_name, MAX_BAYES_CATEGORY_NAME);
     NBCategories.categories[NBCategories.used].totalFeatures = header.records;
 
-    if (NBJudgeHashList.used + featuresInCategory(fbc_file, &header) >= NBJudgeHashList.slots) {
+    if (header.records && NBJudgeHashList.used + featuresInCategory(fbc_file, &header) >= NBJudgeHashList.slots) {
         NBJudgeHashList.slots += featuresInCategory(fbc_file, &header);
         tempHashes = realloc(NBJudgeHashList.hashes, NBJudgeHashList.slots * sizeof(FBCFeatureExt));
         if (tempHashes != NULL) NBJudgeHashList.hashes = tempHashes;
@@ -861,7 +861,8 @@ STORE_NEW:
         offsets[2] = NBJudgeHashList.used;
     }
 
-    if (startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
+//    if (startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
+    if (startHashes != NBJudgeHashList.used) FBC_fluxsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
 //  ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
     NBCategories.used++;
 
@@ -883,6 +884,7 @@ STORE_NEW:
     return 1;
 }
 
+#ifdef TRAINER
 int learnHashesBayesCategory(uint16_t cat_num, HashList *docHashes)
 {
     uint32_t i, z, shortcut = 0, offsetPos = 3, handled = 0;
@@ -957,7 +959,8 @@ STORE_NEW:
         offsets[2] = NBJudgeHashList.used;
     }
 
-    if (startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
+//    if (startHashes != NBJudgeHashList.used) qsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
+    if (startHashes != NBJudgeHashList.used) FBC_fluxsort(NBJudgeHashList.hashes, NBJudgeHashList.used, sizeof(FBCFeatureExt), &FBCjudgeHash_compare);
 //  ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", NBCategories.used, NBJudgeHashList.used);
 
     // Fixup memory usage
@@ -970,6 +973,7 @@ STORE_NEW:
 
     return 1;
 }
+#endif
 
 static int preload_hash_compare(const uint_least64_t a, const uint_least64_t b)
 {

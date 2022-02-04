@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2021 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -170,3 +170,57 @@ extern void (*__log_error)(void *req, const char *format,... );
 // allocate 4 bytes per input character just in case.
 // DO NOT USE THIS FOR ANYTHING ELSE
 #define UTF32_CHAR_SIZE 4
+
+#ifdef IN_HTML
+#ifndef HASH_USE_PATRICIA
+// Use fluxsort -- things from fluxsort.h, we don't use it.
+typedef int CMPFUNC (const void *a, const void *b);
+
+#define parity_merge_two(array, swap, x, y, ptl, ptr, pts, cmp)  \
+{  \
+	ptl = array + 0; ptr = array + 2; pts = swap + 0;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	*pts = cmp(ptl, ptr) <= 0 ? *ptl : *ptr;  \
+  \
+	ptl = array + 1; ptr = array + 3; pts = swap + 3;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	*pts = cmp(ptl, ptr)  > 0 ? *ptl : *ptr;  \
+}
+
+#define parity_merge_four(array, swap, x, y, ptl, ptr, pts, cmp)  \
+{  \
+	ptl = array + 0; ptr = array + 4; pts = swap;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	*pts = cmp(ptl, ptr) <= 0 ? *ptl : *ptr;  \
+  \
+	ptl = array + 3; ptr = array + 7; pts = swap + 7;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	*pts = cmp(ptl, ptr)  > 0 ? *ptl : *ptr;  \
+}
+
+#undef VAR
+#undef FUNC
+#undef STRUCT
+
+#define VAR HTMLFeature
+#define FUNC(NAME) NAME##HTMLFeature
+#define STRUCT(NAME) struct NAME##HTMLFeature
+
+#include "quadsort.c"
+#include "fluxsort.c"
+
+static void HTML_fluxsort(void *array, size_t nmemb, size_t size, CMPFUNC *cmp)
+{
+	if (nmemb < 2)
+	{
+		return;
+	}
+
+	return fluxsortHTMLFeature(array, nmemb, cmp);
+}
+#endif
+#endif

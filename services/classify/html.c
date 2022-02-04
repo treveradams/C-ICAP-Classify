@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2021 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -844,7 +844,8 @@ static int HTMLhash_compare(void const *a, void const *b)
 void makeSortedUniqueHashes(HashList *hashes_list)
 {
     uint32_t i = 1, j = 0;
-    qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare );
+//    qsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare);
+    HTML_fluxsort(hashes_list->hashes, hashes_list->used, sizeof(HTMLFeature), &HTMLhash_compare);
 //  ci_debug_printf(10, "\nTotal non-unique features: %"PRIu32"\n", hashes_list->used);
     for (i = 1; i < hashes_list->used; i++) {
         if (hashes_list->hashes[i] != hashes_list->hashes[j]) {

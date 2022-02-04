@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2013 Trever L. Adams
+ *  Copyright (C) 2008-2021 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -85,16 +85,14 @@ typedef struct __attribute__ ((__packed__))
         float probability;
         uint32_t count;
     } data;
-}
-FBCHashJudgeUsers;
+} FBCHashJudgeUsers;
 
 typedef struct __attribute__ ((__packed__))
 {
     HTMLFeature hash;
     FBCHashJudgeUsers *users;
     uint_least16_t used;
-}
-FBCFeatureExt;
+} FBCFeatureExt;
 
 typedef struct  {
     FBCFeatureExt *hashes;
@@ -162,4 +160,56 @@ CI_DECLARE_FUNC(void) __ldebug_printf(int i,const char *format, ...);
 extern void (*__log_error)(void *req, const char *format,... );
 #define ci_debug_printf(i, args...) fprintf(stderr, args);
 #endif
+#endif
+
+#ifdef IN_BAYES
+// Use fluxsort -- things from fluxsort.h, we don't use it.
+typedef int CMPFUNC (const void *a, const void *b);
+
+#define parity_merge_two(array, swap, x, y, ptl, ptr, pts, cmp)  \
+{  \
+	ptl = array + 0; ptr = array + 2; pts = swap + 0;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	*pts = cmp(ptl, ptr) <= 0 ? *ptl : *ptr;  \
+  \
+	ptl = array + 1; ptr = array + 3; pts = swap + 3;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	*pts = cmp(ptl, ptr)  > 0 ? *ptl : *ptr;  \
+}
+
+#define parity_merge_four(array, swap, x, y, ptl, ptr, pts, cmp)  \
+{  \
+	ptl = array + 0; ptr = array + 4; pts = swap;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts[x] = *ptr; ptr += y; pts[y] = *ptl; ptl += x; pts++;  \
+	*pts = cmp(ptl, ptr) <= 0 ? *ptl : *ptr;  \
+  \
+	ptl = array + 3; ptr = array + 7; pts = swap + 7;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	x = cmp(ptl, ptr) <= 0; y = !x; pts--; pts[x] = *ptr; ptr -= x; pts[y] = *ptl; ptl -= y;  \
+	*pts = cmp(ptl, ptr)  > 0 ? *ptl : *ptr;  \
+}
+
+#undef VAR
+#undef FUNC
+#undef STRUCT
+
+#define VAR FBCFeatureExt
+#define FUNC(NAME) NAME##FBCFeatureExt
+#define STRUCT(NAME) struct NAME##FBCFeatureExt
+
+#include "quadsort.c"
+#include "fluxsort.c"
+
+static void FBC_fluxsort(void *array, size_t nmemb, size_t size, CMPFUNC *cmp)
+{
+	if (nmemb < 2)
+	{
+		return;
+	}
+
+	return fluxsortFBCFeatureExt(array, nmemb, cmp);
+}
 #endif

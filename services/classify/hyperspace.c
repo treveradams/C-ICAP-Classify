@@ -1,5 +1,5 @@
 /*
- *  Copyright (C) 2008-2017 Trever L. Adams
+ *  Copyright (C) 2008-2021 Trever L. Adams
  *
  *  This file is part of srv_classify c-icap module and accompanying tools.
  *
@@ -414,7 +414,7 @@ int loadHyperSpaceCategory(const char *fhs_name, const char *cat_name)
     HSCategories.categories[HSCategories.used].totalFeatures = 0;
     HSCategories.categories[HSCategories.used].documentKnownHashes = malloc(header.records * sizeof(uint16_t));
 
-    if (HSJudgeHashList.used + featuresInCategory(fhs_file, &header) >= HSJudgeHashList.slots) {
+    if (header.records && HSJudgeHashList.used + featuresInCategory(fhs_file, &header) >= HSJudgeHashList.slots) {
         HSJudgeHashList.slots += featuresInCategory(fhs_file, &header);
         tempHashes = realloc(HSJudgeHashList.hashes, HSJudgeHashList.slots * sizeof(hyperspaceFeatureExt));
         if (tempHashes != NULL) HSJudgeHashList.hashes = tempHashes;
@@ -467,13 +467,15 @@ STORE_NEW:
         }
         closeDocument(docHashes);
         if (offsetPos > HS_OFFSET_MAX) {
-            qsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare );
+//            qsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare);
+            HS_fluxsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare);
             offsetPos = 2;
         }
         offsets[offsetPos] = HSJudgeHashList.used;
         if (offsets[offsetPos-1] != offsets[offsetPos]) offsetPos++;
     }
-    if (startHashes != HSJudgeHashList.used) qsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare);
+//    if (startHashes != HSJudgeHashList.used) qsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare);
+    if (startHashes != HSJudgeHashList.used) HS_fluxsort(HSJudgeHashList.hashes, HSJudgeHashList.used, sizeof(hyperspaceFeatureExt), &judgeHash_compare);
 //  ci_debug_printf(10, "Categories: %"PRIu32" Hashes Used: %"PRIu32"\n", HSCategories.used, HSJudgeHashList.used);
     HSCategories.used++;
     // Fixup memory usage

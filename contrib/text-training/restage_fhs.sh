@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Copyright (C) 2008-2016 Trever L. Adams
+# Copyright (C) 2008-2021 Trever L. Adams
 #
 #    This program is free software: you can redistribute it and/or modify
 #    it under the terms of the GNU General Public License as published by
@@ -64,7 +64,9 @@ for directory in *; do
 			rm -rfv $directory/possible/.pre-hash-z* > /dev/null
 			rm -rfv $directory/possible/.pre-hash-* > /dev/null
 			if [ -n ${partialrestage["$category"]} ]; then
-				$restage_fix_dir/$category.sh
+				if [ -x $restage_fix_dir/$category.sh ]; then
+					$restage_fix_dir/$category.sh
+				fi;
 			fi;
 		fi;
 	else
