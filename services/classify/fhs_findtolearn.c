@@ -149,17 +149,17 @@ HTMLClassification judgeFile(char *judge_file)
     strcat(prehash_file, ".pre-hash-");
     strcat(prehash_file, filename);
     free(dirpath);
-    // If we found the file, load it
+    // If we find a prehash file for the file, load it
     if ((prehash_data_file = open(prehash_file, O_RDONLY, S_IRUSR | S_IWUSR | S_IWOTH | S_IWGRP)) > 0) {
         readPREHASHES(prehash_data_file, &myHashes);
         close(prehash_data_file);
-    }
-    if (myHashes.used < 5) {
-        if (myHashes.hashes) {
-            free(myHashes.hashes);
-            myHashes.hashes = NULL;
+
+        if (myHashes.used < 5) {
+            if (myHashes.hashes) {
+                free(myHashes.hashes);
+                myHashes.hashes = NULL;
+            }
         }
-        close(prehash_data_file);
     }
 #endif
     if (prehash_data_file <= 0) {
@@ -179,8 +179,14 @@ HTMLClassification judgeFile(char *judge_file)
         computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
         myData = NULL;
     }
-
-    classification = doHSPrepandClassify(&myHashes);
+    if (myHashes.used < 5) { // We don't want untrainable and irrelevant files messing things up
+        classification.primary_name = train_as_category;
+        classification.secondary_name = train_as_category;
+        classification.primary_probability = DBL_MAX;
+        classification.secondary_probability = DBL_MAX;
+        classification.primary_probScaled = DBL_MAX;
+        classification.secondary_probScaled = DBL_MAX;
+    } else classification = doHSPrepandClassify(&myHashes);
 
 #ifdef _GNU_SOURCE
     if (prehash_data_file <= 0 && myHashes.used > 0) {

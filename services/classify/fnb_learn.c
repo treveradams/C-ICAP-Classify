@@ -190,7 +190,6 @@ void doLearn(char *data_file)
             myHashes.used = 0;
             computeOSBHashes(&myRegexHead, HASHSEED1, HASHSEED2, &myHashes);
         }
-        myData = NULL;
     }
 
 #ifdef _GNU_SOURCE

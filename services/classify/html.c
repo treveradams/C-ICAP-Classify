@@ -205,7 +205,7 @@ static myRegmatch_t *getEmptyRegexBlock(regexHead *myHead)
     return myRet;
 }
 
-// And empty head passed here must have main_memory, arrays and head set to NULL!
+// An empty head passed here must have main_memory, arrays and head set to NULL!
 // Old heads will have appropriate elements freed before setting up new data.
 void mkRegexHead(regexHead *head, wchar_t *myData, int is_cicap_membuf)
 {
@@ -218,7 +218,12 @@ void mkRegexHead(regexHead *head, wchar_t *myData, int is_cicap_membuf)
     head->lastarray = arrays;
     data = getEmptyRegexBlock(head);
     data->rm_so = 0;
-    data->rm_eo = wcslen(myData);
+    if (myData != NULL)
+    {
+        data->rm_eo = wcslen(myData);
+    } else {
+        data->rm_eo = 0;
+    }
     head->head = data; // assign data in
     head->tail = data;
     head->head_cicap_membuf = is_cicap_membuf;
@@ -236,7 +241,11 @@ void freeRegexHead(regexHead *myHead)
     myRegmatch_t *current = myHead->head;
 
     while (current != NULL) {
-        if (current->data && current->owns_memory) free(current->data);
+        if (current->data && current->owns_memory)
+        {
+            free(current->data);
+            current->data = NULL;
+        }
         current = current->next;
     }
     if (myHead->arrays) freeRegmatchArrays(myHead->arrays);
@@ -534,8 +543,10 @@ void removeHTML(regexHead *myHead)
     uint32_t tempUTF32CHAR;
 #endif
 
+    if (myHead->main_memory == NULL) return; // There is NOT any data... so There absolutely NOTHING to be done!
+
     while (current != NULL) { // kill scripts, styles -- each used to be a block identical to this with their own regex and a slightly different printf statement
-        myData= (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
+        myData = (wchar_t *)(current->data == NULL ? myHead->main_memory : current->data);
         currentOffset = current->rm_so;
         while (myData[currentOffset] != L'<' && current->rm_eo > currentOffset) currentOffset++;
         while (current->rm_eo > currentOffset && tre_regwnexec(&superFinder, myData + currentOffset, current->rm_eo - currentOffset, 1, singleMatch, 0) != REG_NOMATCH) {
